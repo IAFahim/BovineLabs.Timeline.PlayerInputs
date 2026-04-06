@@ -1,171 +1,124 @@
+using System;
 using System.Collections.Generic;
-using PlayerInputs.PlayerInputs.Data;
+using PlayerInputs.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-namespace PlayerInputs.PlayerInputs
+namespace PlayerInputs
 {
     [RequireComponent(typeof(PlayerInput))]
     public class PlayerInputBridge : MonoBehaviour
     {
-        public static readonly HashSet<PlayerInputBridge> Instances = new();
+        private struct CachedButton
+        {
+            public int ID;
+            public InputAction Action;
+        }
 
-        [Header("Input Action References")] [SerializeField]
-        private InputActionReference moveRef;
+        private struct CachedAxis
+        {
+            public int ID;
+            public InputAction Action;
+        }
 
-        [SerializeField] private InputActionReference lookRef;
-        [SerializeField] private InputActionReference attackRef;
-        [SerializeField] private InputActionReference interactRef;
-        [SerializeField] private InputActionReference crouchRef;
-        [SerializeField] private InputActionReference jumpRef;
-        [SerializeField] private InputActionReference previousRef;
-        [SerializeField] private InputActionReference nextRef;
-        [SerializeField] private InputActionReference sprintRef;
-        private InputAction _attackAction;
+        public byte PlayerID;
 
-        private Entity _backingEntity;
-        private InputAction _crouchAction;
         private EntityManager _entityManager;
-        private byte _id;
-
-        private InputAction _interactAction;
-        private InputAction _jumpAction;
-        private InputAction _lookAction;
-        private InputAction _moveAction;
-        private InputAction _nextAction;
-        private InputAction _prevAction;
-        private InputAction _sprintAction;
+        private Entity _backingEntity;
+        private readonly List<CachedButton> _buttons = new();
+        private readonly List<CachedAxis> _axes = new();
 
         private void Start()
         {
-            var unityPlayerInput = GetComponent<PlayerInput>();
-            _id = (byte)unityPlayerInput.playerIndex;
+            var playerInput = GetComponent<PlayerInput>();
+            if (playerInput.actions == null) return;
 
-            _moveAction = ResolveAction(unityPlayerInput, moveRef);
-            _lookAction = ResolveAction(unityPlayerInput, lookRef);
-            _attackAction = ResolveAction(unityPlayerInput, attackRef);
-            _interactAction = ResolveAction(unityPlayerInput, interactRef);
-            _crouchAction = ResolveAction(unityPlayerInput, crouchRef);
-            _jumpAction = ResolveAction(unityPlayerInput, jumpRef);
-            _prevAction = ResolveAction(unityPlayerInput, previousRef);
-            _nextAction = ResolveAction(unityPlayerInput, nextRef);
-            _sprintAction = ResolveAction(unityPlayerInput, sprintRef);
+            // 1. Dynamically read ALL actions in the asset
+            foreach (var action in playerInput.actions)
+            {
+                int actionID = InputUtility.GetActionID(action.name);
+
+                if (action.type == InputActionType.Button)
+                {
+                    _buttons.Add(new CachedButton { ID = actionID, Action = action });
+                }
+                else if (action.type == InputActionType.Value)
+                {
+                    _axes.Add(new CachedAxis { ID = actionID, Action = action });
+                }
+            }
 
             _entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
 
+            // 2. Create the backing entity with our dynamic buffers
             var archetype = _entityManager.CreateArchetype(
                 typeof(BackingInputEntityTag),
                 typeof(ECSPlayerInputID),
-                typeof(InputSubscribedEntity), typeof(ECSPlayerInputActiveThisFrame),
-                typeof(InputAttack), typeof(InputInteract), typeof(InputCrouch), typeof(InputJump),
-                typeof(InputPrevious), typeof(InputNext), typeof(InputSprint),
-                typeof(PlayerMoveInput), typeof(PlayerLookInput), typeof(ECSPlayerInputActivePreviousFrame),
-                typeof(InputAttackPrevious), typeof(InputInteractPrevious), typeof(InputCrouchPrevious),
-                typeof(InputJumpPrevious),
-                typeof(InputPreviousPrevious), typeof(InputNextPrevious), typeof(InputSprintPrevious),
-                typeof(PlayerMoveInputPrevious), typeof(PlayerLookPrevious),
-                typeof(PlayerMoveInputActive), typeof(PlayerLookInputActive),
-                typeof(PlayerMoveInputActivePrevious), typeof(PlayerLookInputActivePrevious)
+                typeof(InputSubscribedEntity),
+                typeof(InputButtonDownBuffer),
+                typeof(InputButtonHeldBuffer),
+                typeof(InputButtonUpBuffer),
+                typeof(InputAxisBuffer)
             );
 
             _backingEntity = _entityManager.CreateEntity(archetype);
-            _entityManager.SetComponentData(_backingEntity, new ECSPlayerInputID { ID = _id });
-
-            DisableEnableables();
+            _entityManager.SetComponentData(_backingEntity, new ECSPlayerInputID { ID = PlayerID });
         }
 
         private void Update()
         {
             if (!_entityManager.Exists(_backingEntity)) return;
 
-            float2 moveInput = _moveAction.ReadValue<Vector2>();
-            float2 lookInput = _lookAction.ReadValue<Vector2>();
+            // 1. Get and clear buffers (O(1) memory clear, no allocations)
+            var downs = _entityManager.GetBuffer<InputButtonDownBuffer>(_backingEntity);
+            var helds = _entityManager.GetBuffer<InputButtonHeldBuffer>(_backingEntity);
+            var ups = _entityManager.GetBuffer<InputButtonUpBuffer>(_backingEntity);
+            var axes = _entityManager.GetBuffer<InputAxisBuffer>(_backingEntity);
 
-            var attackPressed = _attackAction.WasPressedThisFrame();
-            var interactPressed = _interactAction.WasPressedThisFrame();
-            var crouchHeld = _crouchAction.IsInProgress();
-            var jumpPressed = _jumpAction.WasPressedThisFrame();
-            var prevPressed = _prevAction.WasPressedThisFrame();
-            var nextPressed = _nextAction.WasPressedThisFrame();
-            var sprintHeld = _sprintAction.IsInProgress();
+            downs.Clear();
+            helds.Clear();
+            ups.Clear();
+            axes.Clear();
 
-            var moveActive = math.lengthsq(moveInput) > 0;
-            var lookActive = math.lengthsq(lookInput) > 0;
+            // 2. Populate Buttons
+            foreach (var btn in _buttons)
+            {
+                if (btn.Action.WasPressedThisFrame())
+                    downs.Add(new InputButtonDownBuffer { ActionID = btn.ID });
 
-            var isActive = moveActive || lookActive ||
-                           attackPressed || interactPressed || crouchHeld ||
-                           jumpPressed || prevPressed || nextPressed || sprintHeld;
+                if (btn.Action.IsInProgress())
+                    helds.Add(new InputButtonHeldBuffer { ActionID = btn.ID });
 
-            _entityManager.SetComponentEnabled<ECSPlayerInputActiveThisFrame>(_backingEntity, isActive);
+                if (btn.Action.WasReleasedThisFrame())
+                    ups.Add(new InputButtonUpBuffer { ActionID = btn.ID });
+            }
 
-            _entityManager.SetComponentEnabled<InputAttack>(_backingEntity, attackPressed);
-            _entityManager.SetComponentEnabled<InputInteract>(_backingEntity, interactPressed);
-            _entityManager.SetComponentEnabled<InputCrouch>(_backingEntity, crouchHeld);
-            _entityManager.SetComponentEnabled<InputJump>(_backingEntity, jumpPressed);
-            _entityManager.SetComponentEnabled<InputPrevious>(_backingEntity, prevPressed);
-            _entityManager.SetComponentEnabled<InputNext>(_backingEntity, nextPressed);
-            _entityManager.SetComponentEnabled<InputSprint>(_backingEntity, sprintHeld);
+            // 3. Populate Axes (Vector2 and 1D Floats)
+            foreach (var axis in _axes)
+            {
+                float2 val = float2.zero;
 
-            _entityManager.SetComponentEnabled<PlayerMoveInputActive>(_backingEntity, moveActive);
-            _entityManager.SetComponentEnabled<PlayerLookInputActive>(_backingEntity, lookActive);
+                if (axis.Action.expectedControlType == "Vector2")
+                    val = axis.Action.ReadValue<Vector2>();
+                else if (axis.Action.expectedControlType == "Axis" || axis.Action.expectedControlType == "Button")
+                    val.x = axis.Action.ReadValue<float>();
 
-            _entityManager.SetComponentData(_backingEntity, new PlayerMoveInput { Value = moveInput });
-            _entityManager.SetComponentData(_backingEntity, new PlayerLookInput { Value = lookInput });
-        }
-
-        private void OnEnable()
-        {
-            Instances.Add(this);
+                if (math.lengthsq(val) > 0.0001f)
+                    axes.Add(new InputAxisBuffer { ActionID = axis.ID, Value = val });
+            }
         }
 
         private void OnDisable()
         {
-            Instances.Remove(this);
-
             if (World.DefaultGameObjectInjectionWorld != null &&
                 World.DefaultGameObjectInjectionWorld.IsCreated &&
                 _entityManager != default &&
                 _entityManager.Exists(_backingEntity))
+            {
                 _entityManager.DestroyEntity(_backingEntity);
-        }
-
-        private InputAction ResolveAction(PlayerInput playerInput, InputActionReference reference)
-        {
-            if (reference == null || reference.action == null) return null;
-            return playerInput.actions.FindAction(reference.action.id);
-        }
-
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetStatics()
-        {
-            Instances.Clear();
-        }
-
-        private void DisableEnableables()
-        {
-            _entityManager.SetComponentEnabled<ECSPlayerInputActiveThisFrame>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputAttack>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputInteract>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputCrouch>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputJump>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputPrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputNext>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputSprint>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<PlayerMoveInputActive>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<PlayerLookInputActive>(_backingEntity, false);
-
-            _entityManager.SetComponentEnabled<ECSPlayerInputActivePreviousFrame>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputAttackPrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputInteractPrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputCrouchPrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputJumpPrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputPreviousPrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputNextPrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<InputSprintPrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<PlayerMoveInputActivePrevious>(_backingEntity, false);
-            _entityManager.SetComponentEnabled<PlayerLookInputActivePrevious>(_backingEntity, false);
+            }
         }
     }
 }
