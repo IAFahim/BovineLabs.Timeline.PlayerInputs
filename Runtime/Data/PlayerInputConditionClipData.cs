@@ -5,7 +5,7 @@ namespace BovineLabs.Timeline.Tracks.Data.PlayerInputs
 {
     public struct PlayerInputConditionValue : IComponentData
     {
-        public int RequiredActionID;
+        public byte RequiredActionId;
         public ConditionKey ConditionKey;
     }
 }

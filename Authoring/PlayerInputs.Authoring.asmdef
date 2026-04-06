@@ -21,7 +21,8 @@
         "BovineLabs.Reaction.Data",
         "BovineLabs.Timeline.Authoring",
         "Unity.Timeline",
-        "BovineLabs.Timeline.Core.Authoring"
+        "BovineLabs.Timeline.Core.Authoring",
+        "PlayerInputs"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

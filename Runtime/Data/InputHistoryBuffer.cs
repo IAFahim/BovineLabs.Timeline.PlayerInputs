@@ -5,6 +5,6 @@ namespace PlayerInputs.Data
     [InternalBufferCapacity(16)]
     public struct InputHistoryBuffer : IBufferElementData
     {
-        public int ActionID;
+        public byte ActionID;
     }
 }

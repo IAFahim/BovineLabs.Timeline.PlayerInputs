@@ -12,16 +12,18 @@ namespace PlayerInputs.Data
 
     public struct InputAllowedComponent : IComponentData
     {
-        public int ActionID;
+        public byte ActionID;
         public InputPressType PressType;
         public ConditionKey EventKey;
     }
 
-    public struct InputRecordComponent : IComponentData { }
+    public struct InputRecordComponent : IComponentData
+    {
+    }
 
     public struct ComboBlob
     {
-        public BlobArray<int> Sequence;
+        public BlobArray<byte> Sequence;
     }
 
     public struct InputConsumeComponent : IComponentData
@@ -31,5 +33,7 @@ namespace PlayerInputs.Data
         public bool ClearOnConsume;
     }
 
-    public struct InputClearComponent : IComponentData { }
+    public struct InputClearComponent : IComponentData
+    {
+    }
 }
