@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BovineLabs.Reaction.Data.Conditions;
 using Bovinelabs.Timeline.PlayerInputs.Data;
@@ -24,18 +25,10 @@ namespace Bovinelabs.Timeline.PlayerInputs
         private void OnEnable()
         {
             var playerInput = this.GetComponent<PlayerInput>();
-            if (playerInput.actions == null)
-            {
-                Debug.LogWarning("[PlayerInputBridge] PlayerInput component has no actions assigned.", this);
-                return;
-            }
+            if (playerInput.actions == null) return;
 
             var inputKeys = InputSettings.I;
-            if (inputKeys == null || inputKeys.Mappings.Count == 0)
-            {
-                Debug.LogWarning("[PlayerInputBridge] InputSettings is null or contains no Mappings.", this);
-                return;
-            }
+            if (inputKeys == null || inputKeys.Mappings.Count == 0) return;
 
             foreach (var mapping in inputKeys.Mappings)
             {
@@ -63,6 +56,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
 
             this.entityManager.AddComponentData(this.providerEntity, new PlayerId { Value = this.GetPlayerId() });
             this.entityManager.AddComponent<InputProviderTag>(this.providerEntity);
+            this.entityManager.AddComponentData(this.providerEntity, new PlayerInputBridgeComponent { Value = this });
 
             this.entityManager.AddComponent<InputState>(this.providerEntity);
             this.entityManager.AddBuffer<InputAxisBuffer>(this.providerEntity);
@@ -76,10 +70,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
 
         private void Update()
         {
-            if (this.capturedWorld == null || !this.capturedWorld.IsCreated || !this.entityManager.Exists(this.providerEntity))
-            {
-                return;
-            }
+            if (this.capturedWorld == null || !this.capturedWorld.IsCreated || !this.entityManager.Exists(this.providerEntity)) return;
 
             var currentHeld = new InputBitmask();
             foreach (var btn in this.Buttons)
@@ -91,7 +82,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
             }
 
             var previousHeld = this.entityManager.GetComponentData<InputState>(this.providerEntity).Held;
-            
+
             var newState = new InputState
             {
                 Down = currentHeld.AndNot(previousHeld),
@@ -121,7 +112,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
         {
             if (this.capturedWorld != null && this.capturedWorld.IsCreated)
             {
-                if (this.entityManager.Exists(this.providerEntity))
+                if (this.entityManager != default && this.entityManager.Exists(this.providerEntity))
                 {
                     this.entityManager.DestroyEntity(this.providerEntity);
                 }
@@ -137,5 +128,23 @@ namespace Bovinelabs.Timeline.PlayerInputs
             var pi = this.GetComponent<PlayerInput>();
             return (byte)(pi != null ? pi.playerIndex : 0);
         }
+    }
+
+    public sealed class PlayerInputBridgeComponent : IComponentData, IEquatable<PlayerInputBridgeComponent>, ICloneable
+    {
+        public PlayerInputBridge Value;
+
+        public bool Equals(PlayerInputBridgeComponent other)
+        {
+            if (ReferenceEquals(null, other)) return false;
+            if (ReferenceEquals(this, other)) return true;
+            return Equals(this.Value, other.Value);
+        }
+
+        public override bool Equals(object obj) => ReferenceEquals(this, obj) || obj is PlayerInputBridgeComponent other && this.Equals(other);
+
+        public override int GetHashCode() => this.Value != null ? this.Value.GetHashCode() : 0;
+
+        public object Clone() => new PlayerInputBridgeComponent { Value = this.Value };
     }
 }

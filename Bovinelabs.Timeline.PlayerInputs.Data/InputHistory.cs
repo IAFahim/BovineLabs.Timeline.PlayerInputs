@@ -6,6 +6,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
     public struct InputHistory : IBufferElementData
     {
         public byte ActionId;
+        public InputPhase Phase;
         public uint Tick;
     }
 }
