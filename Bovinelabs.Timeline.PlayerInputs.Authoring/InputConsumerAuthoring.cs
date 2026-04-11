@@ -1,4 +1,3 @@
-// Authoring/InputConsumerAuthoring.cs
 using PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine;

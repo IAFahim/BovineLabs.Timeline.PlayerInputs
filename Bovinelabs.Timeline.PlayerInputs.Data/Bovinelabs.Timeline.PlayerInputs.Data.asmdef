@@ -1,12 +1,9 @@
 {
-    "name": "PlayerInputs.Authoring",
+    "name": "Bovinelabs.Timeline.PlayerInputs.Data",
     "rootNamespace": "",
     "references": [
         "BovineLabs.Core",
-        "BovineLabs.Core.Authoring",
         "BovineLabs.Core.Extensions",
-        "BovineLabs.Core.Extensions.Authoring",
-        "PlayerInputs.Data",
         "Unity.Burst",
         "Unity.Collections",
         "Unity.Entities",
@@ -17,12 +14,7 @@
         "Unity.Mathematics.Extensions",
         "Unity.Physics",
         "Unity.Transforms",
-        "BovineLabs.Reaction.Authoring",
-        "BovineLabs.Reaction.Data",
-        "BovineLabs.Timeline.Authoring",
-        "Unity.Timeline",
-        "BovineLabs.Timeline.Core.Authoring",
-        "PlayerInputs"
+        "BovineLabs.Reaction.Data"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -30,9 +22,7 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": false,
-    "defineConstraints": [
-        "UNITY_EDITOR"
-    ],
+    "defineConstraints": [],
     "versionDefines": [],
     "noEngineReferences": false
 }

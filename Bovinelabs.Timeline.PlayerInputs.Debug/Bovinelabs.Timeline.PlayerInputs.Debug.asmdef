@@ -1,5 +1,5 @@
 {
-    "name": "PlayerInputs.Debug",
+    "name": "Bovinelabs.Timeline.PlayerInputs.Debug",
     "rootNamespace": "",
     "references": [
         "BovineLabs.Core",
