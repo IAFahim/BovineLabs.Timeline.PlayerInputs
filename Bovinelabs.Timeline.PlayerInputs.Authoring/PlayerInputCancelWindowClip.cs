@@ -9,17 +9,14 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
     public sealed class PlayerInputCancelWindowClip : DOTSClip, ITimelineClipAsset
     {
         public List<InputSettings.InputMapping> AllowedActions = new();
+        public override double duration => 1;
 
         public ClipCaps clipCaps => ClipCaps.None;
-        public override double duration => 1;
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
             var mask = new InputBitmask();
-            foreach (var mapping in this.AllowedActions)
-            {
-                mask.Set(mapping.Value);
-            }
+            foreach (var mapping in AllowedActions) mask.Set(mapping.Value);
 
             context.Baker.AddComponent(clipEntity, new InputCancelWindowConfig
             {

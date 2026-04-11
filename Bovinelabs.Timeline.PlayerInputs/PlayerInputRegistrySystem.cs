@@ -1,4 +1,3 @@
-
 using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
@@ -14,14 +13,14 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            _previousProviders = new NativeHashMap<byte, Entity>(4, Allocator.Persistent);
+            this._previousProviders = new NativeHashMap<byte, Entity>(4, Allocator.Persistent);
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            if (_previousProviders.IsCreated)
-                _previousProviders.Dispose();
+            if (this._previousProviders.IsCreated)
+                this._previousProviders.Dispose();
         }
 
         [BurstCompile]
@@ -45,37 +44,40 @@ namespace Bovinelabs.Timeline.PlayerInputs
 
             var joinedBuffer = SystemAPI.GetBuffer<PlayerJoinedEventBuffer>(registryEntity);
             var leftBuffer = SystemAPI.GetBuffer<PlayerLeftEventBuffer>(registryEntity);
-            
+            var linkBuffer = SystemAPI.GetBuffer<PlayerInputLink>(registryEntity);
+
             joinedBuffer.Clear();
             leftBuffer.Clear();
-
-            foreach (var kvp in currentProviders)
-            {
-                if (!_previousProviders.ContainsKey(kvp.Key))
-                {
-                    joinedBuffer.Add(new PlayerJoinedEventBuffer { PlayerId = kvp.Key, Provider = kvp.Value });
-                }
-            }
-
-            foreach (var kvp in _previousProviders)
-            {
-                if (!currentProviders.ContainsKey(kvp.Key))
-                {
-                    leftBuffer.Add(new PlayerLeftEventBuffer { PlayerId = kvp.Key });
-                }
-            }
-
-            _previousProviders.Clear();
-            foreach (var kvp in currentProviders)
-            {
-                _previousProviders.Add(kvp.Key, kvp.Value);
-            }
-
-            var linkBuffer = SystemAPI.GetBuffer<PlayerInputLink>(registryEntity);
             linkBuffer.Clear();
-            foreach (var kvp in currentProviders)
+
+            // S-Tier Fix: GetKeyArray bypasses enumerator struct ambiguity across Unity versions
+            var currentKeys = currentProviders.GetKeyArray(state.WorldUpdateAllocator);
+            var previousKeys = this._previousProviders.GetKeyArray(state.WorldUpdateAllocator);
+
+            foreach (var key in currentKeys)
             {
-                linkBuffer.Add(new PlayerInputLink { PlayerId = kvp.Key, Provider = kvp.Value });
+                var provider = currentProviders[key];
+                
+                if (!this._previousProviders.ContainsKey(key))
+                {
+                    joinedBuffer.Add(new PlayerJoinedEventBuffer { PlayerId = key, Provider = provider });
+                }
+                
+                linkBuffer.Add(new PlayerInputLink { PlayerId = key, Provider = provider });
+            }
+
+            foreach (var key in previousKeys)
+            {
+                if (!currentProviders.ContainsKey(key))
+                {
+                    leftBuffer.Add(new PlayerLeftEventBuffer { PlayerId = key });
+                }
+            }
+
+            this._previousProviders.Clear();
+            foreach (var key in currentKeys)
+            {
+                this._previousProviders.Add(key, currentProviders[key]);
             }
         }
     }

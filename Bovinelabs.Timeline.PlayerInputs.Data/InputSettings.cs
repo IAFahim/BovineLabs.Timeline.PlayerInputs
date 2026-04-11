@@ -10,18 +10,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
     [SettingsGroup("Input")]
     public class InputSettings : KSettingsBase<InputSettings, byte>
     {
-        [Serializable]
-        public struct InputMapping
-        {
-            [Tooltip("The ECS byte ID used under the hood.")]
-            public byte Value;
-            
-            [Tooltip("The Unity Input Action to bind to this ID. The name is extracted automatically.")]
-            public InputActionReference Action;
-        }
-
-        [SerializeField]
-        private InputMapping[] mappings = Array.Empty<InputMapping>();
+        [SerializeField] private InputMapping[] mappings = Array.Empty<InputMapping>();
 
         public override IEnumerable<NameValue<byte>> Keys
         {
@@ -29,8 +18,8 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
             {
                 foreach (var mapping in mappings)
                 {
-                    string actionName = mapping.Action != null && mapping.Action.action != null 
-                        ? mapping.Action.action.name 
+                    var actionName = mapping.Action != null && mapping.Action.action != null
+                        ? mapping.Action.action.name
                         : $"[Unassigned Action ID: {mapping.Value}]";
 
                     yield return new NameValue<byte>(actionName, mapping.Value);
@@ -39,5 +28,15 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
         }
 
         public IReadOnlyList<InputMapping> Mappings => mappings;
+
+        [Serializable]
+        public struct InputMapping
+        {
+            [Tooltip("The ECS byte ID used under the hood.")]
+            public byte Value;
+
+            [Tooltip("The Unity Input Action to bind to this ID. The name is extracted automatically.")]
+            public InputActionReference Action;
+        }
     }
 }

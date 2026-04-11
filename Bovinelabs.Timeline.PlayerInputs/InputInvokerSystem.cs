@@ -16,20 +16,20 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this.writers.Create(ref state);
+            writers.Create(ref state);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            this.writers.Update(ref state);
+            writers.Update(ref state);
 
             state.Dependency = new EvaluateInvokerTransition
             {
-                Writers = this.writers,
+                Writers = writers,
                 Sources = SystemAPI.GetComponentLookup<InputSource>(true),
                 States = SystemAPI.GetComponentLookup<InputState>(true)
-            }.ScheduleParallel(state.Dependency);
+            }.Schedule(state.Dependency);
         }
 
         [BurstCompile]
@@ -44,15 +44,9 @@ namespace Bovinelabs.Timeline.PlayerInputs
             {
                 var consumer = binding.Value;
 
-                if (!this.Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null)
-                {
-                    return;
-                }
+                if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
 
-                if (!this.States.TryGetComponent(source.Provider, out var state))
-                {
-                    return;
-                }
+                if (!States.TryGetComponent(source.Provider, out var state)) return;
 
                 var active = config.Phase switch
                 {
@@ -62,10 +56,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
                     _ => false
                 };
 
-                if (active && this.Writers.TryGet(consumer, out var writer))
-                {
-                    writer.Trigger(config.Condition, config.Value);
-                }
+                if (active && Writers.TryGet(consumer, out var writer)) writer.Trigger(config.Condition, config.Value);
             }
         }
     }

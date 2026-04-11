@@ -1,7 +1,8 @@
 using BovineLabs.Reaction.Data.Conditions;
 using Unity.Entities;
 
-namespace Bovinelabs.Timeline.PlayerInputs.Data{
+namespace Bovinelabs.Timeline.PlayerInputs.Data
+{
     public enum InputPhase : byte
     {
         Down = 0,

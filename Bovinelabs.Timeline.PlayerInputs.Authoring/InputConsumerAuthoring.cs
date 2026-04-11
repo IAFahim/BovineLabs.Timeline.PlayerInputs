@@ -1,4 +1,3 @@
-
 using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine;

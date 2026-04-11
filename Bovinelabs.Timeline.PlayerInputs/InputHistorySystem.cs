@@ -6,14 +6,13 @@ using Unity.Entities;
 namespace Bovinelabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(BeginSimulationSystemGroup))]
-    [UpdateAfter(typeof(PlayerInputPollSystem))]
     public partial struct InputHistorySystem : ISystem
     {
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var tick = SystemAPI.Time.ElapsedTime;
-            
+
             state.Dependency = new RecordHistoryJob
             {
                 Tick = (uint)(tick * 1000.0)
@@ -28,23 +27,16 @@ namespace Bovinelabs.Timeline.PlayerInputs
 
             private void Execute(in InputState state, ref DynamicBuffer<InputHistory> history)
             {
-                if (state.Down.Chunk0 == 0 && state.Down.Chunk1 == 0 && state.Down.Chunk2 == 0 && state.Down.Chunk3 == 0)
-                {
-                    return;
-                }
+                if (state.Down.Chunk0 == 0 && state.Down.Chunk1 == 0 && state.Down.Chunk2 == 0 &&
+                    state.Down.Chunk3 == 0) return;
 
                 for (byte i = 0; i < 255; i++)
-                {
                     if (state.Down.Has(i))
                     {
-                        if (history.Length >= history.Capacity)
-                        {
-                            history.RemoveAt(0);
-                        }
-                        
-                        history.Add(new InputHistory { ActionId = i, Tick = this.Tick });
+                        if (history.Length >= history.Capacity) history.RemoveAt(0);
+
+                        history.Add(new InputHistory { ActionId = i, Tick = Tick });
                     }
-                }
             }
         }
     }

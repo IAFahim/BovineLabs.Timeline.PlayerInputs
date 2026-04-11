@@ -10,7 +10,8 @@ using UnityEngine;
 
 namespace Bovinelabs.Timeline.PlayerInputs.Debug
 {
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
+                       WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(DebugSystemGroup))]
     public partial struct DebugPlayerInputSystem : ISystem
     {
@@ -23,6 +24,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            // Use standard unfiltered drawer so it always shows up if Quill is globally active
             var renderer = SystemAPI.GetSingleton<DrawSystem.Singleton>().CreateDrawer();
 
             var chronos = (uint)(SystemAPI.Time.ElapsedTime * 1000.0);
@@ -47,12 +49,13 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                 in DynamicBuffer<InputAxisBuffer> axes,
                 in DynamicBuffer<InputHistory> history)
             {
+                // Space out multiple local players
                 var origin = new float3(id.Value * 4f, 2f, 0f);
 
-                this.RenderHeader(origin, id);
-                this.RenderTelemetry(origin + new float3(-1.5f, -0.5f, 0f), state);
-                this.RenderKinetics(origin + new float3(0f, -1.0f, 0f), axes);
-                this.RenderChronology(origin + new float3(1.5f, -0.5f, 0f), history, this.Chronos);
+                RenderHeader(origin, id);
+                RenderTelemetry(origin + new float3(-1.5f, -0.5f, 0f), state);
+                RenderKinetics(origin + new float3(0f, -1.0f, 0f), axes);
+                RenderChronology(origin + new float3(1.5f, -0.5f, 0f), history, Chronos);
             }
 
             private void RenderHeader(float3 position, PlayerId id)
@@ -61,32 +64,31 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                 label.Append("INTERFACE 0");
                 label.Append(id.Value);
 
-                this.Renderer.Text32(position, label, Color.white, 16f);
-                this.Renderer.Line(position + new float3(-2f, -0.2f, 0f), position + new float3(2f, -0.2f, 0f), new Color(1f, 1f, 1f, 0.2f));
+                Renderer.Text32(position, label, Color.cyan);
+                Renderer.Line(position + new float3(-2f, -0.2f, 0f), position + new float3(2f, -0.2f, 0f),
+                    new Color(0f, 1f, 1f, 0.4f));
             }
 
             private void RenderTelemetry(float3 position, InputState state)
             {
                 var cursor = position;
-                
+
                 for (byte i = 0; i < 255; i++)
-                {
                     if (state.Down.Has(i))
                     {
-                        this.RenderSignal(cursor, i, "D", new Color(0f, 1f, 1f, 1f));
+                        RenderSignal(cursor, i, "D", new Color(0f, 1f, 1f, 1f));
                         cursor.y -= 0.15f;
                     }
                     else if (state.Held.Has(i))
                     {
-                        this.RenderSignal(cursor, i, "H", new Color(0f, 1f, 0.5f, 1f));
+                        RenderSignal(cursor, i, "H", new Color(0f, 1f, 0.5f, 1f));
                         cursor.y -= 0.15f;
                     }
                     else if (state.Up.Has(i))
                     {
-                        this.RenderSignal(cursor, i, "U", new Color(1f, 0.2f, 0.2f, 1f));
+                        RenderSignal(cursor, i, "U", new Color(1f, 0.2f, 0.2f, 1f));
                         cursor.y -= 0.15f;
                     }
-                }
             }
 
             private void RenderSignal(float3 position, byte action, FixedString32Bytes phase, Color tint)
@@ -97,27 +99,27 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                 format.Append("] ");
                 format.Append(InputSettings.KeyToName(action));
 
-                this.Renderer.Text64(position, format, tint, 12f);
+                Renderer.Text64(position, format, tint, 12f);
             }
 
             private void RenderKinetics(float3 position, DynamicBuffer<InputAxisBuffer> axes)
             {
                 var cursor = position;
-                
+
                 for (var i = 0; i < axes.Length; i++)
                 {
                     var axis = axes[i];
                     var boundary = new float3(0f, 0f, 1f) * 0.25f;
                     var vector = new float3(axis.Value.x, axis.Value.y, 0f) * 0.25f;
 
-                    this.Renderer.Circle(cursor, boundary, new Color(1f, 1f, 1f, 0.1f));
-                    this.Renderer.Line(cursor, cursor + vector, new Color(0f, 1f, 1f, 1f));
-                    this.Renderer.Point(cursor + vector, 0.05f, new Color(0f, 1f, 1f, 1f));
+                    Renderer.Circle(cursor, boundary, new Color(1f, 1f, 1f, 0.1f));
+                    Renderer.Line(cursor, cursor + vector, new Color(0f, 1f, 1f, 1f));
+                    Renderer.Point(cursor + vector, 0.05f, new Color(0f, 1f, 1f, 1f));
 
                     var label = new FixedString64Bytes();
                     label.Append(InputSettings.KeyToName(axis.ActionId));
-                    
-                    this.Renderer.Text64(cursor + new float3(0f, 0.35f, 0f), label, new Color(1f, 1f, 1f, 0.5f), 10f);
+
+                    Renderer.Text64(cursor + new float3(0f, 0.35f, 0f), label, new Color(1f, 1f, 1f, 0.5f), 10f);
 
                     cursor.y -= 0.8f;
                 }
@@ -132,13 +134,10 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                 {
                     var record = history[i];
                     var delta = chronos - record.Tick;
-                    
-                    if (delta > 2000)
-                    {
-                        continue;
-                    }
 
-                    var opacity = math.clamp(1f - (delta / 2000f), 0f, 1f);
+                    if (delta > 2000) continue; // Fade out history older than 2 seconds
+
+                    var opacity = math.clamp(1f - delta / 2000f, 0f, 1f);
                     var tint = new Color(1f, 1f, 1f, opacity);
 
                     var format = new FixedString64Bytes();
@@ -147,7 +146,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                     format.Append("ms ");
                     format.Append(InputSettings.KeyToName(record.ActionId));
 
-                    this.Renderer.Text64(cursor, format, tint, 10f);
+                    Renderer.Text64(cursor, format, tint, 10f);
                     cursor.y -= 0.15f;
                 }
             }

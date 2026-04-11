@@ -7,15 +7,22 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
         public byte Value;
     }
 
-    public struct InputProviderTag : IComponentData { }
-    public struct InputConsumerTag : IComponentData { }
+    public struct InputProviderTag : IComponentData
+    {
+    }
+
+    public struct InputConsumerTag : IComponentData
+    {
+    }
 
     public struct InputSource : IComponentData
     {
         public Entity Provider;
     }
 
-    public struct PlayerInputRegistryTag : IComponentData { }
+    public struct PlayerInputRegistryTag : IComponentData
+    {
+    }
 
     public struct PlayerInputLink : IBufferElementData
     {

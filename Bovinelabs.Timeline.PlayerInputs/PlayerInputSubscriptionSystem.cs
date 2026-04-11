@@ -1,4 +1,3 @@
-using BovineLabs.Core.Groups;
 using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
@@ -24,14 +23,11 @@ namespace Bovinelabs.Timeline.PlayerInputs
             var links = SystemAPI.GetBuffer<PlayerInputLink>(registryEntity);
 
             var map = new NativeHashMap<byte, Entity>(links.Length, state.WorldUpdateAllocator);
-            foreach (var link in links)
-            {
-                map.TryAdd(link.PlayerId, link.Provider);
-            }
+            foreach (var link in links) map.TryAdd(link.PlayerId, link.Provider);
 
             state.Dependency = new AssignSourceJob
             {
-                ProvidersMap = map,
+                ProvidersMap = map
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -44,15 +40,10 @@ namespace Bovinelabs.Timeline.PlayerInputs
             private void Execute(in PlayerId id, ref InputSource source)
             {
                 if (ProvidersMap.TryGetValue(id.Value, out var providerEntity))
-                {
                     source.Provider = providerEntity;
-                }
                 else
-                {
                     source.Provider = Entity.Null;
-                }
             }
         }
     }
 }
-

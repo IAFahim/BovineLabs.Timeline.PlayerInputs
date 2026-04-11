@@ -9,16 +9,16 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
     {
         public bool ClearAll = true;
         public InputSettings.InputMapping ActionToClear;
+        public override double duration => 1;
 
         public ClipCaps clipCaps => ClipCaps.None;
-        public override double duration => 1;
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
             context.Baker.AddComponent(clipEntity, new InputBufferClearTrigger
             {
-                ClearAll = this.ClearAll,
-                ActionId = this.ActionToClear.Value
+                ClearAll = ClearAll,
+                ActionId = ActionToClear.Value
             });
 
             context.Baker.SetComponentEnabled<InputBufferClearTrigger>(clipEntity, false);

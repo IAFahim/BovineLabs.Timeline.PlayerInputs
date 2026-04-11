@@ -2,12 +2,12 @@ using BovineLabs.Core.Groups;
 using BovineLabs.Reaction.Conditions;
 using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 
 namespace Bovinelabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(BeginSimulationSystemGroup))]
-    [UpdateAfter(typeof(PlayerInputPollSystem))]
     public partial struct InputTransducerSystem : ISystem
     {
         private ConditionEventWriter.Lookup eventWriterLookup;
@@ -15,17 +15,17 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this.eventWriterLookup.Create(ref state);
+            eventWriterLookup.Create(ref state);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            this.eventWriterLookup.Update(ref state);
+            eventWriterLookup.Update(ref state);
 
             state.Dependency = new TransduceJob
             {
-                Writers = this.eventWriterLookup
+                Writers = eventWriterLookup
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -33,14 +33,12 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [WithAll(typeof(InputProviderTag))]
         private partial struct TransduceJob : IJobEntity
         {
-            public ConditionEventWriter.Lookup Writers;
+            [NativeDisableParallelForRestriction] public ConditionEventWriter.Lookup Writers;
 
-            private void Execute(Entity entity, in InputState state, in DynamicBuffer<InputToConditionEvent> transducers)
+            private void Execute(Entity entity, in InputState state,
+                in DynamicBuffer<InputToConditionEvent> transducers)
             {
-                if (!this.Writers.TryGet(entity, out var writer))
-                {
-                    return;
-                }
+                if (!Writers.TryGet(entity, out var writer)) return;
 
                 foreach (var transducer in transducers)
                 {
@@ -52,10 +50,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
                         _ => false
                     };
 
-                    if (active)
-                    {
-                        writer.Trigger(transducer.Condition, transducer.Value);
-                    }
+                    if (active) writer.Trigger(transducer.Condition, transducer.Value);
                 }
             }
         }

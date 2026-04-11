@@ -1,7 +1,6 @@
 using BovineLabs.Timeline;
 using BovineLabs.Timeline.Data;
 using Bovinelabs.Timeline.PlayerInputs.Data;
-
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -17,7 +16,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
             state.Dependency = new ClearBufferTransition
             {
                 Sources = SystemAPI.GetComponentLookup<InputSource>(true),
-                Histories = SystemAPI.GetBufferLookup<InputHistory>(false)
+                Histories = SystemAPI.GetBufferLookup<InputHistory>()
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -33,30 +32,16 @@ namespace Bovinelabs.Timeline.PlayerInputs
             {
                 var consumer = binding.Value;
 
-                if (!this.Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null)
-                {
-                    return;
-                }
+                if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
 
-                if (!this.Histories.TryGetBuffer(source.Provider, out var history))
-                {
-                    return;
-                }
+                if (!Histories.TryGetBuffer(source.Provider, out var history)) return;
 
                 if (config.ClearAll)
-                {
                     history.Clear();
-                }
                 else
-                {
                     for (var i = history.Length - 1; i >= 0; i--)
-                    {
                         if (history[i].ActionId == config.ActionId)
-                        {
                             history.RemoveAt(i);
-                        }
-                    }
-                }
             }
         }
     }

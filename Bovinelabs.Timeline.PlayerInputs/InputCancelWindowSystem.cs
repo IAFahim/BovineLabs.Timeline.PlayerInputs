@@ -17,8 +17,8 @@ namespace Bovinelabs.Timeline.PlayerInputs
             {
                 Sources = SystemAPI.GetComponentLookup<InputSource>(true),
                 States = SystemAPI.GetComponentLookup<InputState>(true),
-                Timelines = SystemAPI.GetComponentLookup<TimelineActive>(false)
-            }.ScheduleParallel(state.Dependency);
+                Timelines = SystemAPI.GetComponentLookup<TimelineActive>()
+            }.Schedule(state.Dependency);
         }
 
         [BurstCompile]
@@ -27,29 +27,19 @@ namespace Bovinelabs.Timeline.PlayerInputs
         {
             [ReadOnly] public ComponentLookup<InputSource> Sources;
             [ReadOnly] public ComponentLookup<InputState> States;
-            [NativeDisableParallelForRestriction] public ComponentLookup<TimelineActive> Timelines;
+            public ComponentLookup<TimelineActive> Timelines;
 
             private void Execute(in InputCancelWindowConfig config, in TrackBinding binding, in DirectorRoot director)
             {
                 var consumer = binding.Value;
 
-                if (!this.Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null)
-                {
-                    return;
-                }
+                if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
 
-                if (!this.States.TryGetComponent(source.Provider, out var state))
-                {
-                    return;
-                }
+                if (!States.TryGetComponent(source.Provider, out var state)) return;
 
                 if (state.Down.Overlaps(config.AllowedMask))
-                {
-                    if (this.Timelines.HasComponent(director.Director))
-                    {
-                        this.Timelines.SetComponentEnabled(director.Director, false);
-                    }
-                }
+                    if (Timelines.HasComponent(director.Director))
+                        Timelines.SetComponentEnabled(director.Director, false);
             }
         }
     }
