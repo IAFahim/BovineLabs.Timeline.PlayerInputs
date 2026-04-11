@@ -3,6 +3,7 @@ using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using InputSettings = Bovinelabs.Timeline.PlayerInputs.Data.InputSettings;
 
 namespace Bovinelabs.Timeline.PlayerInputs
 {
@@ -25,7 +26,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
                 return;
             }
 
-            var inputKeys = InputKeys.I;
+            var inputKeys = InputSettings.I;
             if (inputKeys != null)
             {
                 foreach (var mapping in inputKeys.Mappings)

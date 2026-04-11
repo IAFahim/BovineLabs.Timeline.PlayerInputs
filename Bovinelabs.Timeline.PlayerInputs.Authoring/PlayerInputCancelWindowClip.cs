@@ -8,7 +8,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
 {
     public sealed class PlayerInputCancelWindowClip : DOTSClip, ITimelineClipAsset
     {
-        public List<InputKeys.InputMapping> AllowedActions = new();
+        public List<InputSettings.InputMapping> AllowedActions = new();
 
         public ClipCaps clipCaps => ClipCaps.None;
         public override double duration => 1;

@@ -8,7 +8,7 @@ using UnityEngine.InputSystem;
 namespace Bovinelabs.Timeline.PlayerInputs.Data
 {
     [SettingsGroup("Input")]
-    public class InputKeys : KSettingsBase<InputKeys, byte>
+    public class InputSettings : KSettingsBase<InputSettings, byte>
     {
         [Serializable]
         public struct InputMapping

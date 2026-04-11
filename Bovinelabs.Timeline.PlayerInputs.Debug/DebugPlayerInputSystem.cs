@@ -95,7 +95,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                 format.Append("[");
                 format.Append(phase);
                 format.Append("] ");
-                format.Append(InputKeys.KeyToName(action));
+                format.Append(InputSettings.KeyToName(action));
 
                 this.Renderer.Text64(position, format, tint, 12f);
             }
@@ -115,7 +115,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                     this.Renderer.Point(cursor + vector, 0.05f, new Color(0f, 1f, 1f, 1f));
 
                     var label = new FixedString64Bytes();
-                    label.Append(InputKeys.KeyToName(axis.ActionId));
+                    label.Append(InputSettings.KeyToName(axis.ActionId));
                     
                     this.Renderer.Text64(cursor + new float3(0f, 0.35f, 0f), label, new Color(1f, 1f, 1f, 0.5f), 10f);
 
@@ -145,7 +145,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                     format.Append("-");
                     format.Append(delta);
                     format.Append("ms ");
-                    format.Append(InputKeys.KeyToName(record.ActionId));
+                    format.Append(InputSettings.KeyToName(record.ActionId));
 
                     this.Renderer.Text64(cursor, format, tint, 10f);
                     cursor.y -= 0.15f;

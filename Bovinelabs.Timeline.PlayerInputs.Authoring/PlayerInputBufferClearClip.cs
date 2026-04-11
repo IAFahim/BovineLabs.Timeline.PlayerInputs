@@ -8,7 +8,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
     public sealed class PlayerInputBufferClearClip : DOTSClip, ITimelineClipAsset
     {
         public bool ClearAll = true;
-        public InputKeys.InputMapping ActionToClear;
+        public InputSettings.InputMapping ActionToClear;
 
         public ClipCaps clipCaps => ClipCaps.None;
         public override double duration => 1;

@@ -9,7 +9,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
 {
     public sealed class PlayerInputConditionInvokerClip : DOTSClip, ITimelineClipAsset
     {
-        public InputKeys.InputMapping Action;
+        public InputSettings.InputMapping Action;
         public InputPhase Phase;
         public ConditionEventObject Condition;
         public int Value = 1;

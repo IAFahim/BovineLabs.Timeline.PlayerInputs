@@ -25,7 +25,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
                 return;
             }
 
-            var inputKeys = InputKeys.I;
+            var inputKeys = InputSettings.I;
             if (inputKeys != null)
             {
                 foreach (var mapping in inputKeys.Mappings)
