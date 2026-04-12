@@ -1,3 +1,5 @@
+using BovineLabs.Core.Extensions;
+using BovineLabs.Core.Iterators;
 using BovineLabs.Timeline;
 using BovineLabs.Timeline.Data;
 using Bovinelabs.Timeline.PlayerInputs.Data;
@@ -10,13 +12,26 @@ namespace Bovinelabs.Timeline.PlayerInputs
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     public partial struct InputBufferClearSystem : ISystem
     {
+        private UnsafeComponentLookup<InputSource> sources;
+        private UnsafeBufferLookup<InputHistory> histories;
+
+        [BurstCompile]
+        public void OnCreate(ref SystemState state)
+        {
+            this.sources = state.GetUnsafeComponentLookup<InputSource>(true);
+            this.histories = state.GetUnsafeBufferLookup<InputHistory>(false); // Read/Write
+        }
+
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            this.sources.Update(ref state);
+            this.histories.Update(ref state);
+
             state.Dependency = new ClearBufferTransition
             {
-                Sources = SystemAPI.GetComponentLookup<InputSource>(true),
-                Histories = SystemAPI.GetBufferLookup<InputHistory>()
+                Sources = this.sources,
+                Histories = this.histories
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -25,23 +40,30 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [WithNone(typeof(ClipActivePrevious))]
         private partial struct ClearBufferTransition : IJobEntity
         {
-            [ReadOnly] public ComponentLookup<InputSource> Sources;
-            [NativeDisableParallelForRestriction] public BufferLookup<InputHistory> Histories;
+            [ReadOnly] public UnsafeComponentLookup<InputSource> Sources;
+            [NativeDisableParallelForRestriction] public UnsafeBufferLookup<InputHistory> Histories;
 
             private void Execute(in InputBufferClearTrigger config, in TrackBinding binding)
             {
                 var consumer = binding.Value;
 
-                if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
-
-                if (!Histories.TryGetBuffer(source.Provider, out var history)) return;
+                if (!this.Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
+                if (!this.Histories.TryGetBuffer(source.Provider, out var history)) return;
 
                 if (config.ClearAll)
+                {
                     history.Clear();
+                }
                 else
+                {
                     for (var i = history.Length - 1; i >= 0; i--)
+                    {
                         if (history[i].ActionId == config.ActionId)
+                        {
                             history.RemoveAt(i);
+                        }
+                    }
+                }
             }
         }
     }

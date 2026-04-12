@@ -1,22 +1,20 @@
 using System;
 using System.Collections.Generic;
+using BovineLabs.Core.Collections;
 using BovineLabs.Reaction.Data.Conditions;
-using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using InputSettings = Bovinelabs.Timeline.PlayerInputs.Data.InputSettings;
 
-namespace Bovinelabs.Timeline.PlayerInputs
+namespace Bovinelabs.Timeline.PlayerInputs.Data
 {
     [RequireComponent(typeof(PlayerInput))]
     public sealed class PlayerInputBridge : MonoBehaviour
     {
-        public int PlayerIdOverride = -1;
-
-        internal readonly List<(byte Id, InputAction Action)> Buttons = new();
-        internal readonly List<(byte Id, InputAction Action)> Axes = new();
+        public int playerIdOverride = -1;
+        private readonly List<(byte Id, InputAction Action)> _axes = new();
+        private readonly List<(byte Id, InputAction Action)> _buttons = new();
 
         private World capturedWorld;
         private EntityManager entityManager;
@@ -24,7 +22,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
 
         private void OnEnable()
         {
-            var playerInput = this.GetComponent<PlayerInput>();
+            var playerInput = GetComponent<PlayerInput>();
             if (playerInput.actions == null) return;
 
             var inputKeys = InputSettings.I;
@@ -40,21 +38,21 @@ namespace Bovinelabs.Timeline.PlayerInputs
                 switch (action.type)
                 {
                     case InputActionType.Button:
-                        this.Buttons.Add((mapping.Value, action));
+                        _buttons.Add((mapping.Value, action));
                         break;
                     case InputActionType.Value:
-                        this.Axes.Add((mapping.Value, action));
+                        _axes.Add((mapping.Value, action));
                         break;
                 }
             }
 
             this.capturedWorld = World.DefaultGameObjectInjectionWorld;
-            if (this.capturedWorld == null || !this.capturedWorld.IsCreated) return;
+            if (this.capturedWorld == null) return;
 
             this.entityManager = this.capturedWorld.EntityManager;
             this.providerEntity = this.entityManager.CreateEntity();
 
-            this.entityManager.AddComponentData(this.providerEntity, new PlayerId { Value = this.GetPlayerId() });
+            this.entityManager.AddComponentData(this.providerEntity, new PlayerId { Value = GetPlayerId() });
             this.entityManager.AddComponent<InputProviderTag>(this.providerEntity);
             this.entityManager.AddComponentData(this.providerEntity, new PlayerInputBridgeComponent { Value = this });
 
@@ -64,6 +62,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
             this.entityManager.AddBuffer<InputToConditionEvent>(this.providerEntity);
 
             this.entityManager.AddBuffer<ConditionEvent>(this.providerEntity).Initialize();
+            
             this.entityManager.AddComponent<EventsDirty>(this.providerEntity);
             this.entityManager.SetComponentEnabled<EventsDirty>(this.providerEntity, false);
         }
@@ -72,22 +71,23 @@ namespace Bovinelabs.Timeline.PlayerInputs
         {
             if (this.capturedWorld == null || !this.capturedWorld.IsCreated || !this.entityManager.Exists(this.providerEntity)) return;
 
-            var currentHeld = new InputBitmask();
-            foreach (var btn in this.Buttons)
+            var currentHeld = new BitArray256();
+            foreach (var btn in this._buttons)
             {
                 if (btn.Action.IsPressed())
                 {
-                    currentHeld.Set(btn.Id);
+                    currentHeld[btn.Id] = true;
                 }
             }
 
             var previousHeld = this.entityManager.GetComponentData<InputState>(this.providerEntity).Held;
 
+            // S-Tier Core optimization: Native Bitwise calculations without branching
             var newState = new InputState
             {
-                Down = currentHeld.AndNot(previousHeld),
+                Down = currentHeld.BitAnd(previousHeld.BitNot()),
                 Held = currentHeld,
-                Up = previousHeld.AndNot(currentHeld)
+                Up = previousHeld.BitAnd(currentHeld.BitNot())
             };
 
             this.entityManager.SetComponentData(this.providerEntity, newState);
@@ -95,11 +95,11 @@ namespace Bovinelabs.Timeline.PlayerInputs
             var axes = this.entityManager.GetBuffer<InputAxisBuffer>(this.providerEntity);
             axes.Clear();
 
-            foreach (var axis in this.Axes)
+            foreach (var axis in this._axes)
             {
-                var val = float2.zero;
-                if (axis.Action.expectedControlType == "Vector2") val = axis.Action.ReadValue<Vector2>();
-                else val.x = axis.Action.ReadValue<float>();
+                var val = axis.Action.expectedControlType == "Vector2" 
+                    ? axis.Action.ReadValue<Vector2>() 
+                    : new Vector2(axis.Action.ReadValue<float>(), 0f);
 
                 if (math.lengthsq(val) > 0.0001f)
                 {
@@ -110,41 +110,24 @@ namespace Bovinelabs.Timeline.PlayerInputs
 
         private void OnDisable()
         {
-            if (this.capturedWorld != null && this.capturedWorld.IsCreated)
+            if (this.capturedWorld != null && this.capturedWorld.IsCreated && this.entityManager.Exists(this.providerEntity))
             {
-                if (this.entityManager != default && this.entityManager.Exists(this.providerEntity))
-                {
-                    this.entityManager.DestroyEntity(this.providerEntity);
-                }
+                this.entityManager.DestroyEntity(this.providerEntity);
             }
 
-            this.Buttons.Clear();
-            this.Axes.Clear();
+            _buttons.Clear();
+            _axes.Clear();
         }
 
-        public byte GetPlayerId()
-        {
-            if (this.PlayerIdOverride >= 0) return (byte)this.PlayerIdOverride;
-            var pi = this.GetComponent<PlayerInput>();
-            return (byte)(pi != null ? pi.playerIndex : 0);
-        }
+        public byte GetPlayerId() => playerIdOverride >= 0 ? (byte)playerIdOverride : (byte)(GetComponent<PlayerInput>()?.playerIndex ?? 0);
     }
 
     public sealed class PlayerInputBridgeComponent : IComponentData, IEquatable<PlayerInputBridgeComponent>, ICloneable
     {
         public PlayerInputBridge Value;
-
-        public bool Equals(PlayerInputBridgeComponent other)
-        {
-            if (ReferenceEquals(null, other)) return false;
-            if (ReferenceEquals(this, other)) return true;
-            return Equals(this.Value, other.Value);
-        }
-
-        public override bool Equals(object obj) => ReferenceEquals(this, obj) || obj is PlayerInputBridgeComponent other && this.Equals(other);
-
+        public bool Equals(PlayerInputBridgeComponent other) => !ReferenceEquals(null, other) && (ReferenceEquals(this, other) || Equals(this.Value, other.Value));
+        public override bool Equals(object obj) => ReferenceEquals(this, obj) || obj is PlayerInputBridgeComponent other && Equals(other);
         public override int GetHashCode() => this.Value != null ? this.Value.GetHashCode() : 0;
-
         public object Clone() => new PlayerInputBridgeComponent { Value = this.Value };
     }
 }

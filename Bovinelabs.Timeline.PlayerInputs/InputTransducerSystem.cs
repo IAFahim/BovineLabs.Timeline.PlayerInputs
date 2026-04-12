@@ -44,9 +44,9 @@ namespace Bovinelabs.Timeline.PlayerInputs
                 {
                     var active = transducer.Phase switch
                     {
-                        InputPhase.Down => state.Down.Has(transducer.ActionId),
-                        InputPhase.Held => state.Held.Has(transducer.ActionId),
-                        InputPhase.Up => state.Up.Has(transducer.ActionId),
+                        InputPhase.Down => state.Down[transducer.ActionId],
+                        InputPhase.Held => state.Held[transducer.ActionId],
+                        InputPhase.Up => state.Up[transducer.ActionId],
                         _ => false
                     };
 

@@ -8,19 +8,21 @@ namespace Bovinelabs.Timeline.PlayerInputs
     [UpdateInGroup(typeof(InitializationSystemGroup))]
     public partial struct PlayerInputRegistrySystem : ISystem
     {
-        private NativeHashMap<byte, Entity> _previousProviders;
+        private NativeHashMap<byte, Entity> previousProviders;
+        private EntityQuery providerQuery;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this._previousProviders = new NativeHashMap<byte, Entity>(4, Allocator.Persistent);
+            this.previousProviders = new NativeHashMap<byte, Entity>(4, Allocator.Persistent);
+            this.providerQuery = SystemAPI.QueryBuilder().WithAll<PlayerId, InputProviderTag>().Build();
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            if (this._previousProviders.IsCreated)
-                this._previousProviders.Dispose();
+            if (this.previousProviders.IsCreated)
+                this.previousProviders.Dispose();
         }
 
         [BurstCompile]
@@ -35,7 +37,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
                 state.EntityManager.AddBuffer<PlayerLeftEventBuffer>(registryEntity);
             }
 
-            var currentProviders = new NativeHashMap<byte, Entity>(4, state.WorldUpdateAllocator);
+            var currentProviders = new NativeHashMap<byte, Entity>(this.providerQuery.CalculateEntityCount(), state.WorldUpdateAllocator);
 
             foreach (var (id, entity) in SystemAPI.Query<RefRO<PlayerId>>().WithAll<InputProviderTag>().WithEntityAccess())
             {
@@ -50,15 +52,14 @@ namespace Bovinelabs.Timeline.PlayerInputs
             leftBuffer.Clear();
             linkBuffer.Clear();
 
-            // S-Tier Fix: GetKeyArray bypasses enumerator struct ambiguity across Unity versions
             var currentKeys = currentProviders.GetKeyArray(state.WorldUpdateAllocator);
-            var previousKeys = this._previousProviders.GetKeyArray(state.WorldUpdateAllocator);
+            var previousKeys = this.previousProviders.GetKeyArray(state.WorldUpdateAllocator);
 
             foreach (var key in currentKeys)
             {
                 var provider = currentProviders[key];
                 
-                if (!this._previousProviders.ContainsKey(key))
+                if (!this.previousProviders.ContainsKey(key))
                 {
                     joinedBuffer.Add(new PlayerJoinedEventBuffer { PlayerId = key, Provider = provider });
                 }
@@ -74,10 +75,10 @@ namespace Bovinelabs.Timeline.PlayerInputs
                 }
             }
 
-            this._previousProviders.Clear();
+            this.previousProviders.Clear();
             foreach (var key in currentKeys)
             {
-                this._previousProviders.Add(key, currentProviders[key]);
+                this.previousProviders.Add(key, currentProviders[key]);
             }
         }
     }

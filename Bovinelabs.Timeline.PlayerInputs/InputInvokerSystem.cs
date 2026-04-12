@@ -1,3 +1,5 @@
+using BovineLabs.Core.Extensions;
+using BovineLabs.Core.Iterators;
 using BovineLabs.Reaction.Conditions;
 using BovineLabs.Timeline;
 using BovineLabs.Timeline.Data;
@@ -12,23 +14,29 @@ namespace Bovinelabs.Timeline.PlayerInputs
     public partial struct InputInvokerSystem : ISystem
     {
         private ConditionEventWriter.Lookup writers;
+        private UnsafeComponentLookup<InputSource> sources;
+        private UnsafeComponentLookup<InputState> states;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            writers.Create(ref state);
+            this.writers.Create(ref state);
+            this.sources = state.GetUnsafeComponentLookup<InputSource>(true);
+            this.states = state.GetUnsafeComponentLookup<InputState>(true);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            writers.Update(ref state);
+            this.writers.Update(ref state);
+            this.sources.Update(ref state);
+            this.states.Update(ref state);
 
             state.Dependency = new EvaluateInvokerTransition
             {
-                Writers = writers,
-                Sources = SystemAPI.GetComponentLookup<InputSource>(true),
-                States = SystemAPI.GetComponentLookup<InputState>(true)
+                Writers = this.writers,
+                Sources = this.sources,
+                States = this.states
             }.Schedule(state.Dependency);
         }
 
@@ -37,26 +45,28 @@ namespace Bovinelabs.Timeline.PlayerInputs
         private partial struct EvaluateInvokerTransition : IJobEntity
         {
             public ConditionEventWriter.Lookup Writers;
-            [ReadOnly] public ComponentLookup<InputSource> Sources;
-            [ReadOnly] public ComponentLookup<InputState> States;
+            [ReadOnly] public UnsafeComponentLookup<InputSource> Sources;
+            [ReadOnly] public UnsafeComponentLookup<InputState> States;
 
             private void Execute(in InputInvokerConfig config, in TrackBinding binding)
             {
                 var consumer = binding.Value;
 
-                if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
-
-                if (!States.TryGetComponent(source.Provider, out var state)) return;
+                if (!this.Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
+                if (!this.States.TryGetComponent(source.Provider, out var state)) return;
 
                 var active = config.Phase switch
                 {
-                    InputPhase.Down => state.Down.Has(config.ActionId),
-                    InputPhase.Held => state.Held.Has(config.ActionId),
-                    InputPhase.Up => state.Up.Has(config.ActionId),
+                    InputPhase.Down => state.Down[config.ActionId],
+                    InputPhase.Held => state.Held[config.ActionId],
+                    InputPhase.Up => state.Up[config.ActionId],
                     _ => false
                 };
 
-                if (active && Writers.TryGet(consumer, out var writer)) writer.Trigger(config.Condition, config.Value);
+                if (active && this.Writers.TryGet(consumer, out var writer))
+                {
+                    writer.Trigger(config.Condition, config.Value);
+                }
             }
         }
     }

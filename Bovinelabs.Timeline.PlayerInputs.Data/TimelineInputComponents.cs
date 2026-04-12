@@ -1,3 +1,4 @@
+using BovineLabs.Core.Collections;
 using BovineLabs.Reaction.Data.Conditions;
 using Unity.Entities;
 
@@ -19,6 +20,6 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
 
     public struct InputCancelWindowConfig : IComponentData
     {
-        public InputBitmask AllowedMask;
+        public BitArray256 AllowedMask;
     }
 }

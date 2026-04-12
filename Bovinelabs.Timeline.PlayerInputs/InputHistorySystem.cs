@@ -25,19 +25,16 @@ namespace Bovinelabs.Timeline.PlayerInputs
 
             private void Execute(in InputState state, ref DynamicBuffer<InputHistory> history)
             {
-                var hasDown = state.Down.Chunk0 != 0 || state.Down.Chunk1 != 0 || state.Down.Chunk2 != 0 || state.Down.Chunk3 != 0;
-                var hasUp = state.Up.Chunk0 != 0 || state.Up.Chunk1 != 0 || state.Up.Chunk2 != 0 || state.Up.Chunk3 != 0;
-
-                if (!hasDown && !hasUp) return;
+                if (state.Down.AllFalse && state.Up.AllFalse) return;
 
                 for (byte i = 0; i < 255; i++)
                 {
-                    if (state.Down.Has(i))
+                    if (state.Down[i])
                     {
                         if (history.Length >= history.Capacity) history.RemoveAt(0);
                         history.Add(new InputHistory { ActionId = i, Phase = InputPhase.Down, Tick = this.Tick });
                     }
-                    else if (state.Up.Has(i))
+                    else if (state.Up[i])
                     {
                         if (history.Length >= history.Capacity) history.RemoveAt(0);
                         history.Add(new InputHistory { ActionId = i, Phase = InputPhase.Up, Tick = this.Tick });
