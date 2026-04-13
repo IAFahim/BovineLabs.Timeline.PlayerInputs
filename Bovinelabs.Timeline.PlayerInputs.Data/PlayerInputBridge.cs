@@ -26,14 +26,13 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
             if (playerInput.actions == null) return;
 
             var inputKeys = InputSettings.I;
-            if (inputKeys == null || inputKeys.Mappings.Count == 0) return;
 
-            for (byte i = 0; i < inputKeys.Mappings.Count; i++)
+            for (byte i = 0; i < inputKeys.InputActionReferences.Count; i++)
             {
-                var mapping = inputKeys.Mappings[i];
-                if (mapping.Action == null || mapping.Action.action == null) continue;
+                var inputActionReference = inputKeys.InputActionReferences[i];
+                if (inputActionReference == null || inputActionReference.action == null) continue;
 
-                var action = playerInput.actions.FindAction(mapping.Action.action.id);
+                var action = playerInput.actions.FindAction(inputActionReference.action.id);
                 if (action == null) continue;
 
                 switch (action.type)

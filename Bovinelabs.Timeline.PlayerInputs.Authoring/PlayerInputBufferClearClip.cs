@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BovineLabs.Core.Authoring.Settings;
 using BovineLabs.Timeline.Authoring;
@@ -14,29 +15,23 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
     public sealed class PlayerInputBufferClearClip : DOTSClip, ITimelineClipAsset
     {
         [Tooltip("Zero Means Clear all")]
-        public List<InputActionReference> actionsToClear = new();
+        public InputActionReference[] actionsToClear = Array.Empty<InputActionReference>();
 
         public override double duration => 1;
         public ClipCaps clipCaps => ClipCaps.None;
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
-            var settings = AuthoringSettingsUtility.GetSettings<InputSettings>();
-
             var builder = new BlobBuilder(Allocator.Temp);
             ref var root = ref builder.ConstructRoot<BlobArray<byte>>();
 
-            if (actionsToClear.Count > 0)
+            if (actionsToClear.Length > 0)
             {
-                var resolved = new List<byte>(actionsToClear.Count);
+                var resolved = new List<byte>(actionsToClear.Length);
                 foreach (var inputActionReference in actionsToClear)
                 {
-                    for (byte i = 0; i < settings.Mappings.Count; i++)
-                    {
-                        if (settings.Mappings[i].Action != inputActionReference) continue;
-                        resolved.Add(i);
-                        break;
-                    }
+                    var indexOf = InputSettings.GetIndex(inputActionReference);
+                    resolved.Add((byte)indexOf);
                 }
 
                 var array = builder.Allocate(ref root, resolved.Count);

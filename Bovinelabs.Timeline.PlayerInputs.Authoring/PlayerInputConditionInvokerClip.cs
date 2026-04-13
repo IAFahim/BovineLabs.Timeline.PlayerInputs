@@ -12,7 +12,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
 {
     public sealed class PlayerInputConditionInvokerClip : DOTSClip, ITimelineClipAsset
     {
-        public InputActionReference action;
+        public InputActionReference inputActionReference;
         public InputPhase phase;
         public ConditionEventObject condition;
         public int value = 1;
@@ -22,19 +22,9 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
-            var settings = AuthoringSettingsUtility.GetSettings<InputSettings>();
-            byte actionId = 0;
-            
-            for (byte i = 0; i < settings.Mappings.Count; i++)
-            {
-                if (settings.Mappings[i].Action != action) continue;
-                actionId = i;
-                break;
-            }
-
             context.Baker.AddComponent(clipEntity, new InputInvokerConfig
             {
-                ActionId = actionId,
+                ActionId = InputSettings.GetIndex(inputActionReference),
                 Phase = phase,
                 Condition = condition ? condition.Key : ConditionKey.Null,
                 Value = value

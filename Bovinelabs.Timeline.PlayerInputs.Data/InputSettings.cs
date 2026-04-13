@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BovineLabs.Core.Keys;
 using BovineLabs.Core.Settings;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -10,17 +11,17 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
     [SettingsGroup("Input")]
     public class InputSettings : KSettingsBase<InputSettings, byte>
     {
-        [SerializeField] private InputMapping[] mappings = Array.Empty<InputMapping>();
+        [SerializeField] private InputActionReference[] inputActionReferences = Array.Empty<InputActionReference>();
 
         public override IEnumerable<NameValue<byte>> Keys
         {
             get
             {
-                for (byte index = 0; index < mappings.Length; index++)
+                for (byte index = 0; index < inputActionReferences.Length; index++)
                 {
-                    var mapping = mappings[index];
-                    var actionName = mapping.Action != null && mapping.Action.action != null
-                        ? mapping.Action.action.name
+                    var mapping = inputActionReferences[index];
+                    var actionName = mapping != null && mapping.action != null
+                        ? mapping.action.name
                         : $"[Unassigned Action ID: {index}]";
 
                     yield return new NameValue<byte>(actionName, index);
@@ -28,13 +29,9 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
             }
         }
 
-        public IReadOnlyList<InputMapping> Mappings => mappings;
+        public IReadOnlyList<InputActionReference> InputActionReferences => inputActionReferences;
 
-        [Serializable]
-        public struct InputMapping
-        {
-            [Tooltip("The Unity Input Action to bind to this ID. The name is extracted automatically.")]
-            public InputActionReference Action;
-        }
+        public static byte GetIndex(InputActionReference inputActionReference) =>
+            NameToKey((FixedString32Bytes)inputActionReference.action.name);
     }
 }
