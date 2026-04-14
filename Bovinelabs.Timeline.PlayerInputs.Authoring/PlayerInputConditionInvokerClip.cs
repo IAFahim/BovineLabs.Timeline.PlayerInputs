@@ -1,4 +1,3 @@
-using BovineLabs.Core.Authoring.Settings;
 using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Timeline.Authoring;

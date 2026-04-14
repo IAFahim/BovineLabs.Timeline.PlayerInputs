@@ -1,6 +1,5 @@
 #if UNITY_EDITOR || BL_DEBUG
 using BovineLabs.Core;
-using BovineLabs.Core.ConfigVars;
 using BovineLabs.Quill;
 using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
@@ -62,8 +61,8 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                 label.Append("INTERFACE 0");
                 label.Append(id.Value);
 
-                this.Renderer.Text32(position, label, Color.cyan);
-                this.Renderer.Line(position + new float3(-2f, -0.2f, 0f), position + new float3(2f, -0.2f, 0f),
+                Renderer.Text32(position, label, Color.cyan);
+                Renderer.Line(position + new float3(-2f, -0.2f, 0f), position + new float3(2f, -0.2f, 0f),
                     new Color(0f, 1f, 1f, 0.4f));
             }
 
@@ -72,7 +71,6 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                 var cursor = position;
 
                 for (byte i = 0; i < 255; i++)
-                {
                     if (state.Down[i])
                     {
                         RenderSignal(cursor, i, "D", new Color(0f, 1f, 1f, 1f));
@@ -88,7 +86,6 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                         RenderSignal(cursor, i, "U", new Color(1f, 0.2f, 0.2f, 1f));
                         cursor.y -= 0.15f;
                     }
-                }
             }
 
             private void RenderSignal(float3 position, byte action, FixedString32Bytes phase, Color tint)
@@ -99,7 +96,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                 format.Append("] ");
                 format.Append(InputSettings.KeyToName(action));
 
-                this.Renderer.Text64(position, format, tint, 12f);
+                Renderer.Text64(position, format, tint, 12f);
             }
 
             private void RenderKinetics(float3 position, DynamicBuffer<InputAxisBuffer> axes)
@@ -112,14 +109,14 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                     var boundary = new float3(0f, 0f, 1f) * 0.25f;
                     var vector = new float3(axis.Value.x, axis.Value.y, 0f) * 0.25f;
 
-                    this.Renderer.Circle(cursor, boundary, new Color(1f, 1f, 1f, 0.1f));
-                    this.Renderer.Line(cursor, cursor + vector, new Color(0f, 1f, 1f, 1f));
-                    this.Renderer.Point(cursor + vector, 0.05f, new Color(0f, 1f, 1f, 1f));
+                    Renderer.Circle(cursor, boundary, new Color(1f, 1f, 1f, 0.1f));
+                    Renderer.Line(cursor, cursor + vector, new Color(0f, 1f, 1f, 1f));
+                    Renderer.Point(cursor + vector, 0.05f, new Color(0f, 1f, 1f, 1f));
 
                     var label = new FixedString64Bytes();
                     label.Append(InputSettings.KeyToName(axis.ActionId));
 
-                    this.Renderer.Text64(cursor + new float3(0f, 0.35f, 0f), label, new Color(1f, 1f, 1f, 0.5f), 10f);
+                    Renderer.Text64(cursor + new float3(0f, 0.35f, 0f), label, new Color(1f, 1f, 1f, 0.5f), 10f);
 
                     cursor.y -= 0.8f;
                 }
@@ -146,7 +143,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Debug
                     format.Append("ms ");
                     format.Append(InputSettings.KeyToName(record.ActionId));
 
-                    this.Renderer.Text64(cursor, format, tint, 10f);
+                    Renderer.Text64(cursor, format, tint, 10f);
                     cursor.y -= 0.15f;
                 }
             }

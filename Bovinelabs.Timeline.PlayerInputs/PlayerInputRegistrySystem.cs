@@ -14,15 +14,15 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this.previousProviders = new NativeHashMap<byte, Entity>(4, Allocator.Persistent);
-            this.providerQuery = SystemAPI.QueryBuilder().WithAll<PlayerId, InputProviderTag>().Build();
+            previousProviders = new NativeHashMap<byte, Entity>(4, Allocator.Persistent);
+            providerQuery = SystemAPI.QueryBuilder().WithAll<PlayerId, InputProviderTag>().Build();
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            if (this.previousProviders.IsCreated)
-                this.previousProviders.Dispose();
+            if (previousProviders.IsCreated)
+                previousProviders.Dispose();
         }
 
         [BurstCompile]
@@ -37,12 +37,11 @@ namespace Bovinelabs.Timeline.PlayerInputs
                 state.EntityManager.AddBuffer<PlayerLeftEventBuffer>(registryEntity);
             }
 
-            var currentProviders = new NativeHashMap<byte, Entity>(this.providerQuery.CalculateEntityCount(), state.WorldUpdateAllocator);
+            var currentProviders =
+                new NativeHashMap<byte, Entity>(providerQuery.CalculateEntityCount(), state.WorldUpdateAllocator);
 
-            foreach (var (id, entity) in SystemAPI.Query<RefRO<PlayerId>>().WithAll<InputProviderTag>().WithEntityAccess())
-            {
-                currentProviders.Add(id.ValueRO.Value, entity);
-            }
+            foreach (var (id, entity) in SystemAPI.Query<RefRO<PlayerId>>().WithAll<InputProviderTag>()
+                         .WithEntityAccess()) currentProviders.Add(id.ValueRO.Value, entity);
 
             var joinedBuffer = SystemAPI.GetBuffer<PlayerJoinedEventBuffer>(registryEntity);
             var leftBuffer = SystemAPI.GetBuffer<PlayerLeftEventBuffer>(registryEntity);
@@ -53,33 +52,24 @@ namespace Bovinelabs.Timeline.PlayerInputs
             linkBuffer.Clear();
 
             var currentKeys = currentProviders.GetKeyArray(state.WorldUpdateAllocator);
-            var previousKeys = this.previousProviders.GetKeyArray(state.WorldUpdateAllocator);
+            var previousKeys = previousProviders.GetKeyArray(state.WorldUpdateAllocator);
 
             foreach (var key in currentKeys)
             {
                 var provider = currentProviders[key];
-                
-                if (!this.previousProviders.ContainsKey(key))
-                {
+
+                if (!previousProviders.ContainsKey(key))
                     joinedBuffer.Add(new PlayerJoinedEventBuffer { PlayerId = key, Provider = provider });
-                }
-                
+
                 linkBuffer.Add(new PlayerInputLink { PlayerId = key, Provider = provider });
             }
 
             foreach (var key in previousKeys)
-            {
                 if (!currentProviders.ContainsKey(key))
-                {
                     leftBuffer.Add(new PlayerLeftEventBuffer { PlayerId = key });
-                }
-            }
 
-            this.previousProviders.Clear();
-            foreach (var key in currentKeys)
-            {
-                this.previousProviders.Add(key, currentProviders[key]);
-            }
+            previousProviders.Clear();
+            foreach (var key in currentKeys) previousProviders.Add(key, currentProviders[key]);
         }
     }
 }

@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using BovineLabs.Core.Authoring.Settings;
 using BovineLabs.Core.Collections;
 using BovineLabs.Timeline.Authoring;
 using Bovinelabs.Timeline.PlayerInputs.Data;

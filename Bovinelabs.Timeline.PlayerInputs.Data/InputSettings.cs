@@ -31,7 +31,9 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
 
         public IReadOnlyList<InputActionReference> InputActionReferences => inputActionReferences;
 
-        public static byte GetIndex(InputActionReference inputActionReference) =>
-            NameToKey((FixedString32Bytes)inputActionReference.action.name);
+        public static byte GetIndex(InputActionReference inputActionReference)
+        {
+            return NameToKey((FixedString32Bytes)inputActionReference.action.name);
+        }
     }
 }

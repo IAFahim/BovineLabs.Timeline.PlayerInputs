@@ -20,6 +20,40 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
         private EntityManager entityManager;
         private Entity providerEntity;
 
+        private void Update()
+        {
+            if (capturedWorld == null || !capturedWorld.IsCreated || !entityManager.Exists(providerEntity)) return;
+
+            var currentHeld = new BitArray256();
+            foreach (var btn in _buttons)
+                if (btn.Action.IsPressed())
+                    currentHeld[btn.Id] = true;
+
+            var previousHeld = entityManager.GetComponentData<InputState>(providerEntity).Held;
+
+            // S-Tier Core optimization: Native Bitwise calculations without branching
+            var newState = new InputState
+            {
+                Down = currentHeld.BitAnd(previousHeld.BitNot()),
+                Held = currentHeld,
+                Up = previousHeld.BitAnd(currentHeld.BitNot())
+            };
+
+            entityManager.SetComponentData(providerEntity, newState);
+
+            var axes = entityManager.GetBuffer<InputAxisBuffer>(providerEntity);
+            axes.Clear();
+
+            foreach (var axis in _axes)
+            {
+                var val = axis.Action.expectedControlType == "Vector2"
+                    ? axis.Action.ReadValue<Vector2>()
+                    : new Vector2(axis.Action.ReadValue<float>(), 0f);
+
+                if (math.lengthsq(val) > 0.0001f) axes.Add(new InputAxisBuffer { ActionId = axis.Id, Value = val });
+            }
+        }
+
         private void OnEnable()
         {
             var playerInput = GetComponent<PlayerInput>();
@@ -41,93 +75,71 @@ namespace Bovinelabs.Timeline.PlayerInputs.Data
                         _buttons.Add((i, action)); // Use 'i' as the ID
                         break;
                     case InputActionType.Value:
-                        _axes.Add((i, action));    // Use 'i' as the ID
+                        _axes.Add((i, action)); // Use 'i' as the ID
                         break;
                 }
             }
 
-            this.capturedWorld = World.DefaultGameObjectInjectionWorld;
-            if (this.capturedWorld == null) return;
+            capturedWorld = World.DefaultGameObjectInjectionWorld;
+            if (capturedWorld == null) return;
 
-            this.entityManager = this.capturedWorld.EntityManager;
-            this.providerEntity = this.entityManager.CreateEntity();
+            entityManager = capturedWorld.EntityManager;
+            providerEntity = entityManager.CreateEntity();
 
-            this.entityManager.AddComponentData(this.providerEntity, new PlayerId { Value = GetPlayerId() });
-            this.entityManager.AddComponent<InputProviderTag>(this.providerEntity);
-            this.entityManager.AddComponentData(this.providerEntity, new PlayerInputBridgeComponent { Value = this });
+            entityManager.AddComponentData(providerEntity, new PlayerId { Value = GetPlayerId() });
+            entityManager.AddComponent<InputProviderTag>(providerEntity);
+            entityManager.AddComponentData(providerEntity, new PlayerInputBridgeComponent { Value = this });
 
-            this.entityManager.AddComponent<InputState>(this.providerEntity);
-            this.entityManager.AddBuffer<InputAxisBuffer>(this.providerEntity);
-            this.entityManager.AddBuffer<InputHistory>(this.providerEntity);
-            this.entityManager.AddBuffer<InputToConditionEvent>(this.providerEntity);
+            entityManager.AddComponent<InputState>(providerEntity);
+            entityManager.AddBuffer<InputAxisBuffer>(providerEntity);
+            entityManager.AddBuffer<InputHistory>(providerEntity);
+            entityManager.AddBuffer<InputToConditionEvent>(providerEntity);
 
-            this.entityManager.AddBuffer<ConditionEvent>(this.providerEntity).Initialize();
-            
-            this.entityManager.AddComponent<EventsDirty>(this.providerEntity);
-            this.entityManager.SetComponentEnabled<EventsDirty>(this.providerEntity, false);
-        }
+            entityManager.AddBuffer<ConditionEvent>(providerEntity).Initialize();
 
-        private void Update()
-        {
-            if (this.capturedWorld == null || !this.capturedWorld.IsCreated || !this.entityManager.Exists(this.providerEntity)) return;
-
-            var currentHeld = new BitArray256();
-            foreach (var btn in this._buttons)
-            {
-                if (btn.Action.IsPressed())
-                {
-                    currentHeld[btn.Id] = true;
-                }
-            }
-
-            var previousHeld = this.entityManager.GetComponentData<InputState>(this.providerEntity).Held;
-
-            // S-Tier Core optimization: Native Bitwise calculations without branching
-            var newState = new InputState
-            {
-                Down = currentHeld.BitAnd(previousHeld.BitNot()),
-                Held = currentHeld,
-                Up = previousHeld.BitAnd(currentHeld.BitNot())
-            };
-
-            this.entityManager.SetComponentData(this.providerEntity, newState);
-
-            var axes = this.entityManager.GetBuffer<InputAxisBuffer>(this.providerEntity);
-            axes.Clear();
-
-            foreach (var axis in this._axes)
-            {
-                var val = axis.Action.expectedControlType == "Vector2" 
-                    ? axis.Action.ReadValue<Vector2>() 
-                    : new Vector2(axis.Action.ReadValue<float>(), 0f);
-
-                if (math.lengthsq(val) > 0.0001f)
-                {
-                    axes.Add(new InputAxisBuffer { ActionId = axis.Id, Value = val });
-                }
-            }
+            entityManager.AddComponent<EventsDirty>(providerEntity);
+            entityManager.SetComponentEnabled<EventsDirty>(providerEntity, false);
         }
 
         private void OnDisable()
         {
-            if (this.capturedWorld != null && this.capturedWorld.IsCreated && this.entityManager.Exists(this.providerEntity))
-            {
-                this.entityManager.DestroyEntity(this.providerEntity);
-            }
+            if (capturedWorld != null && capturedWorld.IsCreated && entityManager.Exists(providerEntity))
+                entityManager.DestroyEntity(providerEntity);
 
             _buttons.Clear();
             _axes.Clear();
         }
 
-        public byte GetPlayerId() => playerIdOverride >= 0 ? (byte)playerIdOverride : (byte)(GetComponent<PlayerInput>()?.playerIndex ?? 0);
+        public byte GetPlayerId()
+        {
+            return playerIdOverride >= 0
+                ? (byte)playerIdOverride
+                : (byte)(GetComponent<PlayerInput>()?.playerIndex ?? 0);
+        }
     }
 
     public sealed class PlayerInputBridgeComponent : IComponentData, IEquatable<PlayerInputBridgeComponent>, ICloneable
     {
         public PlayerInputBridge Value;
-        public bool Equals(PlayerInputBridgeComponent other) => !ReferenceEquals(null, other) && (ReferenceEquals(this, other) || Equals(this.Value, other.Value));
-        public override bool Equals(object obj) => ReferenceEquals(this, obj) || obj is PlayerInputBridgeComponent other && Equals(other);
-        public override int GetHashCode() => this.Value != null ? this.Value.GetHashCode() : 0;
-        public object Clone() => new PlayerInputBridgeComponent { Value = this.Value };
+
+        public object Clone()
+        {
+            return new PlayerInputBridgeComponent { Value = this.Value };
+        }
+
+        public bool Equals(PlayerInputBridgeComponent other)
+        {
+            return !ReferenceEquals(null, other) && (ReferenceEquals(this, other) || Equals(this.Value, other.Value));
+        }
+
+        public override bool Equals(object obj)
+        {
+            return ReferenceEquals(this, obj) || obj is PlayerInputBridgeComponent other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            return this.Value != null ? this.Value.GetHashCode() : 0;
+        }
     }
 }

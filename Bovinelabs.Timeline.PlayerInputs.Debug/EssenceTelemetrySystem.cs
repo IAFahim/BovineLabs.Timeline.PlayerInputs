@@ -1,6 +1,5 @@
 #if UNITY_EDITOR || BL_DEBUG
 using BovineLabs.Core;
-using BovineLabs.Core.Iterators;
 using BovineLabs.Essence.Data;
 using BovineLabs.Quill;
 using BovineLabs.Reaction.Data.Conditions;
@@ -14,7 +13,8 @@ using UnityEngine;
 
 namespace BovineLabs.Essence.Debug
 {
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
+                       WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(DebugSystemGroup))]
     public partial struct EssenceTelemetrySystem : ISystem
     {
@@ -23,7 +23,7 @@ namespace BovineLabs.Essence.Debug
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this.telemetryQuery = SystemAPI.QueryBuilder()
+            telemetryQuery = SystemAPI.QueryBuilder()
                 .WithAll<LocalToWorld>()
                 .WithAny<Stat, Intrinsic, ConditionEvent>()
                 .Build();
@@ -43,7 +43,7 @@ namespace BovineLabs.Essence.Debug
                 StatHandle = SystemAPI.GetBufferTypeHandle<Stat>(true),
                 IntrinsicHandle = SystemAPI.GetBufferTypeHandle<Intrinsic>(true),
                 EventHandle = SystemAPI.GetBufferTypeHandle<ConditionEvent>(true)
-            }.Schedule(this.telemetryQuery, state.Dependency);
+            }.Schedule(telemetryQuery, state.Dependency);
         }
 
         [BurstCompile]
@@ -60,12 +60,13 @@ namespace BovineLabs.Essence.Debug
             private static readonly Color EventTint = new(0.9f, 0.4f, 0.2f, 1f);
             private static readonly Color HeaderTint = new(1f, 1f, 1f, 0.2f);
 
-            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
+            public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask,
+                in v128 chunkEnabledMask)
             {
-                var transforms = chunk.GetNativeArray(ref this.TransformHandle);
-                var statsAccessor = chunk.GetBufferAccessor(ref this.StatHandle);
-                var intrinsicsAccessor = chunk.GetBufferAccessor(ref this.IntrinsicHandle);
-                var eventsAccessor = chunk.GetBufferAccessor(ref this.EventHandle);
+                var transforms = chunk.GetNativeArray(ref TransformHandle);
+                var statsAccessor = chunk.GetBufferAccessor(ref StatHandle);
+                var intrinsicsAccessor = chunk.GetBufferAccessor(ref IntrinsicHandle);
+                var eventsAccessor = chunk.GetBufferAccessor(ref EventHandle);
 
                 var hasStats = statsAccessor.Length > 0;
                 var hasIntrinsics = intrinsicsAccessor.Length > 0;
@@ -77,12 +78,12 @@ namespace BovineLabs.Essence.Debug
                     var origin = transforms[index].Position;
                     var cursor = origin + new float3(0f, 1.5f, 0f);
 
-                    this.Renderer.Line(origin, cursor, HeaderTint);
-                    this.Renderer.Point(origin, 0.05f, HeaderTint);
+                    Renderer.Line(origin, cursor, HeaderTint);
+                    Renderer.Point(origin, 0.05f, HeaderTint);
 
-                    if (hasStats) this.RenderStats(ref cursor, statsAccessor[index]);
-                    if (hasIntrinsics) this.RenderIntrinsics(ref cursor, intrinsicsAccessor[index]);
-                    if (hasEvents) this.RenderEvents(ref cursor, eventsAccessor[index]);
+                    if (hasStats) RenderStats(ref cursor, statsAccessor[index]);
+                    if (hasIntrinsics) RenderIntrinsics(ref cursor, intrinsicsAccessor[index]);
+                    if (hasEvents) RenderEvents(ref cursor, eventsAccessor[index]);
                 }
             }
 
@@ -96,7 +97,7 @@ namespace BovineLabs.Essence.Debug
                     format.Append(" : ");
                     format.Append(kvp.Value.Value);
 
-                    this.Renderer.Text64(cursor, format, StatTint, 11f);
+                    Renderer.Text64(cursor, format, StatTint, 11f);
                     cursor.y += 0.15f;
                 }
             }
@@ -111,7 +112,7 @@ namespace BovineLabs.Essence.Debug
                     format.Append(" : ");
                     format.Append(kvp.Value);
 
-                    this.Renderer.Text64(cursor, format, IntrinsicTint, 11f);
+                    Renderer.Text64(cursor, format, IntrinsicTint, 11f);
                     cursor.y += 0.15f;
                 }
             }
@@ -126,7 +127,7 @@ namespace BovineLabs.Essence.Debug
                     format.Append(" : ");
                     format.Append(kvp.Value);
 
-                    this.Renderer.Text64(cursor, format, EventTint, 11f);
+                    Renderer.Text64(cursor, format, EventTint, 11f);
                     cursor.y += 0.15f;
                 }
             }

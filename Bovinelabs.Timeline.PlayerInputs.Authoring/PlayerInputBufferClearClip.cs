@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BovineLabs.Core.Authoring.Settings;
 using BovineLabs.Timeline.Authoring;
 using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Collections;
@@ -31,7 +30,7 @@ namespace Bovinelabs.Timeline.PlayerInputs.Authoring
                 foreach (var inputActionReference in actionsToClear)
                 {
                     var indexOf = InputSettings.GetIndex(inputActionReference);
-                    resolved.Add((byte)indexOf);
+                    resolved.Add(indexOf);
                 }
 
                 var array = builder.Allocate(ref root, resolved.Count);

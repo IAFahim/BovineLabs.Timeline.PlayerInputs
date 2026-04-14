@@ -19,23 +19,23 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this.sources = state.GetUnsafeComponentLookup<InputSource>(true);
-            this.states = state.GetUnsafeComponentLookup<InputState>(true);
-            this.timelines = state.GetUnsafeEnableableLookup();
+            sources = state.GetUnsafeComponentLookup<InputSource>(true);
+            states = state.GetUnsafeComponentLookup<InputState>(true);
+            timelines = state.GetUnsafeEnableableLookup();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            this.sources.Update(ref state);
-            this.states.Update(ref state);
-            this.timelines = state.GetUnsafeEnableableLookup();
+            sources.Update(ref state);
+            states.Update(ref state);
+            timelines = state.GetUnsafeEnableableLookup();
 
             state.Dependency = new EvaluateCancelTransition
             {
-                Sources = this.sources,
-                States = this.states,
-                Timelines = this.timelines
+                Sources = sources,
+                States = states,
+                Timelines = timelines
             }.Schedule(state.Dependency);
         }
 
@@ -51,17 +51,14 @@ namespace Bovinelabs.Timeline.PlayerInputs
             {
                 var consumer = binding.Value;
 
-                if (!this.Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
-                if (!this.States.TryGetComponent(source.Provider, out var state)) return;
+                if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
+                if (!States.TryGetComponent(source.Provider, out var state)) return;
 
                 // Fast binary intersection check
                 if (!state.Down.BitAnd(config.AllowedMask).AllFalse)
-                {
-                    if (this.Timelines.HasComponent(director.Director, ComponentType.ReadWrite<TimelineActive>()))
-                    {
-                        this.Timelines.SetComponentEnabled(director.Director, ComponentType.ReadWrite<TimelineActive>(), false);
-                    }
-                }
+                    if (Timelines.HasComponent(director.Director, ComponentType.ReadWrite<TimelineActive>()))
+                        Timelines.SetComponentEnabled(director.Director, ComponentType.ReadWrite<TimelineActive>(),
+                            false);
             }
         }
     }

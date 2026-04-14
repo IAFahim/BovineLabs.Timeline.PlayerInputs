@@ -7,7 +7,6 @@ using Bovinelabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
-using UnityEngine;
 
 namespace Bovinelabs.Timeline.PlayerInputs
 {
@@ -21,23 +20,23 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this.writers.Create(ref state);
-            this.sources = state.GetUnsafeComponentLookup<InputSource>(true);
-            this.states = state.GetUnsafeComponentLookup<InputState>(true);
+            writers.Create(ref state);
+            sources = state.GetUnsafeComponentLookup<InputSource>(true);
+            states = state.GetUnsafeComponentLookup<InputState>(true);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            this.writers.Update(ref state);
-            this.sources.Update(ref state);
-            this.states.Update(ref state);
+            writers.Update(ref state);
+            sources.Update(ref state);
+            states.Update(ref state);
 
             state.Dependency = new EvaluateInvokerTransition
             {
-                Writers = this.writers,
-                Sources = this.sources,
-                States = this.states
+                Writers = writers,
+                Sources = sources,
+                States = states
             }.Schedule(state.Dependency);
         }
 
@@ -53,8 +52,8 @@ namespace Bovinelabs.Timeline.PlayerInputs
             {
                 var consumer = binding.Value;
 
-                if (!this.Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
-                if (!this.States.TryGetComponent(source.Provider, out var state)) return;
+                if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
+                if (!States.TryGetComponent(source.Provider, out var state)) return;
 
                 var active = config.Phase switch
                 {
@@ -64,10 +63,7 @@ namespace Bovinelabs.Timeline.PlayerInputs
                     _ => false
                 };
 
-                if (active && this.Writers.TryGet(consumer, out var writer))
-                {
-                    writer.Trigger(config.Condition, config.Value);
-                }
+                if (active && Writers.TryGet(consumer, out var writer)) writer.Trigger(config.Condition, config.Value);
             }
         }
     }

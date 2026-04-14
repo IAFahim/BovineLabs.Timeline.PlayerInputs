@@ -1,4 +1,5 @@
 // InputBufferClearSystem.cs
+
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Timeline;
@@ -19,19 +20,19 @@ namespace Bovinelabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this.sources = state.GetUnsafeComponentLookup<InputSource>(true);
-            this.histories = state.GetUnsafeBufferLookup<InputHistory>(false);
+            sources = state.GetUnsafeComponentLookup<InputSource>(true);
+            histories = state.GetUnsafeBufferLookup<InputHistory>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            this.sources.Update(ref state);
-            this.histories.Update(ref state);
+            sources.Update(ref state);
+            histories.Update(ref state);
             state.Dependency = new ClearBufferTransition
             {
-                Sources = this.sources,
-                Histories = this.histories,
+                Sources = sources,
+                Histories = histories
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -46,8 +47,8 @@ namespace Bovinelabs.Timeline.PlayerInputs
             private void Execute(in InputBufferClearTrigger config, in TrackBinding binding)
             {
                 var consumer = binding.Value;
-                if (!this.Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
-                if (!this.Histories.TryGetBuffer(source.Provider, out var history)) return;
+                if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
+                if (!Histories.TryGetBuffer(source.Provider, out var history)) return;
 
                 ref var actionIds = ref config.ActionIds.Value;
 
@@ -62,13 +63,11 @@ namespace Bovinelabs.Timeline.PlayerInputs
                 {
                     var historyActionId = history[i].ActionId;
                     for (var j = 0; j < actionIds.Length; j++)
-                    {
                         if (historyActionId == actionIds[j])
                         {
                             history.RemoveAt(i);
                             break;
                         }
-                    }
                 }
             }
         }
