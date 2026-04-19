@@ -125,12 +125,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         public object Clone()
         {
-            return new PlayerInputBridgeComponent { Value = this.Value };
+            return new PlayerInputBridgeComponent { Value = Value };
         }
 
         public bool Equals(PlayerInputBridgeComponent other)
         {
-            return !ReferenceEquals(null, other) && (ReferenceEquals(this, other) || Equals(this.Value, other.Value));
+            return !ReferenceEquals(null, other) && (ReferenceEquals(this, other) || Equals(Value, other.Value));
         }
 
         public override bool Equals(object obj)
@@ -140,7 +140,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         public override int GetHashCode()
         {
-            return this.Value != null ? this.Value.GetHashCode() : 0;
+            return Value != null ? Value.GetHashCode() : 0;
         }
     }
 }
