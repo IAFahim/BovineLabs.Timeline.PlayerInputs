@@ -28,6 +28,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 }
             }
         }
+        
+        
 
         public IReadOnlyList<InputActionReference> InputActionReferences => inputActionReferences;
 
