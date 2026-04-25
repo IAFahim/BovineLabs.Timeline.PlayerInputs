@@ -53,10 +53,11 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (!Sources.TryGetComponent(consumer, out var source) || source.Provider == Entity.Null) return;
                 if (!States.TryGetComponent(source.Provider, out var state)) return;
 
+                var activeType = ComponentType.ReadWrite<TimelineActive>();
+
                 if (!state.Down.BitAnd(config.AllowedMask).AllFalse)
-                    if (Timelines.HasComponent(director.Director, ComponentType.ReadWrite<TimelineActive>()))
-                        Timelines.SetComponentEnabled(director.Director, ComponentType.ReadWrite<TimelineActive>(),
-                            false);
+                    if (Timelines.HasComponent(director.Director, activeType))
+                        Timelines.SetComponentEnabled(director.Director, activeType, false);
             }
         }
     }
