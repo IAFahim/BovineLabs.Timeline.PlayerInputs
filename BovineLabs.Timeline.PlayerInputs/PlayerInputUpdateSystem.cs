@@ -8,7 +8,8 @@ namespace BovineLabs.Timeline.PlayerInputs
     {
         protected override void OnUpdate()
         {
-            foreach (var (state, axes, bridge) in SystemAPI.Query<RefRW<InputState>, DynamicBuffer<InputAxisBuffer>, PlayerInputBridgeComponent>())
+            foreach (var (state, axes, bridge) in SystemAPI
+                         .Query<RefRW<InputState>, DynamicBuffer<InputAxisBuffer>, PlayerInputBridgeComponent>())
             {
                 if (bridge.Value == null) continue;
 

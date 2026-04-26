@@ -15,7 +15,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public InputActionReference inputActionReference;
         public InputPhase phase;
         public ConditionEventObject condition;
-        public int value = 1;[Tooltip("EntityLink to route the condition event to. If empty, routes to the bound track target.")]
+        public int value = 1;
+
+        [Tooltip("EntityLink to route the condition event to. If empty, routes to the bound track target.")]
         public EntityLinkSchema routeTo;
 
         public override double duration => 1;

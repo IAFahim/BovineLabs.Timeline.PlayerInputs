@@ -32,7 +32,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (source.Provider == Entity.Null) return;
                 if (!AxisLookup.TryGetBuffer(source.Provider, out var axes)) return;
 
-                for (int i = 0; i < axes.Length; i++)
+                for (var i = 0; i < axes.Length; i++)
                 {
                     var axis = axes[i];
                     if (math.lengthsq(axis.Value) > 0.0001f)

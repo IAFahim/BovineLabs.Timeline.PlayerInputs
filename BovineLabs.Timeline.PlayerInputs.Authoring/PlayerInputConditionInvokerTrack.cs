@@ -9,7 +9,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     [TrackClipType(typeof(PlayerInputConditionInvokerClip))]
     [TrackColor(0.2f, 0.6f, 0.9f)]
     [TrackBindingType(typeof(InputConsumerAuthoring))]
-    [DisplayName("BovineLabs/Timeline/Player Inputs/Condition Invoker Track")]
+    [DisplayName("BovineLabs/Player Inputs/Condition Invoker Track")]
     public sealed class PlayerInputConditionInvokerTrack : DOTSTrack
     {
     }

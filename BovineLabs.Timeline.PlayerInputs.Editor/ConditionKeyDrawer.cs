@@ -2,15 +2,15 @@
 //     Copyright (c) BovineLabs. All rights reserved.
 // </copyright>
 
+using System.Collections.Generic;
+using BovineLabs.Reaction.Authoring.Conditions;
+using BovineLabs.Reaction.Data.Conditions;
+using UnityEditor;
+using UnityEngine;
+
 #if UNITY_EDITOR
 namespace BovineLabs.Timeline.PlayerInputs.Editor
 {
-    using System.Collections.Generic;
-    using BovineLabs.Reaction.Authoring.Conditions;
-    using BovineLabs.Reaction.Data.Conditions;
-    using UnityEditor;
-    using UnityEngine;
-
     [CustomPropertyDrawer(typeof(ConditionKey))]
     public class ConditionKeyDrawer : PropertyDrawer
     {
@@ -26,7 +26,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
 
             var current = FindByKey(valueProp?.intValue ?? 0);
             var next = (ConditionEventObject)EditorGUI.ObjectField(
-                position, label, current, typeof(ConditionEventObject), allowSceneObjects: false);
+                position, label, current, typeof(ConditionEventObject), false);
 
             if (!ReferenceEquals(next, current) && valueProp != null)
             {
@@ -42,7 +42,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
         private static SerializedProperty FirstChild(SerializedProperty prop)
         {
             var copy = prop.Copy();
-            return copy.Next(enterChildren: true) ? copy : null;
+            return copy.Next(true) ? copy : null;
         }
 
         private static ConditionEventObject FindByKey(int key)
@@ -58,7 +58,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             foreach (var guid in AssetDatabase.FindAssets("t:ConditionEventObject"))
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
-                var obj  = AssetDatabase.LoadAssetAtPath<ConditionEventObject>(path);
+                var obj = AssetDatabase.LoadAssetAtPath<ConditionEventObject>(path);
                 if (obj != null)
                     s_Cache[obj.Key] = obj;
             }

@@ -13,13 +13,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public sealed class PlayerInputBridge : MonoBehaviour
     {
         public int PlayerIdOverride = -1;
+
+        public BitArray256 CurrentHeld;
         internal readonly List<(byte Id, InputAction Action)> Axes = new();
         internal readonly List<(byte Id, InputAction Action)> Buttons = new();
 
-        public BitArray256 CurrentHeld;
-        public List<InputAxisBuffer> CurrentAxes = new();
-
         private World capturedWorld;
+        public List<InputAxisBuffer> CurrentAxes = new();
         private EntityManager entityManager;
         private Entity providerEntity;
 
@@ -36,7 +36,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 float2 val;
                 if (axis.Action.expectedControlType == "Vector2")
                 {
-                    var v2 = axis.Action.ReadValue<UnityEngine.Vector2>();
+                    var v2 = axis.Action.ReadValue<Vector2>();
                     val = new float2(v2.x, v2.y);
                 }
                 else
@@ -51,67 +51,66 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         private void OnEnable()
         {
-            var playerInput = this.GetComponent<PlayerInput>();
-            if (playerInput.actions == null)
-            {
-                return;
-            }
+            var playerInput = GetComponent<PlayerInput>();
+            if (playerInput.actions == null) return;
 
             var inputSettings = MuliInputSettings.I;
-            if (inputSettings == null || inputSettings.InputActions.Count == 0)
-            {
-                return;
-            }
+            if (inputSettings == null || inputSettings.InputActions.Count == 0) return;
 
-            this.Buttons.Clear();
-            this.Axes.Clear();
-            this.CurrentAxes.Clear();
-            this.CurrentHeld = new BitArray256();
+            Buttons.Clear();
+            Axes.Clear();
+            CurrentAxes.Clear();
+            CurrentHeld = new BitArray256();
 
             for (byte index = 0; index < inputSettings.InputActions.Count; index++)
             {
                 var binding = inputSettings.InputActions[index];
-                if (!TryFindAction(playerInput, binding.Input, out var action))
-                {
-                    continue;
-                }
+                if (!TryFindAction(playerInput, binding.Input, out var action)) continue;
 
                 switch (action.type)
                 {
                     case InputActionType.Button:
-                        this.Buttons.Add((index, action));
+                        Buttons.Add((index, action));
                         break;
 
                     case InputActionType.Value:
-                        this.Axes.Add((index, action));
+                        Axes.Add((index, action));
                         break;
                 }
             }
 
-            this.capturedWorld = World.DefaultGameObjectInjectionWorld;
-            if (this.capturedWorld == null)
-            {
-                return;
-            }
+            capturedWorld = World.DefaultGameObjectInjectionWorld;
+            if (capturedWorld == null) return;
 
-            this.entityManager = this.capturedWorld.EntityManager;
-            this.providerEntity = this.entityManager.CreateEntity();
+            entityManager = capturedWorld.EntityManager;
+            providerEntity = entityManager.CreateEntity();
 
-            this.entityManager.AddComponentData(this.providerEntity, new PlayerId { Value = this.GetPlayerId() });
-            this.entityManager.AddComponent<InputProviderTag>(this.providerEntity);
-            this.entityManager.AddComponentObject(this.providerEntity, new PlayerInputBridgeComponent { Value = this });
+            entityManager.AddComponentData(providerEntity, new PlayerId { Value = GetPlayerId() });
+            entityManager.AddComponent<InputProviderTag>(providerEntity);
+            entityManager.AddComponentObject(providerEntity, new PlayerInputBridgeComponent { Value = this });
 
-            this.entityManager.AddComponent<InputState>(this.providerEntity);
-            this.entityManager.AddBuffer<InputAxisBuffer>(this.providerEntity);
-            this.entityManager.AddBuffer<InputHistory>(this.providerEntity);
+            entityManager.AddComponent<InputState>(providerEntity);
+            entityManager.AddBuffer<InputAxisBuffer>(providerEntity);
+            entityManager.AddBuffer<InputHistory>(providerEntity);
 
-            var transducers = this.entityManager.AddBuffer<InputToConditionEvent>(this.providerEntity);
+            var transducers = entityManager.AddBuffer<InputToConditionEvent>(providerEntity);
             AddTransducers(transducers, inputSettings);
 
-            this.entityManager.AddBuffer<ConditionEvent>(this.providerEntity).Initialize();
+            entityManager.AddBuffer<ConditionEvent>(providerEntity).Initialize();
 
-            this.entityManager.AddComponent<EventsDirty>(this.providerEntity);
-            this.entityManager.SetComponentEnabled<EventsDirty>(this.providerEntity, false);
+            entityManager.AddComponent<EventsDirty>(providerEntity);
+            entityManager.SetComponentEnabled<EventsDirty>(providerEntity, false);
+        }
+
+        private void OnDisable()
+        {
+            if (capturedWorld != null && capturedWorld.IsCreated && entityManager.Exists(providerEntity))
+                entityManager.DestroyEntity(providerEntity);
+
+            Buttons.Clear();
+            Axes.Clear();
+            CurrentAxes.Clear();
+            CurrentHeld = new BitArray256();
         }
 
         private static bool TryFindAction(PlayerInput playerInput, InputActionReference reference,
@@ -119,10 +118,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             action = null;
 
-            if (reference == null || reference.action == null)
-            {
-                return false;
-            }
+            if (reference == null || reference.action == null) return false;
 
             action = playerInput.actions.FindAction(reference.action.id);
             return action != null;
@@ -135,35 +131,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             for (byte actionId = 0; actionId < settings.InputActions.Count; actionId++)
             {
                 var binding = settings.InputActions[actionId];
-                if (binding.Events == null)
-                {
-                    continue;
-                }
+                if (binding.Events == null) continue;
 
                 foreach (var evt in binding.Events)
                 {
-                    if (evt == null)
-                    {
-                        continue;
-                    }
+                    if (evt == null) continue;
 
-                    if (evt.TryBake(actionId, out var transducer))
-                    {
-                        transducers.Add(transducer);
-                    }
+                    if (evt.TryBake(actionId, out var transducer)) transducers.Add(transducer);
                 }
             }
-        }
-
-        private void OnDisable()
-        {
-            if (capturedWorld != null && capturedWorld.IsCreated && entityManager.Exists(providerEntity))
-                entityManager.DestroyEntity(providerEntity);
-
-            Buttons.Clear();
-            Axes.Clear();
-            CurrentAxes.Clear();
-            CurrentHeld = new BitArray256();
         }
 
         public byte GetPlayerId()

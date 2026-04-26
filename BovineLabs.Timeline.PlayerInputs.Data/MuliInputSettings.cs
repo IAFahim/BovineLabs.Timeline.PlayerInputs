@@ -12,18 +12,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     [SettingsGroup("Input")]
     public class MuliInputSettings : KSettingsBase<MuliInputSettings, byte>
     {
-        [SerializeField]
-        private InputActionBinding[] inputActions = Array.Empty<InputActionBinding>();
+        [SerializeField] private InputActionBinding[] inputActions = Array.Empty<InputActionBinding>();
 
-        public IReadOnlyList<InputActionBinding> InputActions => this.inputActions;
+        public IReadOnlyList<InputActionBinding> InputActions => inputActions;
 
         public override IEnumerable<NameValue<byte>> Keys
         {
             get
             {
-                for (byte index = 0; index < this.inputActions.Length; index++)
+                for (byte index = 0; index < inputActions.Length; index++)
                 {
-                    var binding = this.inputActions[index];
+                    var binding = inputActions[index];
                     var actionName = binding.Input != null && binding.Input.action != null
                         ? binding.Input.action.name
                         : $"[Unassigned Action ID: {index}]";
@@ -35,10 +34,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         public static byte GetIndex(InputActionReference inputActionReference)
         {
-            if (TryGetIndex(inputActionReference, out var index))
-            {
-                return index;
-            }
+            if (TryGetIndex(inputActionReference, out var index)) return index;
 
             return NameToKey((FixedString32Bytes)inputActionReference.action.name);
         }
@@ -47,23 +43,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             index = 0;
 
-            if (I == null || inputActionReference == null || inputActionReference.action == null)
-            {
-                return false;
-            }
+            if (I == null || inputActionReference == null || inputActionReference.action == null) return false;
 
             for (byte i = 0; i < I.inputActions.Length; i++)
             {
                 var input = I.inputActions[i].Input;
-                if (input == null || input.action == null)
-                {
-                    continue;
-                }
+                if (input == null || input.action == null) continue;
 
-                if (input.action.id != inputActionReference.action.id)
-                {
-                    continue;
-                }
+                if (input.action.id != inputActionReference.action.id) continue;
 
                 index = i;
                 return true;
@@ -90,17 +77,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             {
                 result = default;
 
-                if (this.Condition == null)
-                {
-                    return false;
-                }
+                if (Condition == null) return false;
 
                 result = new InputToConditionEvent
                 {
                     ActionId = actionId,
-                    Phase = this.Phase,
-                    Condition = this.Condition,
-                    Value = this.Value
+                    Phase = Phase,
+                    Condition = Condition,
+                    Value = Value
                 };
 
                 return true;

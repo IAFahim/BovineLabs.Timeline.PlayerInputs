@@ -9,7 +9,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     [TrackClipType(typeof(PlayerInputCancelWindowClip))]
     [TrackColor(0.9f, 0.6f, 0.2f)]
     [TrackBindingType(typeof(InputConsumerAuthoring))]
-    [DisplayName("BovineLabs/Timeline/Player Inputs/Cancel Window Track")]
+    [DisplayName("BovineLabs/Player Inputs/Cancel Window Track")]
     public sealed class PlayerInputCancelWindowTrack : DOTSTrack
     {
     }

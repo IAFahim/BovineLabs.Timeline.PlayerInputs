@@ -6,7 +6,8 @@ using Unity.Collections;
 using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
-{[UpdateInGroup(typeof(BeginSimulationSystemGroup))]
+{
+    [UpdateInGroup(typeof(BeginSimulationSystemGroup))]
     public partial struct InputTransducerSystem : ISystem
     {
         private ConditionEventWriter.Lookup eventWriterLookup;
@@ -34,7 +35,9 @@ namespace BovineLabs.Timeline.PlayerInputs
                 States = stateLookup,
                 Transducers = transducerLookup
             }.Schedule(state.Dependency);
-        }[BurstCompile]
+        }
+
+        [BurstCompile]
         [WithAll(typeof(InputConsumerTag))]
         private partial struct TransduceJob : IJobEntity
         {

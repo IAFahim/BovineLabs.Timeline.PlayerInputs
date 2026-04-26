@@ -9,7 +9,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     public class InputConsumerAuthoring : MonoBehaviour
     {
         public byte PlayerId;
-        
+
         [Tooltip("Where to route transduced hardware input events. Defaults to self.")]
         public EntityLinkSchema routeEventsTo;
 
@@ -24,16 +24,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 {
                     var root = authoring.transform.root.GetComponentInChildren<EntityLinkRootAuthoring>();
                     if (root != null)
-                    {
                         foreach (var link in root.Links)
-                        {
                             if (link.Schema == authoring.routeEventsTo && link.Target != null)
                             {
                                 targetEntity = GetEntity(link.Target, TransformUsageFlags.None);
                                 break;
                             }
-                        }
-                    }
                 }
 
                 var commands = new BakerCommands(this, entity);
