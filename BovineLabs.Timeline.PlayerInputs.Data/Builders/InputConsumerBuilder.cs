@@ -21,6 +21,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data.Builders
             builder.AddComponent(new PlayerId { Value = PlayerId });
             builder.AddComponent<InputConsumerTag>();
             builder.AddComponent(new InputSource { Provider = Entity.Null });
+            builder.AddComponent(new PlayerMoveInput());
         }
     }
 }
