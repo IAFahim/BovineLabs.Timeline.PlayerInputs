@@ -10,6 +10,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public InputPhase Phase;
         public ConditionKey Condition;
         public int Value;
+        public Entity RouteEntity;
+    }
+
+    public struct InputConsumerRoute : IComponentData
+    {
+        public Entity Target;
     }
 
     public struct InputBufferClearTrigger : IComponentData, IEnableableComponent

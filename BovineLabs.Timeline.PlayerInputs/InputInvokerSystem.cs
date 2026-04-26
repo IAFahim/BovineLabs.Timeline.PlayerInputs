@@ -8,8 +8,7 @@ using Unity.Collections;
 using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
-{
-    [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
+{[UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     public partial struct InputInvokerSystem : ISystem
     {
         private ConditionEventWriter.Lookup writers;
@@ -62,7 +61,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     _ => false
                 };
 
-                if (active && Writers.TryGet(consumer, out var writer)) writer.Trigger(config.Condition, config.Value);
+                if (active && Writers.TryGet(config.RouteEntity, out var writer)) writer.Trigger(config.Condition, config.Value);
             }
         }
     }
