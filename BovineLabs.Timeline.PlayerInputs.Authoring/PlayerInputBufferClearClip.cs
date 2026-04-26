@@ -7,7 +7,6 @@ using Unity.Entities;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Timeline;
-using InputSettings = BovineLabs.Timeline.PlayerInputs.Data.InputSettings;
 
 namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
@@ -29,7 +28,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 var resolved = new List<byte>(actionsToClear.Length);
                 foreach (var inputActionReference in actionsToClear)
                 {
-                    var indexOf = InputSettings.GetIndex(inputActionReference);
+                    var indexOf = MuliInputSettings.GetIndex(inputActionReference);
                     resolved.Add(indexOf);
                 }
 

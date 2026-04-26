@@ -5,7 +5,6 @@ using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine.InputSystem;
 using UnityEngine.Timeline;
-using InputSettings = BovineLabs.Timeline.PlayerInputs.Data.InputSettings;
 
 namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
@@ -23,7 +22,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         {
             context.Baker.AddComponent(clipEntity, new InputInvokerConfig
             {
-                ActionId = InputSettings.GetIndex(inputActionReference),
+                ActionId = MuliInputSettings.GetIndex(inputActionReference),
                 Phase = phase,
                 Condition = condition ? condition.Key : ConditionKey.Null,
                 Value = value

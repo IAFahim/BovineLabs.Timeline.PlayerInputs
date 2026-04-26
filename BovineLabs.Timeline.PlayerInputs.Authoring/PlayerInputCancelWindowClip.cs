@@ -5,7 +5,6 @@ using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine.InputSystem;
 using UnityEngine.Timeline;
-using InputSettings = BovineLabs.Timeline.PlayerInputs.Data.InputSettings;
 
 namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
@@ -22,7 +21,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             foreach (var inputActionReference in inputActionReferences)
             {
-                var index = InputSettings.GetIndex(inputActionReference);
+                var index = MuliInputSettings.GetIndex(inputActionReference);
                 mask[index] = true;
             }
 

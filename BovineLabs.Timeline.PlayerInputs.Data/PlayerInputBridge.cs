@@ -51,50 +51,108 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         private void OnEnable()
         {
-            var playerInput = GetComponent<PlayerInput>();
-            if (playerInput.actions == null) return;
-
-            var inputKeys = InputSettings.I;
-            if (inputKeys == null || inputKeys.InputActionReferences.Count == 0) return;
-
-            for (byte index = 0; index < inputKeys.InputActionReferences.Count; index++)
+            var playerInput = this.GetComponent<PlayerInput>();
+            if (playerInput.actions == null)
             {
-                var mapping = inputKeys.InputActionReferences[index];
-                if (mapping == null || mapping.action == null) continue;
+                return;
+            }
 
-                var action = playerInput.actions.FindAction(mapping.action.id);
-                if (action == null) continue;
+            var inputSettings = MuliInputSettings.I;
+            if (inputSettings == null || inputSettings.InputActions.Count == 0)
+            {
+                return;
+            }
+
+            this.Buttons.Clear();
+            this.Axes.Clear();
+            this.CurrentAxes.Clear();
+            this.CurrentHeld = new BitArray256();
+
+            for (byte index = 0; index < inputSettings.InputActions.Count; index++)
+            {
+                var binding = inputSettings.InputActions[index];
+                if (!TryFindAction(playerInput, binding.Input, out var action))
+                {
+                    continue;
+                }
 
                 switch (action.type)
                 {
                     case InputActionType.Button:
-                        Buttons.Add((index, action));
+                        this.Buttons.Add((index, action));
                         break;
+
                     case InputActionType.Value:
-                        Axes.Add((index, action));
+                        this.Axes.Add((index, action));
                         break;
                 }
             }
 
-            capturedWorld = World.DefaultGameObjectInjectionWorld;
-            if (capturedWorld == null) return;
+            this.capturedWorld = World.DefaultGameObjectInjectionWorld;
+            if (this.capturedWorld == null)
+            {
+                return;
+            }
 
-            entityManager = capturedWorld.EntityManager;
-            providerEntity = entityManager.CreateEntity();
+            this.entityManager = this.capturedWorld.EntityManager;
+            this.providerEntity = this.entityManager.CreateEntity();
 
-            entityManager.AddComponentData(providerEntity, new PlayerId { Value = GetPlayerId() });
-            entityManager.AddComponent<InputProviderTag>(providerEntity);
-            entityManager.AddComponentObject(providerEntity, new PlayerInputBridgeComponent { Value = this });
+            this.entityManager.AddComponentData(this.providerEntity, new PlayerId { Value = this.GetPlayerId() });
+            this.entityManager.AddComponent<InputProviderTag>(this.providerEntity);
+            this.entityManager.AddComponentObject(this.providerEntity, new PlayerInputBridgeComponent { Value = this });
 
-            entityManager.AddComponent<InputState>(providerEntity);
-            entityManager.AddBuffer<InputAxisBuffer>(providerEntity);
-            entityManager.AddBuffer<InputHistory>(providerEntity);
-            entityManager.AddBuffer<InputToConditionEvent>(providerEntity);
+            this.entityManager.AddComponent<InputState>(this.providerEntity);
+            this.entityManager.AddBuffer<InputAxisBuffer>(this.providerEntity);
+            this.entityManager.AddBuffer<InputHistory>(this.providerEntity);
 
-            entityManager.AddBuffer<ConditionEvent>(providerEntity).Initialize();
+            var transducers = this.entityManager.AddBuffer<InputToConditionEvent>(this.providerEntity);
+            AddTransducers(transducers, inputSettings);
 
-            entityManager.AddComponent<EventsDirty>(providerEntity);
-            entityManager.SetComponentEnabled<EventsDirty>(providerEntity, false);
+            this.entityManager.AddBuffer<ConditionEvent>(this.providerEntity).Initialize();
+
+            this.entityManager.AddComponent<EventsDirty>(this.providerEntity);
+            this.entityManager.SetComponentEnabled<EventsDirty>(this.providerEntity, false);
+        }
+
+        private static bool TryFindAction(PlayerInput playerInput, InputActionReference reference,
+            out InputAction action)
+        {
+            action = null;
+
+            if (reference == null || reference.action == null)
+            {
+                return false;
+            }
+
+            action = playerInput.actions.FindAction(reference.action.id);
+            return action != null;
+        }
+
+        private static void AddTransducers(DynamicBuffer<InputToConditionEvent> transducers, MuliInputSettings settings)
+        {
+            transducers.Clear();
+
+            for (byte actionId = 0; actionId < settings.InputActions.Count; actionId++)
+            {
+                var binding = settings.InputActions[actionId];
+                if (binding.Events == null)
+                {
+                    continue;
+                }
+
+                foreach (var evt in binding.Events)
+                {
+                    if (evt == null)
+                    {
+                        continue;
+                    }
+
+                    if (evt.TryBake(actionId, out var transducer))
+                    {
+                        transducers.Add(transducer);
+                    }
+                }
+            }
         }
 
         private void OnDisable()

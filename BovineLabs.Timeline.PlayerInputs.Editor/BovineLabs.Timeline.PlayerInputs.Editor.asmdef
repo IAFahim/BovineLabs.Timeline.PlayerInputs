@@ -1,0 +1,32 @@
+{
+  "name": "BovineLabs.Timeline.PlayerInputs.Editor",
+  "rootNamespace": "",
+  "references": [
+    "BovineLabs.Core",
+    "BovineLabs.Core.Extensions",
+    "BovineLabs.Quill",
+    "PlayerInputs.Data",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "Unity.Transforms",
+    "BovineLabs.Timeline.PlayerInputs",
+    "BovineLabs.Timeline.PlayerInputs.Data",
+    "BovineLabs.Essence",
+    "BovineLabs.Essence.Data",
+    "BovineLabs.Reaction.Data",
+    "BovineLabs.Reaction",
+    "BovineLabs.Reaction.Authoring"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "versionDefines": [],
+  "noEngineReferences": false
+}
