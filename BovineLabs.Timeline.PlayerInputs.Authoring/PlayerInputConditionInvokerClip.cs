@@ -2,7 +2,6 @@ using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
-using BovineLabs.Timeline.EntityLinks.Authoring.Extensions;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine;
@@ -17,7 +16,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public InputPhase phase;
         public ConditionEventObject condition;
         public int value = 1;[Tooltip("EntityLink to route the condition event to. If empty, routes to the bound track target.")]
-        public SourceSchema routeTo;
+        public EntityLinkSchema routeTo;
 
         public override double duration => 1;
         public ClipCaps clipCaps => ClipCaps.None;
@@ -25,8 +24,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public override void Bake(Entity clipEntity, BakingContext context)
         {
             var targetEntity = context.Target;
-            if (routeTo != null && context.TryResolveLink(routeTo, out var linkedGo))
-                targetEntity = context.Baker.GetEntity(linkedGo, TransformUsageFlags.None);
+            if (routeTo != null && context.TryResolveLink(routeTo, out var linked))
+                targetEntity = context.Baker.GetEntity(linked, TransformUsageFlags.None);
 
             context.Baker.AddComponent(clipEntity, new InputInvokerConfig
             {

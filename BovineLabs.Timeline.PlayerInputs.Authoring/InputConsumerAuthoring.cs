@@ -8,8 +8,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public class InputConsumerAuthoring : MonoBehaviour
     {
-        public byte PlayerId;[Tooltip("Where to route transduced hardware input events. Defaults to self.")]
-        public SourceSchema routeEventsTo;
+        public byte PlayerId;
+        
+        [Tooltip("Where to route transduced hardware input events. Defaults to self.")]
+        public EntityLinkSchema routeEventsTo;
 
         public class Baker : Baker<InputConsumerAuthoring>
         {
@@ -20,14 +22,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
                 if (authoring.routeEventsTo != null)
                 {
-                    var registry = authoring.transform.root.GetComponent<RootSourceRegistryAuthoring>();
-                    if (registry != null)
+                    var root = authoring.transform.root.GetComponentInChildren<EntityLinkRootAuthoring>();
+                    if (root != null)
                     {
-                        foreach (var tag in registry.entityTagAuthorings)
+                        foreach (var link in root.Links)
                         {
-                            if (tag != null && tag.sourceSchema == authoring.routeEventsTo)
+                            if (link.Schema == authoring.routeEventsTo && link.Target != null)
                             {
-                                targetEntity = GetEntity(tag.gameObject, TransformUsageFlags.None);
+                                targetEntity = GetEntity(link.Target, TransformUsageFlags.None);
                                 break;
                             }
                         }
