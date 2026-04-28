@@ -10,7 +10,7 @@ using UnityEngine.InputSystem;
 namespace BovineLabs.Timeline.PlayerInputs.Data
 {
     [SettingsGroup("Input")]
-    public class MuliInputSettings : KSettingsBase<MuliInputSettings, byte>
+    public class MultiInputSettings : KSettingsBase<MultiInputSettings, byte>
     {
         [SerializeField] private InputActionBinding[] inputActions = Array.Empty<InputActionBinding>();
 

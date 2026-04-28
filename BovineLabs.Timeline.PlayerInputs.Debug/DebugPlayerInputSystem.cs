@@ -94,7 +94,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 format.Append("[");
                 format.Append(phase);
                 format.Append("] ");
-                format.Append(MuliInputSettings.KeyToName(action));
+                format.Append(MultiInputSettings.KeyToName(action));
 
                 Renderer.Text64(position, format, tint, 12f);
             }
@@ -114,7 +114,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                     Renderer.Point(cursor + vector, 0.05f, new Color(0f, 1f, 1f, 1f));
 
                     var label = new FixedString64Bytes();
-                    label.Append(MuliInputSettings.KeyToName(axis.ActionId));
+                    label.Append(MultiInputSettings.KeyToName(axis.ActionId));
 
                     Renderer.Text64(cursor + new float3(0f, 0.35f, 0f), label, new Color(1f, 1f, 1f, 0.5f), 10f);
 
@@ -141,7 +141,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                     format.Append("-");
                     format.Append(delta);
                     format.Append("ms ");
-                    format.Append(MuliInputSettings.KeyToName(record.ActionId));
+                    format.Append(MultiInputSettings.KeyToName(record.ActionId));
 
                     Renderer.Text64(cursor, format, tint, 10f);
                     cursor.y -= 0.15f;

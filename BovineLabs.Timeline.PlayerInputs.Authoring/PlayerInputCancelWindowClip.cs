@@ -21,7 +21,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             foreach (var inputActionReference in inputActionReferences)
             {
-                var index = MuliInputSettings.GetIndex(inputActionReference);
+                var index = MultiInputSettings.GetIndex(inputActionReference);
                 mask[index] = true;
             }
 

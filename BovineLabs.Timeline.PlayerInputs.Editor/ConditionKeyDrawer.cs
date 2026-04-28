@@ -31,7 +31,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             if (!ReferenceEquals(next, current) && valueProp != null)
             {
                 valueProp.intValue = next != null ? next.Key : 0;
-                s_Cache = null; // invalidate so a renamed/moved asset is re-resolved
             }
 
             EditorGUI.EndProperty();
@@ -49,7 +48,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
         {
             if (key == 0) return null;
             if (s_Cache == null) BuildCache();
-            return s_Cache.TryGetValue(key, out var obj) ? obj : null;
+            if (s_Cache.TryGetValue(key, out var obj)) return obj;
+
+            // Rebuild if not found in case of new assets
+            BuildCache();
+            return s_Cache.TryGetValue(key, out var obj2) ? obj2 : null;
         }
 
         private static void BuildCache()
@@ -61,6 +64,27 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
                 var obj = AssetDatabase.LoadAssetAtPath<ConditionEventObject>(path);
                 if (obj != null)
                     s_Cache[obj.Key] = obj;
+            }
+        }
+
+        private class AssetPostprocessor : UnityEditor.AssetPostprocessor
+        {
+            private static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets,
+                string[] movedAssets, string[] movedFromAssetPaths)
+            {
+                foreach (var path in importedAssets)
+                {
+                    if (path.EndsWith(".asset"))
+                    {
+                        s_Cache = null;
+                        return;
+                    }
+                }
+
+                if (deletedAssets.Length > 0 || movedAssets.Length > 0)
+                {
+                    s_Cache = null;
+                }
             }
         }
     }

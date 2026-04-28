@@ -31,7 +31,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             context.Baker.AddComponent(clipEntity, new InputInvokerConfig
             {
-                ActionId = MuliInputSettings.GetIndex(inputActionReference),
+                ActionId = MultiInputSettings.GetIndex(inputActionReference),
                 Phase = phase,
                 Condition = condition ? condition.Key : ConditionKey.Null,
                 Value = value,

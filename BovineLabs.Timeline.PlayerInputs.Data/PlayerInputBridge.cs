@@ -54,7 +54,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             var playerInput = GetComponent<PlayerInput>();
             if (playerInput.actions == null) return;
 
-            var inputSettings = MuliInputSettings.I;
+            var inputSettings = MultiInputSettings.I;
             if (inputSettings == null || inputSettings.InputActions.Count == 0) return;
 
             Buttons.Clear();
@@ -124,7 +124,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             return action != null;
         }
 
-        private static void AddTransducers(DynamicBuffer<InputToConditionEvent> transducers, MuliInputSettings settings)
+        private static void AddTransducers(DynamicBuffer<InputToConditionEvent> transducers, MultiInputSettings settings)
         {
             transducers.Clear();
 

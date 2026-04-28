@@ -20,6 +20,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data.Builders
             builder.AddComponent<InputConsumerTag>();
             builder.AddComponent(new InputSource { Provider = Entity.Null });
             builder.AddComponent(new PlayerMoveInput());
+            builder.AddComponent(new InputConsumerRoute { Target = Entity.Null });
         }
     }
 }

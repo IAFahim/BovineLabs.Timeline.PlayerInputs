@@ -28,7 +28,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 var resolved = new List<byte>(actionsToClear.Length);
                 foreach (var inputActionReference in actionsToClear)
                 {
-                    var indexOf = MuliInputSettings.GetIndex(inputActionReference);
+                    var indexOf = MultiInputSettings.GetIndex(inputActionReference);
                     resolved.Add(indexOf);
                 }
 

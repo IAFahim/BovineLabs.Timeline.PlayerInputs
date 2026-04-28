@@ -27,4 +27,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         public BitArray256 AllowedMask;
     }
+
+    public struct EventsDirty : IComponentData, IEnableableComponent { }
 }
