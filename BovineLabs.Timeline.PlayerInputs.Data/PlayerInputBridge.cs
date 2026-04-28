@@ -124,7 +124,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             return action != null;
         }
 
-        private static void AddTransducers(DynamicBuffer<InputToConditionEvent> transducers, MultiInputSettings settings)
+        private static void AddTransducers(DynamicBuffer<InputToConditionEvent> transducers,
+            MultiInputSettings settings)
         {
             transducers.Clear();
 

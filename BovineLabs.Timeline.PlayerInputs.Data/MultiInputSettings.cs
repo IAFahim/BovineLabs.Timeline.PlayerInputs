@@ -77,7 +77,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             {
                 result = default;
 
-                if (Condition == null) return false;
+                if (Condition == ConditionKey.Null) return false;
 
                 result = new InputToConditionEvent
                 {

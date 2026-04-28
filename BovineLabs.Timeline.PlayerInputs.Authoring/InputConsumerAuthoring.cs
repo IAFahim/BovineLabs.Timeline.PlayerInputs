@@ -25,14 +25,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     .WithPlayerId(authoring.PlayerId);
                 builder.ApplyTo(ref commands);
 
-                Entity routeTarget = entity;
+                var routeTarget = entity;
                 if (authoring.routeEventsTo != null)
                 {
                     var root = authoring.GetComponentInParent<EntityLinkRootAuthoring>();
-                    if (root != null && EntityLinkAuthoringUtility.TryFindLinkedComponent(root, authoring.routeEventsTo, out var linked))
-                    {
-                        routeTarget = GetEntity(linked, TransformUsageFlags.None);
-                    }
+                    if (root != null &&
+                        EntityLinkAuthoringUtility.TryFindLinkedComponent(root, authoring.routeEventsTo,
+                            out var linked)) routeTarget = GetEntity(linked, TransformUsageFlags.None);
                 }
 
                 AddComponent(entity, new InputConsumerRoute { Target = routeTarget });

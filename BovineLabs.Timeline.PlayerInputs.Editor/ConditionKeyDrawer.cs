@@ -28,10 +28,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             var next = (ConditionEventObject)EditorGUI.ObjectField(
                 position, label, current, typeof(ConditionEventObject), false);
 
-            if (!ReferenceEquals(next, current) && valueProp != null)
-            {
-                valueProp.intValue = next != null ? next.Key : 0;
-            }
+            if (!ReferenceEquals(next, current) && valueProp != null) valueProp.intValue = next != null ? next.Key : 0;
 
             EditorGUI.EndProperty();
         }
@@ -73,18 +70,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
                 string[] movedAssets, string[] movedFromAssetPaths)
             {
                 foreach (var path in importedAssets)
-                {
                     if (path.EndsWith(".asset"))
                     {
                         s_Cache = null;
                         return;
                     }
-                }
 
-                if (deletedAssets.Length > 0 || movedAssets.Length > 0)
-                {
-                    s_Cache = null;
-                }
+                if (deletedAssets.Length > 0 || movedAssets.Length > 0) s_Cache = null;
             }
         }
     }
