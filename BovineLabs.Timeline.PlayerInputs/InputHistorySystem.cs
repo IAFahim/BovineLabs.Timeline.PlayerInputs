@@ -23,21 +23,39 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             public uint Tick;
 
-            private void Execute(in InputState state, ref DynamicBuffer<InputHistory> history)
+            private void Execute(in InputState state, ref InputHistoryState historyState,
+                ref DynamicBuffer<InputHistory> history)
             {
                 if (state.Down.AllFalse && state.Up.AllFalse) return;
 
                 for (byte i = 0; i < 255; i++)
                     if (state.Down[i])
-                        AddHistory(history, new InputHistory { ActionId = i, Phase = InputPhase.Down, Tick = Tick });
+                        AddHistory(ref historyState, history,
+                            new InputHistory { ActionId = i, Phase = InputPhase.Down, Tick = Tick });
                     else if (state.Up[i])
-                        AddHistory(history, new InputHistory { ActionId = i, Phase = InputPhase.Up, Tick = Tick });
+                        AddHistory(ref historyState, history,
+                            new InputHistory { ActionId = i, Phase = InputPhase.Up, Tick = Tick });
             }
 
-            private void AddHistory(DynamicBuffer<InputHistory> history, InputHistory entry)
+            private static void AddHistory(ref InputHistoryState historyState, DynamicBuffer<InputHistory> history,
+                InputHistory entry)
             {
-                if (history.Length >= history.Capacity) history.RemoveAt(0);
-                history.Add(entry);
+                if (history.Length < history.Capacity)
+                {
+                    history.Add(entry);
+                    return;
+                }
+
+                if (history.Length == 0) return;
+
+                var head = historyState.Head;
+                if ((uint)head >= history.Length) head = 0;
+
+                history[head] = entry;
+                head++;
+
+                if (head >= history.Length) head = 0;
+                historyState.Head = head;
             }
         }
     }

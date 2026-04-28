@@ -45,6 +45,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 in PlayerId id,
                 in InputState state,
                 in DynamicBuffer<InputAxisBuffer> axes,
+                in InputHistoryState historyState,
                 in DynamicBuffer<InputHistory> history)
             {
                 var origin = new float3(id.Value * 4f, 2f, 0f);
@@ -52,7 +53,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 RenderHeader(origin, id);
                 RenderTelemetry(origin + new float3(-1.5f, -0.5f, 0f), state);
                 RenderKinetics(origin + new float3(0f, -1.0f, 0f), axes);
-                RenderChronology(origin + new float3(1.5f, -0.5f, 0f), history, Chronos);
+                RenderChronology(origin + new float3(1.5f, -0.5f, 0f), history, historyState, Chronos);
             }
 
             private void RenderHeader(float3 position, PlayerId id)
@@ -122,14 +123,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 }
             }
 
-            private void RenderChronology(float3 position, DynamicBuffer<InputHistory> history, uint chronos)
+            private void RenderChronology(float3 position, DynamicBuffer<InputHistory> history, InputHistoryState state,
+                uint chronos)
             {
                 var cursor = position;
-                var limit = math.max(0, history.Length - 16);
+                var maxRecords = math.min(history.Length, 16);
 
-                for (var i = history.Length - 1; i >= limit; i--)
+                for (var offset = 0; offset < maxRecords; offset++)
                 {
-                    var record = history[i];
+                    var logicalIndex = history.Length - 1 - offset;
+                    var record = history[ToBufferIndex(logicalIndex, history.Length, state.Head)];
                     var delta = chronos - record.Tick;
 
                     if (delta > 2000) continue;
@@ -146,6 +149,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                     Renderer.Text64(cursor, format, tint, 10f);
                     cursor.y -= 0.15f;
                 }
+            }
+
+            private static int ToBufferIndex(int chronologicalIndex, int length, int head)
+            {
+                if (length <= 0) return 0;
+
+                if ((uint)head >= length) head = 0;
+                return (head + chronologicalIndex) % length;
             }
         }
     }

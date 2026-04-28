@@ -4,6 +4,7 @@ using BovineLabs.Reaction.Conditions;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
+using Unity.Burst.CompilerServices;
 using Unity.Collections;
 using Unity.Entities;
 
@@ -62,8 +63,10 @@ namespace BovineLabs.Timeline.PlayerInputs
                     _ => false
                 };
 
-                if (active && Writers.TryGet(config.RouteEntity, out var writer))
-                    writer.Trigger(config.Condition, config.Value);
+                if(Hint.Likely(!active)) return;
+                var hasComponent = Writers.TryGet(config.RouteEntity, out var writer);
+                if (Hint.Unlikely(!hasComponent)) return;
+                writer.Trigger(config.Condition, config.Value);
             }
         }
     }

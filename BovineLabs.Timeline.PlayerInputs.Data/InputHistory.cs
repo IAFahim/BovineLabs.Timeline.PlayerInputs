@@ -9,4 +9,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public InputPhase Phase;
         public uint Tick;
     }
+
+    public struct InputHistoryState : IComponentData
+    {
+        public int Head;
+    }
 }

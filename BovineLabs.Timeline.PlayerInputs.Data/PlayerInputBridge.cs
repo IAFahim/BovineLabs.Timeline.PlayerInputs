@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using BovineLabs.Core.Collections;
-using BovineLabs.Reaction.Data.Conditions;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
@@ -19,13 +18,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         internal readonly List<(byte Id, InputAction Action)> Buttons = new();
 
         private World capturedWorld;
-        public List<InputAxisBuffer> CurrentAxes = new();
+        public List<InputAxisBuffer> CurrentAxes = new(16);
         private EntityManager entityManager;
         private Entity providerEntity;
 
         private void Update()
         {
-            CurrentHeld = new BitArray256();
+            CurrentHeld = default;
             foreach (var btn in Buttons)
                 if (btn.Action.IsPressed())
                     CurrentHeld[btn.Id] = true;
@@ -60,7 +59,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             Buttons.Clear();
             Axes.Clear();
             CurrentAxes.Clear();
-            CurrentHeld = new BitArray256();
+            CurrentHeld = default;
+
+            var actionCount = inputSettings.InputActions.Count;
+            if (Buttons.Capacity < actionCount) Buttons.Capacity = actionCount;
+            if (Axes.Capacity < actionCount) Axes.Capacity = actionCount;
+            if (CurrentAxes.Capacity < actionCount) CurrentAxes.Capacity = actionCount;
 
             for (byte index = 0; index < inputSettings.InputActions.Count; index++)
             {
@@ -92,12 +96,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             entityManager.AddComponent<InputState>(providerEntity);
             entityManager.AddBuffer<InputAxisBuffer>(providerEntity);
             entityManager.AddBuffer<InputHistory>(providerEntity);
-
-            var transducers = entityManager.AddBuffer<InputToConditionEvent>(providerEntity);
-            AddTransducers(transducers, inputSettings);
-
-            entityManager.AddBuffer<ConditionEvent>(providerEntity).Initialize();
-
+            entityManager.AddComponentData(providerEntity, new InputHistoryState { Head = 0 });
             entityManager.AddComponent<EventsDirty>(providerEntity);
             entityManager.SetComponentEnabled<EventsDirty>(providerEntity, false);
         }
@@ -110,7 +109,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             Buttons.Clear();
             Axes.Clear();
             CurrentAxes.Clear();
-            CurrentHeld = new BitArray256();
+            CurrentHeld = default;
         }
 
         private static bool TryFindAction(PlayerInput playerInput, InputActionReference reference,
@@ -122,25 +121,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
             action = playerInput.actions.FindAction(reference.action.id);
             return action != null;
-        }
-
-        private static void AddTransducers(DynamicBuffer<InputToConditionEvent> transducers,
-            MultiInputSettings settings)
-        {
-            transducers.Clear();
-
-            for (byte actionId = 0; actionId < settings.InputActions.Count; actionId++)
-            {
-                var binding = settings.InputActions[actionId];
-                if (binding.Events == null) continue;
-
-                foreach (var evt in binding.Events)
-                {
-                    if (evt == null) continue;
-
-                    if (evt.TryBake(actionId, out var transducer)) transducers.Add(transducer);
-                }
-            }
         }
 
         public byte GetPlayerId()

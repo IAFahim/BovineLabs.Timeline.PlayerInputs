@@ -45,12 +45,12 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public ComponentLookup<InputState> States;
             [ReadOnly] public BufferLookup<InputToConditionEvent> Transducers;
 
-            private void Execute(in InputSource source, in InputConsumerRoute route)
+            private void Execute(Entity entity, in InputSource source)
             {
                 if (source.Provider == Entity.Null) return;
                 if (!States.TryGetComponent(source.Provider, out var state)) return;
                 if (!Transducers.TryGetBuffer(source.Provider, out var transducers)) return;
-                if (!Writers.TryGet(route.Target, out var writer)) return;
+                if (!Writers.TryGet(entity, out var writer)) return;
 
                 foreach (var transducer in transducers)
                 {

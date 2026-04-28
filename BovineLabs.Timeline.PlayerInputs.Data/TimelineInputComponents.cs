@@ -13,11 +13,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public Entity RouteEntity;
     }
 
-    public struct InputConsumerRoute : IComponentData
-    {
-        public Entity Target;
-    }
-
     public struct InputBufferClearTrigger : IComponentData, IEnableableComponent
     {
         public BlobAssetReference<BlobArray<byte>> ActionIds;

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using BovineLabs.Core.Keys;
 using BovineLabs.Core.Settings;
-using BovineLabs.Reaction.Data.Conditions;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -63,32 +62,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public class InputActionBinding
         {
             public InputActionReference Input;
-            public InputConditionEventBinding[] Events = Array.Empty<InputConditionEventBinding>();
-        }
-
-        [Serializable]
-        public class InputConditionEventBinding
-        {
-            public InputPhase Phase = InputPhase.Down;
-            public ConditionKey Condition;
-            public int Value = 1;
-
-            public bool TryBake(byte actionId, out InputToConditionEvent result)
-            {
-                result = default;
-
-                if (Condition == ConditionKey.Null) return false;
-
-                result = new InputToConditionEvent
-                {
-                    ActionId = actionId,
-                    Phase = Phase,
-                    Condition = Condition,
-                    Value = Value
-                };
-
-                return true;
-            }
         }
     }
 }
