@@ -20,23 +20,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 var entity = GetEntity(TransformUsageFlags.None);
                 var targetEntity = entity;
 
-                if (authoring.routeEventsTo != null)
-                {
-                    if (authoring.transform.root.TryGetComponent<EntityLinkRootAuthoring>(out var root))
-                    {
-                        foreach (var link in root.Links)
-                            if (link.Schema == authoring.routeEventsTo && link.Target != null)
-                            {
-                                targetEntity = GetEntity(link.Target, TransformUsageFlags.None);
-                                break;
-                            }
-                    }
-                }
-
                 var commands = new BakerCommands(this, entity);
                 var builder = new InputConsumerBuilder()
-                    .WithPlayerId(authoring.PlayerId)
-                    .WithRoute(targetEntity);
+                    .WithPlayerId(authoring.PlayerId);
                 builder.ApplyTo(ref commands);
             }
         }
