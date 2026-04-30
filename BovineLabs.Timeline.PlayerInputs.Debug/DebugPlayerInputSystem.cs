@@ -2,7 +2,6 @@
 using BovineLabs.Core;
 using BovineLabs.Quill;
 using BovineLabs.Timeline.PlayerInputs.Data;
-using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -15,13 +14,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
     [UpdateInGroup(typeof(DebugSystemGroup))]
     public partial struct DebugPlayerInputSystem : ISystem
     {
-        [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<DrawSystem.Singleton>();
         }
 
-        [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var renderer = SystemAPI.GetSingleton<DrawSystem.Singleton>().CreateDrawer();
@@ -34,7 +31,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             }.Schedule(state.Dependency);
         }
 
-        [BurstCompile]
         [WithAll(typeof(InputProviderTag))]
         private partial struct RenderInputDiagnostics : IJobEntity
         {

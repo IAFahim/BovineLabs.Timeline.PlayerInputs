@@ -21,9 +21,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public List<InputAxisBuffer> CurrentAxes = new(16);
         private EntityManager entityManager;
         private Entity providerEntity;
+        private bool bindingsInitialized;
 
         private void Update()
         {
+            if (providerEntity == Entity.Null && bindingsInitialized)
+                TryCreateProviderEntity();
+
             CurrentHeld = default;
             foreach (var btn in Buttons)
                 if (btn.Action.IsPressed())
@@ -83,10 +87,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 }
             }
 
-            capturedWorld = World.DefaultGameObjectInjectionWorld;
-            if (capturedWorld == null) return;
+            bindingsInitialized = true;
+            TryCreateProviderEntity();
+        }
 
-            entityManager = capturedWorld.EntityManager;
+        private void TryCreateProviderEntity()
+        {
+            var world = World.DefaultGameObjectInjectionWorld;
+            if (world == null || !world.IsCreated) return;
+
+            capturedWorld = world;
+            entityManager = world.EntityManager;
             providerEntity = entityManager.CreateEntity();
 
             entityManager.AddComponentData(providerEntity, new PlayerId { Value = GetPlayerId() });
@@ -106,6 +117,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             if (capturedWorld != null && capturedWorld.IsCreated && entityManager.Exists(providerEntity))
                 entityManager.DestroyEntity(providerEntity);
 
+            providerEntity = Entity.Null;
+            capturedWorld = null;
+            bindingsInitialized = false;
             Buttons.Clear();
             Axes.Clear();
             CurrentAxes.Clear();
