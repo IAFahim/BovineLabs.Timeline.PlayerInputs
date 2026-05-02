@@ -1,4 +1,5 @@
 using BovineLabs.Core.Groups;
+using BovineLabs.Core.Utility;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
@@ -55,25 +56,33 @@ namespace BovineLabs.Timeline.PlayerInputs
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     public partial struct ConsumerBufferMaskSystem : ISystem
     {
-        // ADD: field to hold the lookup
         private ComponentLookup<ActiveBufferMask> masks;
+        private EntityLock entityLock;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            // ADD: initialize lookup as writable
-            masks = state.GetComponentLookup<ActiveBufferMask>(false);
+            this.masks = state.GetComponentLookup<ActiveBufferMask>(false);
+            this.entityLock = new EntityLock(Allocator.Persistent);
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+            this.entityLock.Dispose();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            // ADD: update lookup each frame
-            masks.Update(ref state);
+            this.masks.Update(ref state);
 
             state.Dependency = new ResetMaskJob().ScheduleParallel(state.Dependency);
-            state.Dependency = new AccumulateMaskJob { Masks = masks }.Schedule(state.Dependency);
-            //                                                          ^^^^^^^^ single-threaded: writes via lookup
+            state.Dependency = new AccumulateMaskJob 
+            { 
+                Masks = this.masks,
+                EntityLock = this.entityLock
+            }.ScheduleParallel(state.Dependency);
         }
 
         [BurstCompile]
@@ -87,15 +96,20 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(ClipActive))]
         private partial struct AccumulateMaskJob : IJobEntity
         {
-            // CHANGED: lookup instead of direct ref — reaches consumer via TrackBinding.Value
+            [NativeDisableParallelForRestriction]
             public ComponentLookup<ActiveBufferMask> Masks;
+            public EntityLock EntityLock;
 
             private void Execute(in BufferWindowConfig config, in TrackBinding binding)
             {
                 if (binding.Value == Entity.Null) return;
-                if (!Masks.TryGetComponent(binding.Value, out var mask)) return;
-                mask.Value = mask.Value.BitOr(config.AllowedActions);
-                Masks[binding.Value] = mask;  // write back
+                
+                using (this.EntityLock.Acquire(binding.Value))
+                {
+                    if (!this.Masks.TryGetComponent(binding.Value, out var mask)) return;
+                    mask.Value = mask.Value.BitOr(config.AllowedActions);
+                    this.Masks[binding.Value] = mask;
+                }
             }
         }
     }
@@ -123,14 +137,30 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (state.Pressed.AllFalse || mask.Value.AllFalse) return;
 
-                var filtered = state.Pressed.BitAnd(mask.Value);  // was state.Down
+                var filtered = state.Pressed.BitAnd(mask.Value);
                 if (filtered.AllFalse) return;
 
-                for (byte i = 0; i < 255; i++)
+                var totalToAdd = filtered.CountBits();
+                var removeCount = math.max(0, history.Length + totalToAdd - history.Capacity);
+                
+                if (removeCount > 0)
                 {
-                    if (!filtered[i]) continue;
-                    if (history.Length >= history.Capacity) history.RemoveAt(0);
-                    history.Add(new InputHistory { ActionId = i, Tick = Tick });
+                    history.RemoveRange(0, removeCount);
+                }
+
+                ProcessULong(filtered.Data1, 0, ref history, this.Tick);
+                ProcessULong(filtered.Data2, 64, ref history, this.Tick);
+                ProcessULong(filtered.Data3, 128, ref history, this.Tick);
+                ProcessULong(filtered.Data4, 192, ref history, this.Tick);
+            }
+
+            private static void ProcessULong(ulong data, byte offset, ref DynamicBuffer<InputHistory> history, uint tick)
+            {
+                while (data != 0)
+                {
+                    var bit = math.tzcnt(data);
+                    data ^= 1ul << bit;
+                    history.Add(new InputHistory { ActionId = (byte)(offset + bit), Tick = tick });
                 }
             }
         }

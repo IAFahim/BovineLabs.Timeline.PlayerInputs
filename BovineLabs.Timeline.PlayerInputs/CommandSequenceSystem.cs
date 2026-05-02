@@ -215,8 +215,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     write++;
                 }
 
-                for (var i = history.Length - 1; i >= write; i--) 
-                    history.RemoveAt(i);
+                history.Length = write;
             }
         }
     }

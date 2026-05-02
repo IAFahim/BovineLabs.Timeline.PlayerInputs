@@ -34,27 +34,23 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             private void Execute(in BufferClearConfig config, in TrackBinding binding)
             {
-                if (binding.Value == Entity.Null || !Histories.TryGetBuffer(binding.Value, out var history)) return;
+                if (binding.Value == Entity.Null || !this.Histories.TryGetBuffer(binding.Value, out var history)) return;
 
-                ref var ids = ref config.ActionIds.Value;
-                if (ids.Length == 0)
+                if (config.ActionMask.AllFalse)
                 {
                     history.Clear();
                     return;
                 }
 
-                var filter = default(BitArray256);
-                for (var i = 0; i < ids.Length; i++) filter[ids[i]] = true;
-
                 var write = 0;
                 for (var read = 0; read < history.Length; read++)
                 {
-                    if (filter[history[read].ActionId]) continue;
+                    if (config.ActionMask[history[read].ActionId]) continue;
                     if (write != read) history[write] = history[read];
                     write++;
                 }
 
-                for (var i = history.Length - 1; i >= write; i--) history.RemoveAt(i);
+                history.Length = write;
             }
         }
     }

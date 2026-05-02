@@ -93,6 +93,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
     public struct BufferClearConfig : IComponentData, IEnableableComponent
     {
-        public BlobAssetReference<BlobArray<byte>> ActionIds;
+        public BitArray256 ActionMask;
     }
 }

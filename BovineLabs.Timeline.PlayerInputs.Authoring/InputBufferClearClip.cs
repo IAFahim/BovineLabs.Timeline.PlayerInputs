@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BovineLabs.Core.Collections;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Collections;
@@ -20,25 +21,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public override void Bake(Entity entity, BakingContext context)
         {
-            var builder = new BlobBuilder(Allocator.Temp);
-            ref var root = ref builder.ConstructRoot<BlobArray<byte>>();
-
-            var resolved = new List<byte>();
+            var mask = default(BitArray256);
             if (ActionsToClear != null)
             {
                 foreach (var action in ActionsToClear)
+                {
                     if (MultiInputSettings.TryGetIndex(action, out var id))
-                        resolved.Add(id);
+                    {
+                        mask[id] = true;
+                    }
+                }
             }
 
-            var array = builder.Allocate(ref root, resolved.Count);
-            for (var i = 0; i < resolved.Count; i++) array[i] = resolved[i];
-
-            var blobRef = builder.CreateBlobAssetReference<BlobArray<byte>>(Allocator.Persistent);
-            builder.Dispose();
-
-            context.Baker.AddBlobAsset(ref blobRef, out _);
-            context.Baker.AddComponent(entity, new BufferClearConfig { ActionIds = blobRef });
+            context.Baker.AddComponent(entity, new BufferClearConfig { ActionMask = mask });
             context.Baker.SetComponentEnabled<BufferClearConfig>(entity, false);
             base.Bake(entity, context);
         }
