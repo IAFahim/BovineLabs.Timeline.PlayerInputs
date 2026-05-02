@@ -61,7 +61,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 for (var i = 0; i < reqs.Length; i++)
                 {
-                    if (!Evaluate(reqs[i], state, history, ref consumeMask)) 
+                    if (!Evaluate(reqs[i], state, history, ref consumeMask))
                         return; // Atomic fail. Abort.
                 }
 
@@ -71,7 +71,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 // Commit consumes
                 if (consumeMask.AllFalse) return;
-                
+
                 var write = 0;
                 for (var read = 0; read < history.Length; read++)
                 {
@@ -79,28 +79,30 @@ namespace BovineLabs.Timeline.PlayerInputs
                     if (write != read) history[write] = history[read];
                     write++;
                 }
+
                 for (var i = history.Length - 1; i >= write; i--) history.RemoveAt(i);
             }
 
-            private static bool Evaluate(TransducerRequirement req, in InputState state, in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask)
+            private static bool Evaluate(TransducerRequirement req, in InputState state,
+                in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask)
             {
                 switch (req.Mode)
                 {
-                    case InputMode.RealtimeDown: return state.Down[req.ActionId];
-                    case InputMode.RealtimeHeld: return state.Held[req.ActionId];
-                    case InputMode.RealtimeUp: return state.Up[req.ActionId];
-                    
-                    case InputMode.BufferContains:
-                    case InputMode.BufferConsume:
+                    case BufferMode.None:
+                        return state.Pressed[req.ActionId];
+
+                    case BufferMode.Contains:
+                    case BufferMode.Consume:
                         for (var i = 0; i < history.Length; i++)
                         {
                             if (consumeMask[i] || history[i].ActionId != req.ActionId) continue;
-                            if (req.Mode == InputMode.BufferConsume) consumeMask[i] = true;
+                            if (req.Mode == BufferMode.Consume) consumeMask[i] = true;
                             return true;
                         }
+
                         return false;
 
-                    case InputMode.BufferFirstConsume:
+                    case BufferMode.FirstConsume:
                         for (var i = 0; i < history.Length; i++)
                         {
                             if (consumeMask[i]) continue;
@@ -108,9 +110,10 @@ namespace BovineLabs.Timeline.PlayerInputs
                             consumeMask[i] = true;
                             return true;
                         }
+
                         return false;
 
-                    case InputMode.BufferLastConsume:
+                    case BufferMode.LastConsume:
                         for (var i = history.Length - 1; i >= 0; i--)
                         {
                             if (consumeMask[i]) continue;
@@ -118,6 +121,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             consumeMask[i] = true;
                             return true;
                         }
+
                         return false;
 
                     default: return false;

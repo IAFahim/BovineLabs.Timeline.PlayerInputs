@@ -33,7 +33,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             for (var i = 0; i < Requirements.Length; i++)
             {
                 if (!MultiInputSettings.TryGetIndex(Requirements[i].Action, out var id)) continue;
-                array[i] = new TransducerRequirement { ActionId = id, Mode = Requirements[i].Mode };
+                array[i] = new TransducerRequirement { ActionId = id, Mode = Requirements[i].BufferMode };
             }
 
             var blobRef = builder.CreateBlobAssetReference<TransducerBlob>(Allocator.Persistent);

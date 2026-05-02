@@ -5,22 +5,25 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.PlayerInputs.Data
 {
-    public enum InputMode : byte
+    public enum BufferMode : byte
     {
-        RealtimeDown = 0,
-        RealtimeHeld = 1,
-        RealtimeUp = 2,
-        BufferContains = 3,
-        BufferConsume = 4,
-        BufferFirstConsume = 5,
-        BufferLastConsume = 6
+        None = 0,
+        Contains = 1,
+        Consume = 2,
+        FirstConsume = 3,
+        LastConsume = 4,
+        OrderedContains = 16,
+        OrderedConsume = 17,
+        OrderedFirstConsume = 18,
+        OrderedLastConsume = 19,
+        NotContains = 32,
+        NotFirst = 33,
+        NotLast = 34,
     }
 
     public struct InputState : IComponentData
     {
-        public BitArray256 Down;
-        public BitArray256 Held;
-        public BitArray256 Up;
+        public BitArray256 Pressed;
     }
 
     public struct ActiveBufferMask : IComponentData
@@ -41,16 +44,33 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public uint Tick;
     }
 
-    public struct PlayerId : IComponentData { public byte Value; }
-    public struct ProviderTag : IComponentData { }
-    public struct ConsumerTag : IComponentData { }
-    public struct InputSource : IComponentData { public Entity Provider; }
-    public struct PlayerMoveInput : IComponentData { public float2 Value; }
+    public struct PlayerId : IComponentData
+    {
+        public byte Value;
+    }
+
+    public struct ProviderTag : IComponentData
+    {
+    }
+
+    public struct ConsumerTag : IComponentData
+    {
+    }
+
+    public struct InputSource : IComponentData
+    {
+        public Entity Provider;
+    }
+
+    public struct PlayerMoveInput : IComponentData
+    {
+        public float2 Value;
+    }
 
     public struct TransducerRequirement
     {
         public byte ActionId;
-        public InputMode Mode;
+        public BufferMode Mode;
     }
 
     public struct TransducerBlob

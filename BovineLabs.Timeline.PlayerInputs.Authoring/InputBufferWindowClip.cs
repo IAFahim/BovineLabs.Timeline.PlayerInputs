@@ -13,7 +13,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     public struct RequirementAuthoring
     {
         public InputActionReference Action;
-        public InputMode Mode;
+        public BufferMode BufferMode;
     }
 
     public sealed class InputBufferWindowClip : DOTSClip, ITimelineClipAsset

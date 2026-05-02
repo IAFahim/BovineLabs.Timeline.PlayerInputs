@@ -121,14 +121,14 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             private void Execute(in InputState state, in ActiveBufferMask mask, ref DynamicBuffer<InputHistory> history)
             {
-                if (state.Down.AllFalse || mask.Value.AllFalse) return;
+                if (state.Pressed.AllFalse || mask.Value.AllFalse) return;
 
-                var filteredDown = state.Down.BitAnd(mask.Value);
-                if (filteredDown.AllFalse) return;
+                var filtered = state.Pressed.BitAnd(mask.Value);  // was state.Down
+                if (filtered.AllFalse) return;
 
                 for (byte i = 0; i < 255; i++)
                 {
-                    if (!filteredDown[i]) continue;
+                    if (!filtered[i]) continue;
                     if (history.Length >= history.Capacity) history.RemoveAt(0);
                     history.Add(new InputHistory { ActionId = i, Tick = Tick });
                 }

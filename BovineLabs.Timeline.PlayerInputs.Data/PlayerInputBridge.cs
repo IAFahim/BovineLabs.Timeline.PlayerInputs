@@ -12,7 +12,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public sealed class PlayerInputBridge : MonoBehaviour
     {
         public int PlayerIdOverride = -1;
-        public BitArray256 CurrentHeld;
+        public BitArray256 CurrentPressed;
         public readonly List<InputAxis> CurrentAxes = new(16);
 
         private readonly List<(byte Id, InputAction Action)> axes = new();
@@ -27,10 +27,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             if (provider == Entity.Null && initialized) TryCreateProvider(out provider);
 
-            CurrentHeld = default;
+            CurrentPressed = default;
             foreach (var btn in buttons)
-                if (btn.Action.IsPressed())
-                    CurrentHeld[btn.Id] = true;
+                if (btn.Action.WasPerformedThisFrame())  // was IsPressed()
+                    CurrentPressed[btn.Id] = true;
 
             CurrentAxes.Clear();
             foreach (var axis in axes)
@@ -51,7 +51,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             buttons.Clear();
             axes.Clear();
             CurrentAxes.Clear();
-            CurrentHeld = default;
+            CurrentPressed = default;
 
             for (byte i = 0; i < MultiInputSettings.I.InputActions.Count; i++)
             {

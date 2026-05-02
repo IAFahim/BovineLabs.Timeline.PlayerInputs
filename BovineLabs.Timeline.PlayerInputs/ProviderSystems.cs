@@ -10,19 +10,13 @@ namespace BovineLabs.Timeline.PlayerInputs
     {
         protected override void OnUpdate()
         {
-            foreach (var (state, axes, bridge) in SystemAPI.Query<RefRW<InputState>, DynamicBuffer<InputAxis>, PlayerInputBridgeComponent>().WithAll<ProviderTag>())
+            foreach (var (state, axes, bridge) in SystemAPI
+                         .Query<RefRW<InputState>, DynamicBuffer<InputAxis>, PlayerInputBridgeComponent>()
+                         .WithAll<ProviderTag>())
             {
                 if (bridge.Value == null) continue;
 
-                var current = bridge.Value.CurrentHeld;
-                var previous = state.ValueRO.Held;
-
-                state.ValueRW = new InputState
-                {
-                    Down = current.BitAnd(previous.BitNot()),
-                    Held = current,
-                    Up = previous.BitAnd(current.BitNot())
-                };
+                state.ValueRW = new InputState { Pressed = bridge.Value.CurrentPressed };
 
                 axes.Clear();
                 foreach (var axis in bridge.Value.CurrentAxes) axes.Add(axis);
