@@ -9,13 +9,6 @@ using UnityEngine.Timeline;
 
 namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
-    [Serializable]
-    public struct RequirementAuthoring
-    {
-        public InputActionReference Action;
-        public BufferMode BufferMode;
-    }
-
     public sealed class InputBufferWindowClip : DOTSClip, ITimelineClipAsset
     {
         [Tooltip("Empty means ALL inputs buffered. Specifics mean ONLY those are buffered.")]
@@ -29,7 +22,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             var mask = default(BitArray256);
             if (AllowedActions == null || AllowedActions.Length == 0)
             {
-                for (int i = 0; i <  256; i++) mask[i] = true;
+                for (int i = 0; i < 256; i++) mask[i] = true;
             }
             else
             {
