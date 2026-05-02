@@ -1,5 +1,4 @@
-using BovineLabs.Core.Authoring.EntityCommands;
-using BovineLabs.Timeline.PlayerInputs.Data.Builders;
+using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine;
 
@@ -14,11 +13,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             public override void Bake(InputConsumerAuthoring authoring)
             {
                 var entity = GetEntity(TransformUsageFlags.None);
-
-                var commands = new BakerCommands(this, entity);
-                var builder = new InputConsumerBuilder()
-                    .WithPlayerId(authoring.PlayerId);
-                builder.ApplyTo(ref commands);
+                
+                AddComponent(entity, new PlayerId { Value = authoring.PlayerId });
+                AddComponent<ConsumerTag>(entity);
+                AddComponent<InputState>(entity);
+                AddComponent<ActiveBufferMask>(entity);
+                AddComponent(entity, new InputSource { Provider = Entity.Null });
+                AddComponent<PlayerMoveInput>(entity);
+                AddBuffer<InputHistory>(entity);
+                AddBuffer<InputAxis>(entity);
             }
         }
     }
