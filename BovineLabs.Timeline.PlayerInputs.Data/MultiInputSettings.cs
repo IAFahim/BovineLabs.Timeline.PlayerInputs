@@ -11,9 +11,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     [SettingsGroup("Input")]
     public sealed class MultiInputSettings : KSettingsBase<MultiInputSettings, byte>
     {
-        [SerializeField] private InputActionBinding[] inputActions = Array.Empty<InputActionBinding>();
+        [SerializeField] private InputActionReference[] inputActions = Array.Empty<InputActionReference>();
 
-        public IReadOnlyList<InputActionBinding> InputActions => inputActions;
+        public IReadOnlyList<InputActionReference> InputActions => inputActions;
 
         public override IEnumerable<NameValue<byte>> Keys
         {
@@ -22,7 +22,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 for (byte i = 0; i < inputActions.Length; i++)
                 {
                     var binding = inputActions[i];
-                    var name = binding.Input?.action != null ? binding.Input.action.name : $"[Unassigned: {i}]";
+                    var name = binding?.action != null ? binding.action.name : $"[Unassigned: {i}]";
                     yield return new NameValue<byte>(name, i);
                 }
             }
@@ -35,7 +35,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
             for (byte i = 0; i < I.inputActions.Length; i++)
             {
-                var input = I.inputActions[i].Input;
+                var input = I.inputActions[i];
                 if (input?.action == null || input.action.id != reference.action.id) continue;
                 
                 index = i;
@@ -44,12 +44,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
             index = NameToKey((FixedString32Bytes)reference.action.name);
             return true;
-        }
-
-        [Serializable]
-        public class InputActionBinding
-        {
-            public InputActionReference Input;
         }
     }
 }

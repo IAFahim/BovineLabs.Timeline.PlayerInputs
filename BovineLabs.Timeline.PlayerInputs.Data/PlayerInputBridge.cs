@@ -56,7 +56,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             for (byte i = 0; i < MultiInputSettings.I.InputActions.Count; i++)
             {
                 var binding = MultiInputSettings.I.InputActions[i];
-                if (!TryFindAction(playerInput, binding.Input, out var action)) continue;
+                if (!TryFindAction(playerInput, binding, out var action)) continue;
 
                 if (action.type == InputActionType.Button) buttons.Add((i, action));
                 else if (action.type == InputActionType.Value) axes.Add((i, action));
