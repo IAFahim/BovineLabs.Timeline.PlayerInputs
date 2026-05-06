@@ -10,5 +10,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     [TrackColor(0.2f, 0.6f, 0.9f)]
     [TrackBindingType(typeof(InputConsumerAuthoring))]
     [DisplayName("BovineLabs/Player Inputs/Command Sequence Track")]
-    public sealed class CommandSequenceTrack : DOTSTrack { }
+    public sealed class CommandSequenceTrack : DOTSTrack
+    {
+    }
 }

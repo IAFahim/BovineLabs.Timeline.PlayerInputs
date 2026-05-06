@@ -1,4 +1,3 @@
-using BovineLabs.Core.Collections;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
@@ -15,7 +14,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            histories = state.GetBufferLookup<InputHistory>(false);
+            histories = state.GetBufferLookup<InputHistory>();
         }
 
         [BurstCompile]
@@ -34,7 +33,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             private void Execute(in BufferClearConfig config, in TrackBinding binding)
             {
-                if (binding.Value == Entity.Null || !this.Histories.TryGetBuffer(binding.Value, out var history)) return;
+                if (binding.Value == Entity.Null || !Histories.TryGetBuffer(binding.Value, out var history)) return;
 
                 if (config.ActionMask.AllFalse)
                 {

@@ -22,7 +22,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             writers.Create(ref state);
             states = state.GetComponentLookup<InputState>(true);
-            histories = state.GetBufferLookup<InputHistory>(false);
+            histories = state.GetBufferLookup<InputHistory>();
         }
 
         [BurstCompile]
@@ -48,7 +48,8 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public ComponentLookup<InputState> States;
             public BufferLookup<InputHistory> Histories;
 
-            private void Execute(ref CommandSequenceState commandState, in CommandSequenceConfig config, in TrackBinding binding)
+            private void Execute(ref CommandSequenceState commandState, in CommandSequenceConfig config,
+                in TrackBinding binding)
             {
                 if (commandState.IsCompleted || binding.Value == Entity.Null) return;
                 if (!States.TryGetComponent(binding.Value, out var state)) return;
@@ -66,13 +67,11 @@ namespace BovineLabs.Timeline.PlayerInputs
                     var matched = true;
 
                     for (var i = 0; i < seq.Steps.Length; i++)
-                    {
                         if (!Evaluate(ref seq.Steps[i], state, history, ref consumeMask, ref searchIndex))
                         {
                             matched = false;
                             break;
                         }
-                    }
 
                     if (!matched) continue;
 
@@ -87,7 +86,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                 }
             }
 
-            private static bool Evaluate(ref CommandStep step, in InputState state, in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask, ref int searchIndex)
+            private static bool Evaluate(ref CommandStep step, in InputState state,
+                in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask, ref int searchIndex)
             {
                 switch (step.Mode)
                 {
@@ -103,6 +103,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             if (step.Mode == CommandMode.Consume) consumeMask[i] = true;
                             return true;
                         }
+
                         return false;
                     }
 
@@ -115,6 +116,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             consumeMask[i] = true;
                             return true;
                         }
+
                         return false;
                     }
 
@@ -127,6 +129,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             consumeMask[i] = true;
                             return true;
                         }
+
                         return false;
                     }
 
@@ -140,6 +143,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             searchIndex = i + 1;
                             return true;
                         }
+
                         return false;
                     }
 
@@ -153,6 +157,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             searchIndex = i + 1;
                             return true;
                         }
+
                         return false;
                     }
 
@@ -166,6 +171,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             searchIndex = i + 1;
                             return true;
                         }
+
                         return false;
                     }
 
@@ -176,6 +182,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             if (consumeMask[i]) continue;
                             if (history[i].ActionId == step.ActionId) return false;
                         }
+
                         return true;
                     }
 
@@ -186,6 +193,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             if (consumeMask[i]) continue;
                             return history[i].ActionId != step.ActionId;
                         }
+
                         return true;
                     }
 
@@ -196,6 +204,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                             if (consumeMask[i]) continue;
                             return history[i].ActionId != step.ActionId;
                         }
+
                         return true;
                     }
 

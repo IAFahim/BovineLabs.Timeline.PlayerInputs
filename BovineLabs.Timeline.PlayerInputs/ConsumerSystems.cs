@@ -1,4 +1,3 @@
-using BovineLabs.Core.Groups;
 using BovineLabs.Core.Utility;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
@@ -28,10 +27,14 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(ConsumerTag))]
         private partial struct SyncStateJob : IJobEntity
         {
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<InputState> Providers;
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public BufferLookup<InputAxis> Axes;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<InputState> Providers;
 
-            private void Execute(in InputSource source, ref InputState state, ref PlayerMoveInput move, ref DynamicBuffer<InputAxis> consumerAxes)
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public BufferLookup<InputAxis> Axes;
+
+            private void Execute(in InputSource source, ref InputState state, ref PlayerMoveInput move,
+                ref DynamicBuffer<InputAxis> consumerAxes)
             {
                 if (source.Provider == Entity.Null || !Providers.TryGetComponent(source.Provider, out state))
                 {
@@ -46,7 +49,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 {
                     if (providerAxes.Length > 0) move.Value = providerAxes[0].Value;
                     else move.Value = float2.zero;
-                    
+
                     foreach (var axis in providerAxes) consumerAxes.Add(axis);
                 }
             }
@@ -62,26 +65,26 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            this.masks = state.GetComponentLookup<ActiveBufferMask>(false);
-            this.entityLock = new EntityLock(Allocator.Persistent);
+            masks = state.GetComponentLookup<ActiveBufferMask>();
+            entityLock = new EntityLock(Allocator.Persistent);
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            this.entityLock.Dispose();
+            entityLock.Dispose();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            this.masks.Update(ref state);
+            masks.Update(ref state);
 
             state.Dependency = new ResetMaskJob().ScheduleParallel(state.Dependency);
-            state.Dependency = new AccumulateMaskJob 
-            { 
-                Masks = this.masks,
-                EntityLock = this.entityLock
+            state.Dependency = new AccumulateMaskJob
+            {
+                Masks = masks,
+                EntityLock = entityLock
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -89,26 +92,28 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(ConsumerTag))]
         private partial struct ResetMaskJob : IJobEntity
         {
-            private void Execute(ref ActiveBufferMask mask) => mask.Value = default;
+            private void Execute(ref ActiveBufferMask mask)
+            {
+                mask.Value = default;
+            }
         }
 
         [BurstCompile]
         [WithAll(typeof(ClipActive))]
         private partial struct AccumulateMaskJob : IJobEntity
         {
-            [NativeDisableParallelForRestriction]
-            public ComponentLookup<ActiveBufferMask> Masks;
+            [NativeDisableParallelForRestriction] public ComponentLookup<ActiveBufferMask> Masks;
             public EntityLock EntityLock;
 
             private void Execute(in BufferWindowConfig config, in TrackBinding binding)
             {
                 if (binding.Value == Entity.Null) return;
-                
-                using (this.EntityLock.Acquire(binding.Value))
+
+                using (EntityLock.Acquire(binding.Value))
                 {
-                    if (!this.Masks.TryGetComponent(binding.Value, out var mask)) return;
+                    if (!Masks.TryGetComponent(binding.Value, out var mask)) return;
                     mask.Value = mask.Value.BitOr(config.AllowedActions);
-                    this.Masks[binding.Value] = mask;
+                    Masks[binding.Value] = mask;
                 }
             }
         }
@@ -142,19 +147,17 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 var totalToAdd = filtered.CountBits();
                 var removeCount = math.max(0, history.Length + totalToAdd - history.Capacity);
-                
-                if (removeCount > 0)
-                {
-                    history.RemoveRange(0, removeCount);
-                }
 
-                ProcessULong(filtered.Data1, 0, ref history, this.Tick);
-                ProcessULong(filtered.Data2, 64, ref history, this.Tick);
-                ProcessULong(filtered.Data3, 128, ref history, this.Tick);
-                ProcessULong(filtered.Data4, 192, ref history, this.Tick);
+                if (removeCount > 0) history.RemoveRange(0, removeCount);
+
+                ProcessULong(filtered.Data1, 0, ref history, Tick);
+                ProcessULong(filtered.Data2, 64, ref history, Tick);
+                ProcessULong(filtered.Data3, 128, ref history, Tick);
+                ProcessULong(filtered.Data4, 192, ref history, Tick);
             }
 
-            private static void ProcessULong(ulong data, byte offset, ref DynamicBuffer<InputHistory> history, uint tick)
+            private static void ProcessULong(ulong data, byte offset, ref DynamicBuffer<InputHistory> history,
+                uint tick)
             {
                 while (data != 0)
                 {

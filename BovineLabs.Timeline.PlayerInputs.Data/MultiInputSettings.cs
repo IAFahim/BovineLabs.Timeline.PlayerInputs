@@ -37,7 +37,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             {
                 var input = I.inputActions[i];
                 if (input?.action == null || input.action.id != reference.action.id) continue;
-                
+
                 index = i;
                 return true;
             }

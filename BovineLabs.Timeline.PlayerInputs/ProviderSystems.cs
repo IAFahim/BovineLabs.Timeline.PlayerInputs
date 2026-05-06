@@ -32,7 +32,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         public void OnUpdate(ref SystemState state)
         {
             var map = new NativeHashMap<byte, Entity>(16, state.WorldUpdateAllocator);
-            
+
             foreach (var (id, entity) in SystemAPI.Query<RefRO<PlayerId>>().WithAll<ProviderTag>().WithEntityAccess())
                 map.TryAdd(id.ValueRO.Value, entity);
 

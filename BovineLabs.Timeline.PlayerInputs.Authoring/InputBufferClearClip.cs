@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Generic;
 using BovineLabs.Core.Collections;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Data;
-using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -23,15 +21,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         {
             var mask = default(BitArray256);
             if (ActionsToClear != null)
-            {
                 foreach (var action in ActionsToClear)
-                {
                     if (MultiInputSettings.TryGetIndex(action, out var id))
-                    {
                         mask[id] = true;
-                    }
-                }
-            }
 
             context.Baker.AddComponent(entity, new BufferClearConfig { ActionMask = mask });
             context.Baker.SetComponentEnabled<BufferClearConfig>(entity, false);

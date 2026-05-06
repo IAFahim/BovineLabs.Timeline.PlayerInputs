@@ -26,8 +26,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public ConditionEventObject Condition;
         public int Value = 1;
     }
-        [Tooltip("Sequences are evaluated top-to-bottom. High priority should be first. First successful match triggers event and completes sequence clip.")]
 
+    [Tooltip(
+        "Sequences are evaluated top-to-bottom. High priority should be first. First successful match triggers event and completes sequence clip.")]
     public sealed class CommandSequenceClip : DOTSClip, ITimelineClipAsset
     {
         public CommandSequenceData[] Sequences = Array.Empty<CommandSequenceData>();
@@ -56,10 +57,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
                 var stepArray = builder.Allocate(ref seqArray[s].Steps, seqData.Steps.Length);
                 for (var i = 0; i < seqData.Steps.Length; i++)
-                {
                     if (MultiInputSettings.TryGetIndex(seqData.Steps[i].Action, out var id))
                         stepArray[i] = new CommandStep { ActionId = id, Mode = seqData.Steps[i].Mode };
-                }
             }
 
             var blobRef = builder.CreateBlobAssetReference<CommandBlob>(Allocator.Persistent);
@@ -69,7 +68,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             context.Baker.AddComponent(entity, new CommandSequenceConfig
             {
                 Blob = blobRef,
-                RouteEntity = target  // proper IComponentData field — entity remapping works
+                RouteEntity = target // proper IComponentData field — entity remapping works
             });
             context.Baker.AddComponent<CommandSequenceState>(entity);
 

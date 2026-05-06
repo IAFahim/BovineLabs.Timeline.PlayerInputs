@@ -7,24 +7,24 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 {
     public enum CommandMode : byte
     {
-        None = 0,               // Live State 
-        
+        None = 0, // Live State 
+
         // Unordered Searches
         Contains = 1,
         Consume = 2,
         FirstConsume = 3,
         LastConsume = 4,
-        
+
         // Ordered Searches (Progressive index)
         OrderedContains = 16,
         OrderedConsume = 17,
         OrderedFirstConsume = 18,
         OrderedLastConsume = 19,
-        
+
         // Negative Requirements
         NotContains = 32,
         NotFirst = 33,
-        NotLast = 34,
+        NotLast = 34
     }
 
     public struct InputState : IComponentData
@@ -50,12 +50,28 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public uint Tick;
     }
 
-    public struct PlayerId : IComponentData { public byte Value; }
-    public struct ProviderTag : IComponentData { }
-    public struct ConsumerTag : IComponentData { }
+    public struct PlayerId : IComponentData
+    {
+        public byte Value;
+    }
 
-    public struct InputSource : IComponentData { public Entity Provider; }
-    public struct PlayerMoveInput : IComponentData { public float2 Value; }
+    public struct ProviderTag : IComponentData
+    {
+    }
+
+    public struct ConsumerTag : IComponentData
+    {
+    }
+
+    public struct InputSource : IComponentData
+    {
+        public Entity Provider;
+    }
+
+    public struct PlayerMoveInput : IComponentData
+    {
+        public float2 Value;
+    }
 
     public struct CommandStep
     {
@@ -78,9 +94,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public struct CommandSequenceConfig : IComponentData
     {
         public BlobAssetReference<CommandBlob> Blob;
-        public Entity RouteEntity; 
+        public Entity RouteEntity;
     }
-    
+
     public struct CommandSequenceState : IComponentData
     {
         public bool IsCompleted;

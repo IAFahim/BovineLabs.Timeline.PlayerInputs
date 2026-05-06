@@ -13,15 +13,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         public int PlayerIdOverride = -1;
         public BitArray256 CurrentPressed;
-        public readonly List<InputAxis> CurrentAxes = new(16);
 
         private readonly List<(byte Id, InputAction Action)> axes = new();
         private readonly List<(byte Id, InputAction Action)> buttons = new();
-
-        private World world;
+        public readonly List<InputAxis> CurrentAxes = new(16);
+        private bool initialized;
         private EntityManager manager;
         private Entity provider;
-        private bool initialized;
+
+        private World world;
 
         private void Update()
         {
@@ -29,15 +29,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
             CurrentPressed = default;
             foreach (var btn in buttons)
-                if (btn.Action.WasPerformedThisFrame())  // was IsPressed()
+                if (btn.Action.WasPerformedThisFrame()) // was IsPressed()
                     CurrentPressed[btn.Id] = true;
 
             CurrentAxes.Clear();
             foreach (var axis in axes)
             {
                 var isVec2 = axis.Action.expectedControlType == "Vector2";
-                var val = isVec2 ? (float2)axis.Action.ReadValue<Vector2>() : new float2(axis.Action.ReadValue<float>(), 0f);
-                
+                var val = isVec2
+                    ? (float2)axis.Action.ReadValue<Vector2>()
+                    : new float2(axis.Action.ReadValue<float>(), 0f);
+
                 if (math.lengthsq(val) > 0.0001f)
                     CurrentAxes.Add(new InputAxis { ActionId = axis.Id, Value = val });
             }
@@ -98,21 +100,41 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             action = null;
             if (reference?.action == null) return false;
-            
+
             action = input.actions.FindAction(reference.action.id);
             return action != null;
         }
 
-        private byte GetPlayerId() => PlayerIdOverride >= 0 ? (byte)PlayerIdOverride : (byte)(GetComponent<PlayerInput>()?.playerIndex ?? 0);
+        private byte GetPlayerId()
+        {
+            return PlayerIdOverride >= 0
+                ? (byte)PlayerIdOverride
+                : (byte)(GetComponent<PlayerInput>()?.playerIndex ?? 0);
+        }
     }
 
     public sealed class PlayerInputBridgeComponent : IComponentData, IEquatable<PlayerInputBridgeComponent>, ICloneable
     {
         public PlayerInputBridge Value;
 
-        public object Clone() => new PlayerInputBridgeComponent { Value = Value };
-        public bool Equals(PlayerInputBridgeComponent other) => !ReferenceEquals(null, other) && (ReferenceEquals(this, other) || Equals(Value, other.Value));
-        public override bool Equals(object obj) => ReferenceEquals(this, obj) || (obj is PlayerInputBridgeComponent other && Equals(other));
-        public override int GetHashCode() => Value?.GetHashCode() ?? 0;
+        public object Clone()
+        {
+            return new PlayerInputBridgeComponent { Value = Value };
+        }
+
+        public bool Equals(PlayerInputBridgeComponent other)
+        {
+            return !ReferenceEquals(null, other) && (ReferenceEquals(this, other) || Equals(Value, other.Value));
+        }
+
+        public override bool Equals(object obj)
+        {
+            return ReferenceEquals(this, obj) || (obj is PlayerInputBridgeComponent other && Equals(other));
+        }
+
+        public override int GetHashCode()
+        {
+            return Value?.GetHashCode() ?? 0;
+        }
     }
 }

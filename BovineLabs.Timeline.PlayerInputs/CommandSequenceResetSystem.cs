@@ -16,9 +16,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             foreach (var commandState in SystemAPI.Query<RefRW<CommandSequenceState>>()
                          .WithAll<ClipActive>()
                          .WithNone<ClipActivePrevious>())
-            {
                 commandState.ValueRW.IsCompleted = false;
-            }
         }
     }
 }
