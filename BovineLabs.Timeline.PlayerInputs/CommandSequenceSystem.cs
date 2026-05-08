@@ -77,7 +77,6 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                     CommitConsumes(history, ref consumeMask);
 
-                    // config.RouteEntity — correct, remapped, valid at runtime
                     if (Hint.Likely(Writers.TryGet(config.RouteEntity, out var writer)))
                         writer.Trigger(seq.Condition, seq.Value);
 

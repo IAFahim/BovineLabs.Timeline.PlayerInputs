@@ -12,7 +12,6 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            // Cleanly reset Sequence State when clip enters active state
             foreach (var commandState in SystemAPI.Query<RefRW<CommandSequenceState>>()
                          .WithAll<ClipActive>()
                          .WithNone<ClipActivePrevious>())
