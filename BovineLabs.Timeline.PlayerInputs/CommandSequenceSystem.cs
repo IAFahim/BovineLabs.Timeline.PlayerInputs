@@ -92,14 +92,20 @@ namespace BovineLabs.Timeline.PlayerInputs
                 switch (step.Mode)
                 {
                     case CommandMode.None:
-                        return state.Pressed[step.ActionId];
+                        return step.Phase switch
+                        {
+                            InputPhase.Down => state.Down[step.ActionId],
+                            InputPhase.Held => state.Held[step.ActionId],
+                            InputPhase.Up => state.Up[step.ActionId],
+                            _ => false
+                        };
 
                     case CommandMode.Contains:
                     case CommandMode.Consume:
                     {
                         for (var i = 0; i < history.Length; i++)
                         {
-                            if (consumeMask[i] || history[i].ActionId != step.ActionId) continue;
+                            if (consumeMask[i] || history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) continue;
                             if (step.Mode == CommandMode.Consume) consumeMask[i] = true;
                             return true;
                         }
@@ -112,7 +118,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         for (var i = 0; i < history.Length; i++)
                         {
                             if (consumeMask[i]) continue;
-                            if (history[i].ActionId != step.ActionId) return false;
+                            if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
                             consumeMask[i] = true;
                             return true;
                         }
@@ -125,7 +131,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         for (var i = history.Length - 1; i >= 0; i--)
                         {
                             if (consumeMask[i]) continue;
-                            if (history[i].ActionId != step.ActionId) return false;
+                            if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
                             consumeMask[i] = true;
                             return true;
                         }
@@ -138,7 +144,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     {
                         for (var i = searchIndex; i < history.Length; i++)
                         {
-                            if (consumeMask[i] || history[i].ActionId != step.ActionId) continue;
+                            if (consumeMask[i] || history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) continue;
                             if (step.Mode == CommandMode.OrderedConsume) consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;
@@ -152,7 +158,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         for (var i = searchIndex; i < history.Length; i++)
                         {
                             if (consumeMask[i]) continue;
-                            if (history[i].ActionId != step.ActionId) return false;
+                            if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
                             consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;
@@ -166,7 +172,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         for (var i = history.Length - 1; i >= searchIndex; i--)
                         {
                             if (consumeMask[i]) continue;
-                            if (history[i].ActionId != step.ActionId) return false;
+                            if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
                             consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;
@@ -180,7 +186,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         for (var i = 0; i < history.Length; i++)
                         {
                             if (consumeMask[i]) continue;
-                            if (history[i].ActionId == step.ActionId) return false;
+                            if (history[i].ActionId == step.ActionId && history[i].Phase == step.Phase) return false;
                         }
 
                         return true;
@@ -191,7 +197,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         for (var i = 0; i < history.Length; i++)
                         {
                             if (consumeMask[i]) continue;
-                            return history[i].ActionId != step.ActionId;
+                            return history[i].ActionId != step.ActionId || history[i].Phase != step.Phase;
                         }
 
                         return true;
@@ -202,7 +208,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         for (var i = history.Length - 1; i >= 0; i--)
                         {
                             if (consumeMask[i]) continue;
-                            return history[i].ActionId != step.ActionId;
+                            return history[i].ActionId != step.ActionId || history[i].Phase != step.Phase;
                         }
 
                         return true;

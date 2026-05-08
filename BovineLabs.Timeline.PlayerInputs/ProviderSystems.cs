@@ -16,7 +16,12 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (bridge.Value == null) continue;
 
-                state.ValueRW = new InputState { Pressed = bridge.Value.CurrentPressed };
+                state.ValueRW = new InputState 
+                { 
+                    Down = bridge.Value.CurrentDown,
+                    Held = bridge.Value.CurrentHeld,
+                    Up = bridge.Value.CurrentUp
+                };
 
                 axes.Clear();
                 foreach (var axis in bridge.Value.CurrentAxes) axes.Add(axis);

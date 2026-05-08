@@ -5,6 +5,13 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.PlayerInputs.Data
 {
+    public enum InputPhase : byte
+    {
+        Down = 0,
+        Held = 1,
+        Up = 2
+    }
+
     public enum CommandMode : byte
     {
         None = 0, // Live State 
@@ -29,7 +36,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
     public struct InputState : IComponentData
     {
-        public BitArray256 Pressed;
+        public BitArray256 Down;
+        public BitArray256 Held;
+        public BitArray256 Up;
     }
 
     public struct ActiveBufferMask : IComponentData
@@ -47,6 +56,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public struct InputHistory : IBufferElementData
     {
         public byte ActionId;
+        public InputPhase Phase;
         public uint Tick;
     }
 
@@ -77,6 +87,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         public byte ActionId;
         public CommandMode Mode;
+        public InputPhase Phase;
     }
 
     public struct CommandSequence

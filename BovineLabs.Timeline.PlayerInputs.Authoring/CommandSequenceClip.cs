@@ -17,6 +17,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     {
         public InputActionReference Action;
         public CommandMode Mode;
+        public InputPhase Phase;
     }
 
     [Serializable]
@@ -39,7 +40,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public override void Bake(Entity entity, BakingContext context)
         {
-            // Resolve once for the whole clip — stored in IComponentData, not blob
             var target = context.Target;
             if (RouteTo != null && context.TryResolveLink(RouteTo, out var linked))
                 target = context.Baker.GetEntity(linked, TransformUsageFlags.None);
@@ -53,12 +53,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 var seqData = Sequences[s];
                 seqArray[s].Condition = seqData.Condition ? seqData.Condition.Key : ConditionKey.Null;
                 seqArray[s].Value = seqData.Value;
-                // NO RouteEntity here
 
                 var stepArray = builder.Allocate(ref seqArray[s].Steps, seqData.Steps.Length);
                 for (var i = 0; i < seqData.Steps.Length; i++)
                     if (MultiInputSettings.TryGetIndex(seqData.Steps[i].Action, out var id))
-                        stepArray[i] = new CommandStep { ActionId = id, Mode = seqData.Steps[i].Mode };
+                        stepArray[i] = new CommandStep 
+                        { 
+                            ActionId = id, 
+                            Mode = seqData.Steps[i].Mode,
+                            Phase = seqData.Steps[i].Phase
+                        };
             }
 
             var blobRef = builder.CreateBlobAssetReference<CommandBlob>(Allocator.Persistent);
@@ -68,7 +72,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             context.Baker.AddComponent(entity, new CommandSequenceConfig
             {
                 Blob = blobRef,
-                RouteEntity = target // proper IComponentData field — entity remapping works
+                RouteEntity = target
             });
             context.Baker.AddComponent<CommandSequenceState>(entity);
 

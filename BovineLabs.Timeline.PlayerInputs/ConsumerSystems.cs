@@ -140,30 +140,35 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             private void Execute(in InputState state, in ActiveBufferMask mask, ref DynamicBuffer<InputHistory> history)
             {
-                if (state.Pressed.AllFalse || mask.Value.AllFalse) return;
+                if (mask.Value.AllFalse) return;
 
-                var filtered = state.Pressed.BitAnd(mask.Value);
-                if (filtered.AllFalse) return;
+                var downFiltered = state.Down.BitAnd(mask.Value);
+                var upFiltered = state.Up.BitAnd(mask.Value);
 
-                var totalToAdd = filtered.CountBits();
+                var totalToAdd = downFiltered.CountBits() + upFiltered.CountBits();
+                if (totalToAdd == 0) return;
+
                 var removeCount = math.max(0, history.Length + totalToAdd - history.Capacity);
-
                 if (removeCount > 0) history.RemoveRange(0, removeCount);
 
-                ProcessULong(filtered.Data1, 0, ref history, Tick);
-                ProcessULong(filtered.Data2, 64, ref history, Tick);
-                ProcessULong(filtered.Data3, 128, ref history, Tick);
-                ProcessULong(filtered.Data4, 192, ref history, Tick);
+                ProcessULong(downFiltered.Data1, 0, InputPhase.Down, ref history, Tick);
+                ProcessULong(downFiltered.Data2, 64, InputPhase.Down, ref history, Tick);
+                ProcessULong(downFiltered.Data3, 128, InputPhase.Down, ref history, Tick);
+                ProcessULong(downFiltered.Data4, 192, InputPhase.Down, ref history, Tick);
+
+                ProcessULong(upFiltered.Data1, 0, InputPhase.Up, ref history, Tick);
+                ProcessULong(upFiltered.Data2, 64, InputPhase.Up, ref history, Tick);
+                ProcessULong(upFiltered.Data3, 128, InputPhase.Up, ref history, Tick);
+                ProcessULong(upFiltered.Data4, 192, InputPhase.Up, ref history, Tick);
             }
 
-            private static void ProcessULong(ulong data, byte offset, ref DynamicBuffer<InputHistory> history,
-                uint tick)
+            private static void ProcessULong(ulong data, byte offset, InputPhase phase, ref DynamicBuffer<InputHistory> history, uint tick)
             {
                 while (data != 0)
                 {
                     var bit = math.tzcnt(data);
                     data ^= 1ul << bit;
-                    history.Add(new InputHistory { ActionId = (byte)(offset + bit), Tick = tick });
+                    history.Add(new InputHistory { ActionId = (byte)(offset + bit), Phase = phase, Tick = tick });
                 }
             }
         }
