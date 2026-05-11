@@ -23,6 +23,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<LocalTransform> _transforms;
+        private EntityQuery _cameraQuery;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -34,6 +35,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
             _transforms = state.GetComponentLookup<LocalTransform>(false);
+            _cameraQuery = SystemAPI.QueryBuilder().WithAll<CameraMain, LocalToWorld>().Build();
         }
 
         [BurstCompile]
@@ -46,6 +48,13 @@ namespace BovineLabs.Timeline.PlayerInputs
             _axes.Update(ref state);
             _transforms.Update(ref state);
 
+            var cameraRotation = quaternion.identity;
+            if (!_cameraQuery.IsEmpty)
+            {
+                var cameraEntity = _cameraQuery.GetSingletonEntity();
+                cameraRotation = SystemAPI.GetComponent<LocalToWorld>(cameraEntity).Rotation;
+            }
+
             state.Dependency = new InitJob().ScheduleParallel(state.Dependency);
 
             state.Dependency = new ApplyJob
@@ -56,7 +65,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Entries = _entries,
                 Axes = _axes,
                 Transforms = _transforms,
-                DeltaTime = SystemAPI.Time.DeltaTime
+                DeltaTime = SystemAPI.Time.DeltaTime,
+                CameraRotation = cameraRotation
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -85,6 +95,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             public ComponentLookup<LocalTransform> Transforms;
 
             public float DeltaTime;
+            public quaternion CameraRotation;
 
             private void Execute(in TrackBinding binding, in AxisTransformConfig config, ref AxisTransformState state)
             {
@@ -98,14 +109,12 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 if (!Axes.TryGetBuffer(consumer, out var axesBuf)) return;
 
-                float2 axisValue = float2.zero;
-                for (int i = 0; i < axesBuf.Length; i++)
+                var axisValue = float2.zero;
+                for (var i = 0; i < axesBuf.Length; i++)
                 {
-                    if (axesBuf[i].ActionId == config.ActionId)
-                    {
-                        axisValue = axesBuf[i].Value;
-                        break;
-                    }
+                    if (axesBuf[i].ActionId != config.ActionId) continue;
+                    axisValue = axesBuf[i].Value;
+                    break;
                 }
 
                 if (math.lengthsq(axisValue) > 0.0001f)
@@ -116,8 +125,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 else
                 {
                     state.HasInput = false;
-                    if (!config.Mode.KeepLast())
-                        state.LastInput = float2.zero;
+                    if (!config.Mode.KeepLast()) state.LastInput = float2.zero;
                 }
 
                 var transform = Transforms[targetEntity];
@@ -133,25 +141,46 @@ namespace BovineLabs.Timeline.PlayerInputs
                 var planeNormal = math.normalize(config.Plane);
                 float3 right, forward;
 
-                if (math.abs(planeNormal.y) > 0.99f)
+                if (config.Mode.IsCameraRelative())
                 {
-                    right = math.right() * math.sign(planeNormal.y);
-                    forward = math.forward() * math.sign(planeNormal.y);
-                }
-                else if (math.abs(planeNormal.z) > 0.99f)
-                {
-                    right = math.right() * math.sign(planeNormal.z);
-                    forward = math.up() * math.sign(planeNormal.z);
+                    var camForward = math.rotate(CameraRotation, math.forward());
+                    var projForward = camForward - math.dot(camForward, planeNormal) * planeNormal;
+
+                    if (math.lengthsq(projForward) > 0.0001f)
+                    {
+                        forward = math.normalize(projForward);
+                        right = math.normalize(math.cross(planeNormal, forward));
+                    }
+                    else
+                    {
+                        var camUp = math.rotate(CameraRotation, math.up());
+                        var projUp = camUp - math.dot(camUp, planeNormal) * planeNormal;
+                        forward = math.normalize(projUp);
+                        right = math.normalize(math.cross(planeNormal, forward));
+                    }
                 }
                 else
                 {
-                    right = math.normalize(math.cross(math.up(), planeNormal));
-                    forward = math.normalize(math.cross(planeNormal, right));
+                    if (math.abs(planeNormal.y) > 0.99f)
+                    {
+                        right = math.right() * math.sign(planeNormal.y);
+                        forward = math.forward() * math.sign(planeNormal.y);
+                    }
+                    else if (math.abs(planeNormal.z) > 0.99f)
+                    {
+                        right = math.right() * math.sign(planeNormal.z);
+                        forward = math.up() * math.sign(planeNormal.z);
+                    }
+                    else
+                    {
+                        right = math.normalize(math.cross(math.up(), planeNormal));
+                        forward = math.normalize(math.cross(planeNormal, right));
+                    }
                 }
 
-                float3 inputVec = right * state.LastInput.x + forward * state.LastInput.y;
+                var inputVec = right * state.LastInput.x + forward * state.LastInput.y;
 
-                if (config.Mode.IsLocal())
+                if (!config.Mode.IsCameraRelative() && config.Mode.IsLocal())
                     inputVec = math.rotate(transform.Rotation, inputVec);
 
                 var lerpT = config.Smoothing > 0f ? math.saturate(DeltaTime * config.Smoothing) : 1f;
@@ -173,9 +202,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     var offset = state.CurrentPosition - state.Origin;
                     var distSq = math.lengthsq(offset);
                     if (distSq > config.ClampRadius * config.ClampRadius)
-                    {
                         state.CurrentPosition = state.Origin + (offset / math.sqrt(distSq)) * config.ClampRadius;
-                    }
                 }
 
                 transform.Position = state.CurrentPosition;

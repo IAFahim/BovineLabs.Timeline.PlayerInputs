@@ -16,19 +16,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public InputActionReference Action;
 
-        [Tooltip("Scales the [-1,1] input range. Range=5 means output spans [-5,5].")]
+        [Tooltip("Scales [-1,1] input range. Range=5 means output spans [-5,5].")]
         public float Range = 1f;
 
-        [Tooltip("Normal of plane on which movement is applied. Up=(0,1,0) moves on XZ. Forward=(0,0,1) moves on XY.")]
+        [Tooltip("Normal of plane movement applied. Up=(0,1,0) moves XZ.")]
         public Vector3 Plane = Vector3.up;
 
         [Tooltip("Lerp speed toward target position. 0 = instant snap.")]
         public float Smoothing = 0f;
 
-        [Tooltip("Max distance from origin target can be moved. 0 = unlimited.")]
+        [Tooltip("Max distance from origin target can move. 0 = unlimited.")]
         public float ClampRadius = 0f;
 
-        [Tooltip("Position sets target directly. Velocity accumulates over time.")]
+        [Tooltip("Position sets target directly. Velocity accumulates. LocalSpace rotates basis by Target. CameraRelative rotates basis by CameraMain.")]
         public AxisTransformMode Mode = AxisTransformMode.Position;
 
         public override double duration => 1;

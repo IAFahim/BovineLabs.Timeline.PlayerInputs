@@ -37,10 +37,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public enum AxisTransformMode : byte
     {
         Position = 0,
-        Velocity = 1 << 0, // 1
+        Velocity = 1 << 0,
+        KeepLastPosition = 1 << 1,
+        LocalSpace = 1 << 2,
+        CameraRelative = 1 << 3
+    }
 
-        KeepLastPosition = 1 << 1, // 2
-        LocalSpace = 1 << 2, // 4
+    public struct CameraMain : IComponentData
+    {
     }
 
     public struct InputState : IComponentData
@@ -143,12 +147,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public float ClampRadius;
         public AxisTransformMode Mode;
     }
-    
+
     public static class AxisTransformModeExtensions
     {
-        public static bool IsVelocity(this AxisTransformMode m) => (m & AxisTransformMode.Velocity)!= 0;
-        public static bool KeepLast(this AxisTransformMode m) => (m & AxisTransformMode.KeepLastPosition)!= 0;
-        public static bool IsLocal(this AxisTransformMode m) => (m & AxisTransformMode.LocalSpace)!= 0;
+        public static bool IsVelocity(this AxisTransformMode m) => (m & AxisTransformMode.Velocity) != 0;
+        public static bool KeepLast(this AxisTransformMode m) => (m & AxisTransformMode.KeepLastPosition) != 0;
+        public static bool IsLocal(this AxisTransformMode m) => (m & AxisTransformMode.LocalSpace) != 0;
+        public static bool IsCameraRelative(this AxisTransformMode m) => (m & AxisTransformMode.CameraRelative) != 0;
     }
 
     public struct AxisTransformState : IComponentData
