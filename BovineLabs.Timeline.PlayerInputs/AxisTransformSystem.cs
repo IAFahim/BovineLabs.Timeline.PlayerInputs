@@ -20,7 +20,6 @@ namespace BovineLabs.Timeline.PlayerInputs
     public partial struct AxisTransformSystem : ISystem
     {
         private ComponentLookup<Targets> _targetsLookup;
-        private ComponentLookup<TargetsCustom> _targetsCustoms;
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
@@ -32,7 +31,6 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             state.RequireForUpdate<AxisTransformConfig>();
             _targetsLookup = state.GetComponentLookup<Targets>(true);
-            _targetsCustoms = state.GetComponentLookup<TargetsCustom>(true);
             _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
@@ -44,7 +42,6 @@ namespace BovineLabs.Timeline.PlayerInputs
         public void OnUpdate(ref SystemState state)
         {
             _targetsLookup.Update(ref state);
-            _targetsCustoms.Update(ref state);
             _sources.Update(ref state);
             _entries.Update(ref state);
             _axes.Update(ref state);
@@ -62,7 +59,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.Dependency = new ApplyJob
             {
                 TargetsLookup = _targetsLookup,
-                TargetsCustoms = _targetsCustoms,
                 Sources = _sources,
                 Entries = _entries,
                 Axes = _axes,
@@ -88,7 +84,6 @@ namespace BovineLabs.Timeline.PlayerInputs
         private partial struct ApplyJob : IJobEntity
         {
             [ReadOnly] public ComponentLookup<Targets> TargetsLookup;
-            [ReadOnly] public ComponentLookup<TargetsCustom> TargetsCustoms;
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
             [ReadOnly] public BufferLookup<InputAxis> Axes;
@@ -106,7 +101,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 if (!EntityLinkResolver.TryResolve(
                         targetEntity, targets, config.ReadRootFrom, config.ConsumerLinkKey,
-                        TargetsCustoms, Sources, Entries, out var consumer)) return;
+                        Sources, Entries, out var consumer)) return;
 
                 if (!Axes.TryGetBuffer(consumer, out var axesBuf)) return;
 
