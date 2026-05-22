@@ -18,27 +18,37 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public InputActionReference Action;
 
-        [Tooltip("Scales [-1,1] input range. Range=5 means output spans [-5,5].")]
+        [Tooltip("Scales [-1,1] input range. Range=5 means output spans [-5,5]. " +
+                 "In Rigidbody modes: max speed (Velocity), force magnitude (Force), or impulse magnitude (Impulse).")]
         public float Range = 1f;
 
-        [Tooltip("Normal of plane movement applied. Up=(0,1,0) moves XZ.")]
+        [Tooltip("Normal of plane movement is applied to. Up=(0,1,0) moves XZ.")]
         public Vector3 Plane = Vector3.up;
 
-        [Tooltip("Lerp speed toward target position. 0 = instant snap.")]
+        [Tooltip("Lerp speed toward target. 0 = instant snap. " +
+                 "In RigidbodyVelocity: lerp speed toward target planar velocity.")]
         public float Smoothing;
 
-        [Tooltip("Max distance from origin target can move. 0 = unlimited.")]
+        [Tooltip("Position/Velocity: max distance from origin. " +
+                 "Rigidbody modes: max planar speed. 0 = unlimited.")]
         public float ClampRadius;
 
-        [Tooltip(
-            "Position sets target directly. Velocity accumulates. LocalSpace rotates basis by Target. CameraRelative rotates basis by CameraMain.")]
+        [Tooltip("RigidbodyForce only: velocity dissipation coefficient per second. " +
+                 "Higher = faster deceleration when no force is applied. 0 = no drag.")]
+        public float Drag;
+
+        [Tooltip("Position sets target directly. Velocity accumulates into state. " +
+                 "LocalSpace rotates basis by Target rotation. CameraRelative rotates basis by CameraMain. " +
+                 "RigidbodyVelocity sets PhysicsVelocity.Linear (planar only) each frame. " +
+                 "RigidbodyForce accumulates force with Drag dissipation each frame. " +
+                 "RigidbodyImpulse fires a single impulse on input rising-edge.")]
         public AxisTransformMode Mode = AxisTransformMode.Position;
 
         [Header("Options")]
         [Tooltip("Evaluate input strictly in world space without rotating along with the parent transform.")]
         public bool IgnoreParentRotation = true;
 
-        [Tooltip("Instantly snaps back to origin when there is no input.")]
+        [Tooltip("Instantly snaps back to origin (non-physics) or zeroes planar velocity (rigidbody) when there is no input.")]
         public bool ResetOnNoInput;
 
         [Header("Events")] public Target EventRouteTo = Target.Self;
@@ -76,6 +86,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Plane = Plane,
                 Smoothing = Smoothing,
                 ClampRadius = ClampRadius,
+                Drag = Drag,
                 Mode = modeFlags,
                 ResetOnNoInput = ResetOnNoInput,
                 EventRouteTo = EventRouteTo,
