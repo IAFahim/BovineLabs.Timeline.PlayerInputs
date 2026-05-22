@@ -1,4 +1,6 @@
 using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Reaction.Data.Conditions;
+using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Data;
@@ -32,6 +34,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             "Position sets target directly. Velocity accumulates. LocalSpace rotates basis by Target. CameraRelative rotates basis by CameraMain.")]
         public AxisTransformMode Mode = AxisTransformMode.Position;
 
+        [Header("Options")]
+        [Tooltip("Evaluate input strictly in world space without rotating along with the parent transform.")]
+        public bool IgnoreParentRotation = true;
+        
+        [Tooltip("Instantly snaps back to origin when there is no input.")]
+        public bool ResetOnNoInput;
+
+        [Header("Events")]
+        public Target EventRouteTo = Target.Self;
+        public EntityLinkSchema EventRouteLink;
+        public ConditionEventObject OnInputStart;
+        public ConditionEventObject OnInputEnd;
+
         public override double duration => 1;
         public ClipCaps clipCaps => ClipCaps.None;
 
@@ -43,9 +58,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 return;
             }
 
+            EntityLinkAuthoringUtility.TryGetKey(EventRouteLink, out var eventRouteLinkKey);
+
             byte actionId = 0;
             if (Action != null)
                 MultiInputSettings.TryGetIndex(Action, out actionId);
+
+            var modeFlags = Mode;
+            if (IgnoreParentRotation) modeFlags |= AxisTransformMode.IgnoreParentRotation;
 
             context.Baker.AddComponent(entity, new AxisTransformConfig
             {
@@ -56,7 +76,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Plane = Plane,
                 Smoothing = Smoothing,
                 ClampRadius = ClampRadius,
-                Mode = Mode
+                Mode = modeFlags,
+                ResetOnNoInput = ResetOnNoInput,
+                EventRouteTo = EventRouteTo,
+                EventRouteLinkKey = eventRouteLinkKey,
+                OnInputStart = OnInputStart != null ? OnInputStart.Key : ConditionKey.Null,
+                OnInputEnd = OnInputEnd != null ? OnInputEnd.Key : ConditionKey.Null
             });
 
             context.Baker.AddComponent<AxisTransformState>(entity);

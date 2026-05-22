@@ -40,7 +40,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         Velocity = 1 << 0,
         KeepLastPosition = 1 << 1,
         LocalSpace = 1 << 2,
-        CameraRelative = 1 << 3
+        CameraRelative = 1 << 3,
+        IgnoreParentRotation = 1 << 4 // NEW
     }
 
     public struct InputState : IComponentData
@@ -142,6 +143,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public float Smoothing;
         public float ClampRadius;
         public AxisTransformMode Mode;
+        
+        // NEW Configurations
+        public bool ResetOnNoInput;
+        public Target EventRouteTo;
+        public ushort EventRouteLinkKey;
+        public ConditionKey OnInputStart;
+        public ConditionKey OnInputEnd;
     }
 
     public static class AxisTransformModeExtensions
@@ -165,6 +173,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             return (m & AxisTransformMode.CameraRelative) != 0;
         }
+        
+        public static bool IgnoreParentRotation(this AxisTransformMode m)
+        {
+            return (m & AxisTransformMode.IgnoreParentRotation) != 0;
+        }
     }
 
     public struct AxisTransformState : IComponentData
@@ -174,6 +187,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public float3 CurrentPosition;
         public float3 Velocity;
         public bool HasInput;
+        public bool WasInputActive; // NEW
         public bool Initialized;
     }
 }

@@ -2,6 +2,8 @@ using BovineLabs.Bridge.Data.Camera;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Reaction.Conditions;
+using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
@@ -24,6 +26,12 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<LocalTransform> _transforms;
+        
+        // NEW Dependencies
+        private ComponentLookup<Parent> _parents;
+        private ComponentLookup<LocalToWorld> _ltws;
+        private ConditionEventWriter.Lookup _writers;
+        
         private EntityQuery _cameraQuery;
 
         [BurstCompile]
@@ -35,6 +43,10 @@ namespace BovineLabs.Timeline.PlayerInputs
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
             _transforms = state.GetComponentLookup<LocalTransform>();
+            _parents = state.GetComponentLookup<Parent>(true);
+            _ltws = state.GetComponentLookup<LocalToWorld>(true);
+            _writers.Create(ref state);
+            
             _cameraQuery = SystemAPI.QueryBuilder().WithAll<CameraMain, LocalToWorld>().Build();
         }
 
@@ -46,6 +58,9 @@ namespace BovineLabs.Timeline.PlayerInputs
             _entries.Update(ref state);
             _axes.Update(ref state);
             _transforms.Update(ref state);
+            _parents.Update(ref state);
+            _ltws.Update(ref state);
+            _writers.Update(ref state);
 
             var cameraRotation = quaternion.identity;
             if (!_cameraQuery.IsEmpty)
@@ -63,6 +78,9 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Entries = _entries,
                 Axes = _axes,
                 Transforms = _transforms,
+                Parents = _parents,
+                Ltws = _ltws,
+                Writers = _writers,
                 DeltaTime = SystemAPI.Time.DeltaTime,
                 CameraRotation = cameraRotation
             }.ScheduleParallel(state.Dependency);
@@ -87,8 +105,11 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
             [ReadOnly] public BufferLookup<InputAxis> Axes;
-
+            [ReadOnly] public ComponentLookup<Parent> Parents;
+            [ReadOnly] public ComponentLookup<LocalToWorld> Ltws;
+            
             [NativeDisableParallelForRestriction] public ComponentLookup<LocalTransform> Transforms;
+            [NativeDisableParallelForRestriction] public ConditionEventWriter.Lookup Writers;
 
             public float DeltaTime;
             public quaternion CameraRotation;
@@ -131,9 +152,42 @@ namespace BovineLabs.Timeline.PlayerInputs
                     state.Origin = transform.Position;
                     state.CurrentPosition = transform.Position;
                     state.Velocity = float3.zero;
+                    state.WasInputActive = false;
                     state.Initialized = true;
                 }
 
+                // 1. Process Condition Events
+                if (state.HasInput && !state.WasInputActive)
+                {
+                    if (config.OnInputStart != ConditionKey.Null && 
+                        TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets, out var eventTarget))
+                    {
+                        if (Writers.TryGet(eventTarget, out var writer))
+                            writer.Trigger(config.OnInputStart, 1);
+                    }
+                }
+                else if (!state.HasInput && state.WasInputActive)
+                {
+                    if (config.OnInputEnd != ConditionKey.Null && 
+                        TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets, out var eventTarget))
+                    {
+                        if (Writers.TryGet(eventTarget, out var writer))
+                            writer.Trigger(config.OnInputEnd, 1);
+                    }
+                }
+                state.WasInputActive = state.HasInput;
+
+                // 2. Process ResetOnNoInput
+                if (config.ResetOnNoInput && !state.HasInput)
+                {
+                    state.CurrentPosition = state.Origin;
+                    state.Velocity = float3.zero;
+                    transform.Position = state.CurrentPosition;
+                    Transforms[targetEntity] = transform;
+                    return;
+                }
+
+                // 3. Transform Logic
                 var planeNormal = math.normalize(config.Plane);
                 float3 right, forward;
 
@@ -176,8 +230,19 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 var inputVec = right * state.LastInput.x + forward * state.LastInput.y;
 
-                if (!config.Mode.IsCameraRelative() && config.Mode.IsLocal())
+                if (config.Mode.IsLocal())
+                {
                     inputVec = math.rotate(transform.Rotation, inputVec);
+                }
+                else if (config.Mode.IgnoreParentRotation())
+                {
+                    if (Parents.TryGetComponent(targetEntity, out var parent) && 
+                        Ltws.TryGetComponent(parent.Value, out var parentLtw))
+                    {
+                        var parentRot = new quaternion(parentLtw.Value);
+                        inputVec = math.rotate(math.inverse(parentRot), inputVec);
+                    }
+                }
 
                 var lerpT = config.Smoothing > 0f ? math.saturate(DeltaTime * config.Smoothing) : 1f;
 
@@ -203,6 +268,28 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 transform.Position = state.CurrentPosition;
                 Transforms[targetEntity] = transform;
+            }
+
+            private bool TryResolveTarget(Target targetMode, ushort linkKey, Entity self, in Targets targets, out Entity resolved)
+            {
+                resolved = Entity.Null;
+                var t = targets.Get(targetMode, self);
+                if (t == Entity.Null) return false;
+
+                if (linkKey == 0)
+                {
+                    resolved = t;
+                    return true;
+                }
+
+                if (EntityLinkResolver.TryResolve(t, linkKey, Sources, Entries, out var linked))
+                {
+                    resolved = linked;
+                    return true;
+                }
+
+                resolved = t;
+                return true;
             }
         }
     }
