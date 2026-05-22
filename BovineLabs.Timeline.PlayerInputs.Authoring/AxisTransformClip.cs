@@ -1,6 +1,6 @@
-using BovineLabs.Reaction.Data.Core;
-using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Reaction.Authoring.Conditions;
+using BovineLabs.Reaction.Data.Conditions;
+using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Data;
@@ -37,12 +37,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Header("Options")]
         [Tooltip("Evaluate input strictly in world space without rotating along with the parent transform.")]
         public bool IgnoreParentRotation = true;
-        
+
         [Tooltip("Instantly snaps back to origin when there is no input.")]
         public bool ResetOnNoInput;
 
-        [Header("Events")]
-        public Target EventRouteTo = Target.Self;
+        [Header("Events")] public Target EventRouteTo = Target.Self;
+
         public EntityLinkSchema EventRouteLink;
         public ConditionEventObject OnInputStart;
         public ConditionEventObject OnInputEnd;

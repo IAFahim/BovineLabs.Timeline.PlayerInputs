@@ -1,9 +1,9 @@
 using BovineLabs.Bridge.Data.Camera;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
-using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Reaction.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
+using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
@@ -26,12 +26,12 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<LocalTransform> _transforms;
-        
+
         // NEW Dependencies
         private ComponentLookup<Parent> _parents;
         private ComponentLookup<LocalToWorld> _ltws;
         private ConditionEventWriter.Lookup _writers;
-        
+
         private EntityQuery _cameraQuery;
 
         [BurstCompile]
@@ -46,7 +46,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _parents = state.GetComponentLookup<Parent>(true);
             _ltws = state.GetComponentLookup<LocalToWorld>(true);
             _writers.Create(ref state);
-            
+
             _cameraQuery = SystemAPI.QueryBuilder().WithAll<CameraMain, LocalToWorld>().Build();
         }
 
@@ -107,7 +107,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public BufferLookup<InputAxis> Axes;
             [ReadOnly] public ComponentLookup<Parent> Parents;
             [ReadOnly] public ComponentLookup<LocalToWorld> Ltws;
-            
+
             [NativeDisableParallelForRestriction] public ComponentLookup<LocalTransform> Transforms;
             [NativeDisableParallelForRestriction] public ConditionEventWriter.Lookup Writers;
 
@@ -159,22 +159,21 @@ namespace BovineLabs.Timeline.PlayerInputs
                 // 1. Process Condition Events
                 if (state.HasInput && !state.WasInputActive)
                 {
-                    if (config.OnInputStart != ConditionKey.Null && 
-                        TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets, out var eventTarget))
-                    {
+                    if (config.OnInputStart != ConditionKey.Null &&
+                        TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
+                            out var eventTarget))
                         if (Writers.TryGet(eventTarget, out var writer))
                             writer.Trigger(config.OnInputStart, 1);
-                    }
                 }
                 else if (!state.HasInput && state.WasInputActive)
                 {
-                    if (config.OnInputEnd != ConditionKey.Null && 
-                        TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets, out var eventTarget))
-                    {
+                    if (config.OnInputEnd != ConditionKey.Null &&
+                        TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
+                            out var eventTarget))
                         if (Writers.TryGet(eventTarget, out var writer))
                             writer.Trigger(config.OnInputEnd, 1);
-                    }
                 }
+
                 state.WasInputActive = state.HasInput;
 
                 // 2. Process ResetOnNoInput
@@ -231,18 +230,14 @@ namespace BovineLabs.Timeline.PlayerInputs
                 var inputVec = right * state.LastInput.x + forward * state.LastInput.y;
 
                 if (config.Mode.IsLocal())
-                {
                     inputVec = math.rotate(transform.Rotation, inputVec);
-                }
                 else if (config.Mode.IgnoreParentRotation())
-                {
-                    if (Parents.TryGetComponent(targetEntity, out var parent) && 
+                    if (Parents.TryGetComponent(targetEntity, out var parent) &&
                         Ltws.TryGetComponent(parent.Value, out var parentLtw))
                     {
                         var parentRot = new quaternion(parentLtw.Value);
                         inputVec = math.rotate(math.inverse(parentRot), inputVec);
                     }
-                }
 
                 var lerpT = config.Smoothing > 0f ? math.saturate(DeltaTime * config.Smoothing) : 1f;
 
@@ -270,7 +265,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Transforms[targetEntity] = transform;
             }
 
-            private bool TryResolveTarget(Target targetMode, ushort linkKey, Entity self, in Targets targets, out Entity resolved)
+            private bool TryResolveTarget(Target targetMode, ushort linkKey, Entity self, in Targets targets,
+                out Entity resolved)
             {
                 resolved = Entity.Null;
                 var t = targets.Get(targetMode, self);

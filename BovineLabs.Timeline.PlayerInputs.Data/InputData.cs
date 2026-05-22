@@ -143,7 +143,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public float Smoothing;
         public float ClampRadius;
         public AxisTransformMode Mode;
-        
+
         // NEW Configurations
         public bool ResetOnNoInput;
         public Target EventRouteTo;
@@ -173,7 +173,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             return (m & AxisTransformMode.CameraRelative) != 0;
         }
-        
+
         public static bool IgnoreParentRotation(this AxisTransformMode m)
         {
             return (m & AxisTransformMode.IgnoreParentRotation) != 0;
