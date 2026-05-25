@@ -16,11 +16,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public Target ReadRootFrom = Target.Owner;
         public EntityLinkSchema ConsumerLink;
 
+        [Tooltip("Entity whose world position the carrot is tethered to. " +
+                 "Without this, leash clamps relative to the carrot's initial position.")]
+        public EntityLinkSchema AnchorLink;
+
         public InputActionReference Action;
 
         [Tooltip("Scales [-1,1] input range. Range=5 means output spans [-5,5]. " +
                  "In Rigidbody modes: max speed (Velocity), force magnitude (Force), or impulse magnitude (Impulse).")]
-        public float Range = 1f;
+        public float Range = 2f;
 
         [Tooltip("Normal of plane movement is applied to. Up=(0,1,0) moves XZ.")]
         public Vector3 Plane = Vector3.up;
@@ -29,16 +33,20 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                  "In RigidbodyVelocity: lerp speed toward target planar velocity.")]
         public float Smoothing;
 
-        [Tooltip("Position/Velocity: max distance from origin. " +
-                 "Rigidbody modes: max planar speed. 0 = unlimited.")]
-        public float ClampRadius;
+        [Tooltip("Max distance the carrot can be from the anchor. 0 = unlimited. " +
+                 "Rigidbody modes: max planar speed.")]
+        public float LeashRadius = 2;
 
         [Tooltip("RigidbodyForce only: velocity dissipation coefficient per second. " +
                  "Higher = faster deceleration when no force is applied. 0 = no drag.")]
         public float Drag;
 
+        [Tooltip("Rate at which offset decays toward zero when no input. " +
+                 "0 = hold position. Higher values return faster. " +
+                 "Rigidbody modes: rate of planar velocity decay.")]
+        public float DecayRate;
+
         [Tooltip("Position sets target directly. Velocity accumulates into state. " +
-                 "LocalSpace rotates basis by Target rotation. CameraRelative rotates basis by CameraMain. " +
                  "RigidbodyVelocity sets PhysicsVelocity.Linear (planar only) each frame. " +
                  "RigidbodyForce accumulates force with Drag dissipation each frame. " +
                  "RigidbodyImpulse fires a single impulse on input rising-edge.")]
@@ -48,8 +56,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Evaluate input strictly in world space without rotating along with the parent transform.")]
         public bool IgnoreParentRotation = true;
 
-        [Tooltip("Instantly snaps back to origin (non-physics) or zeroes planar velocity (rigidbody) when there is no input.")]
-        public bool ResetOnNoInput;
+        [Tooltip("Do not reset input to zero when input is released.")]
+        public bool KeepLastPosition;
+
+        [Tooltip("Evaluate input in local space of target.")]
+        public bool LocalSpace;
+
+        [Tooltip("Evaluate input relative to Main Camera.")]
+        public bool CameraRelative;
 
         [Header("Events")] public Target EventRouteTo = Target.Self;
 
@@ -68,27 +82,39 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 return;
             }
 
+            EntityLinkAuthoringUtility.TryGetKey(AnchorLink, out var anchorLinkKey);
             EntityLinkAuthoringUtility.TryGetKey(EventRouteLink, out var eventRouteLinkKey);
 
             byte actionId = 0;
             if (Action != null)
-                MultiInputSettings.TryGetIndex(Action, out actionId);
+            {
+                if (!MultiInputSettings.TryGetIndex(Action, out actionId))
+                {
+                    Debug.LogError(
+                        $"AxisTransformClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
+                }
+            }
 
-            var modeFlags = Mode;
-            if (IgnoreParentRotation) modeFlags |= AxisTransformMode.IgnoreParentRotation;
+            var flags = AxisTransformFlags.None;
+            if (IgnoreParentRotation) flags |= AxisTransformFlags.IgnoreParentRotation;
+            if (KeepLastPosition) flags |= AxisTransformFlags.KeepLastPosition;
+            if (LocalSpace) flags |= AxisTransformFlags.LocalSpace;
+            if (CameraRelative) flags |= AxisTransformFlags.CameraRelative;
 
             context.Baker.AddComponent(entity, new AxisTransformConfig
             {
                 ReadRootFrom = ReadRootFrom,
                 ConsumerLinkKey = linkKey,
+                AnchorLinkKey = anchorLinkKey,
                 ActionId = actionId,
                 Range = Range,
                 Plane = Plane,
                 Smoothing = Smoothing,
-                ClampRadius = ClampRadius,
+                LeashRadius = LeashRadius,
                 Drag = Drag,
-                Mode = modeFlags,
-                ResetOnNoInput = ResetOnNoInput,
+                DecayRate = DecayRate,
+                Mode = Mode,
+                Flags = flags,
                 EventRouteTo = EventRouteTo,
                 EventRouteLinkKey = eventRouteLinkKey,
                 OnInputStart = OnInputStart != null ? OnInputStart.Key : ConditionKey.Null,

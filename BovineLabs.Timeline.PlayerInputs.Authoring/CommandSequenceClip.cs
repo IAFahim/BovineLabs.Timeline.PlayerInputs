@@ -56,13 +56,25 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
                 var stepArray = builder.Allocate(ref seqArray[s].Steps, seqData.Steps.Length);
                 for (var i = 0; i < seqData.Steps.Length; i++)
-                    if (MultiInputSettings.TryGetIndex(seqData.Steps[i].Action, out var id))
-                        stepArray[i] = new CommandStep
+                {
+                    var actionRef = seqData.Steps[i].Action;
+                    if (actionRef != null)
+                    {
+                        if (MultiInputSettings.TryGetIndex(actionRef, out var id))
                         {
-                            ActionId = id,
-                            Mode = seqData.Steps[i].Mode,
-                            Phase = seqData.Steps[i].Phase
-                        };
+                            stepArray[i] = new CommandStep
+                            {
+                                ActionId = id,
+                                Mode = seqData.Steps[i].Mode,
+                                Phase = seqData.Steps[i].Phase
+                            };
+                        }
+                        else
+                        {
+                            Debug.LogError($"CommandSequenceClip '{name}' action '{actionRef.name}' not found in MultiInputSettings.", this);
+                        }
+                    }
+                }
             }
 
             var blobRef = builder.CreateBlobAssetReference<CommandBlob>(Allocator.Persistent);

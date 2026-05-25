@@ -39,7 +39,16 @@ namespace BovineLabs.Timeline.PlayerInputs
             var map = new NativeHashMap<byte, Entity>(16, state.WorldUpdateAllocator);
 
             foreach (var (id, entity) in SystemAPI.Query<RefRO<PlayerId>>().WithAll<ProviderTag>().WithEntityAccess())
-                map.TryAdd(id.ValueRO.Value, entity);
+            {
+                if (!map.TryAdd(id.ValueRO.Value, entity))
+                {
+                    var errorMsg = new FixedString128Bytes();
+                    errorMsg.Append("Duplicate PlayerId ");
+                    errorMsg.Append(id.ValueRO.Value);
+                    errorMsg.Append(" detected for providers.");
+                    UnityEngine.Debug.LogError(errorMsg);
+                }
+            }
 
             state.Dependency = new AssignProviderJob { Map = map }.ScheduleParallel(state.Dependency);
         }

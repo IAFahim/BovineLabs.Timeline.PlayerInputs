@@ -33,21 +33,23 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         NotLast = 34
     }
 
-    [Flags]
     public enum AxisTransformMode : byte
     {
         Position = 0,
-        Velocity = 1 << 0,
+        Velocity = 1,
+        RigidbodyVelocity = 2,
+        RigidbodyForce = 3,
+        RigidbodyImpulse = 4,
+    }
+
+    [Flags]
+    public enum AxisTransformFlags : byte
+    {
+        None = 0,
+        IgnoreParentRotation = 1 << 0,
         KeepLastPosition = 1 << 1,
         LocalSpace = 1 << 2,
         CameraRelative = 1 << 3,
-        IgnoreParentRotation = 1 << 4,
-
-        // Physics modes — writes to PhysicsVelocity, never LocalTransform.
-        // Planar component is controlled; perpendicular (e.g. gravity) is preserved.
-        RigidbodyVelocity = 1 << 5,  // sets linear velocity to input direction each frame
-        RigidbodyForce = 1 << 6,     // accumulates velocity via force; Drag dissipates it
-        RigidbodyImpulse = 1 << 7,   // fires a single impulse on input rising-edge
     }
 
     public struct InputState : IComponentData
@@ -143,19 +145,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         public Target ReadRootFrom;
         public ushort ConsumerLinkKey;
+        public ushort AnchorLinkKey;
         public byte ActionId;
         public float Range;
         public float3 Plane;
         public float Smoothing;
-        public float ClampRadius;
-
-        // RigidbodyForce: velocity dissipation per second (0 = no drag).
-        // RigidbodyVelocity: ignored (smoothing lerps to zero instead).
+        public float LeashRadius;
         public float Drag;
-
+        public float DecayRate;
         public AxisTransformMode Mode;
-
-        public bool ResetOnNoInput;
+        public AxisTransformFlags Flags;
         public Target EventRouteTo;
         public ushort EventRouteLinkKey;
         public ConditionKey OnInputStart;
@@ -164,42 +163,22 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
     public static class AxisTransformModeExtensions
     {
-        public static bool IsVelocity(this AxisTransformMode m)
-            => (m & AxisTransformMode.Velocity) != 0;
-
-        public static bool KeepLast(this AxisTransformMode m)
-            => (m & AxisTransformMode.KeepLastPosition) != 0;
-
-        public static bool IsLocal(this AxisTransformMode m)
-            => (m & AxisTransformMode.LocalSpace) != 0;
-
-        public static bool IsCameraRelative(this AxisTransformMode m)
-            => (m & AxisTransformMode.CameraRelative) != 0;
-
-        public static bool IgnoreParentRotation(this AxisTransformMode m)
-            => (m & AxisTransformMode.IgnoreParentRotation) != 0;
-
-        public static bool IsRigidbodyVelocity(this AxisTransformMode m)
-            => (m & AxisTransformMode.RigidbodyVelocity) != 0;
-
-        public static bool IsRigidbodyForce(this AxisTransformMode m)
-            => (m & AxisTransformMode.RigidbodyForce) != 0;
-
-        public static bool IsRigidbodyImpulse(this AxisTransformMode m)
-            => (m & AxisTransformMode.RigidbodyImpulse) != 0;
-
         public static bool IsRigidbody(this AxisTransformMode m)
-            => (m & (AxisTransformMode.RigidbodyVelocity
-                   | AxisTransformMode.RigidbodyForce
-                   | AxisTransformMode.RigidbodyImpulse)) != 0;
+            => m >= AxisTransformMode.RigidbodyVelocity;
+    }
+
+    public static class AxisTransformFlagsExtensions
+    {
+        public static bool Has(this AxisTransformFlags flags, AxisTransformFlags flag)
+            => (flags & flag) != 0;
     }
 
     public struct AxisTransformState : IComponentData
     {
-        public float3 Origin;
+        public float3 AnchorOrigin;
+        public float3 DesiredOffset;
+        public float3 SmoothedOffset;
         public float2 LastInput;
-        public float3 CurrentPosition;
-        public float3 Velocity;
         public bool HasInput;
         public bool WasInputActive;
         public bool Initialized;

@@ -36,14 +36,24 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             for (byte i = 0; i < I.inputActions.Length; i++)
             {
                 var input = I.inputActions[i];
-                if (input?.action == null || input.action.id != reference.action.id) continue;
-
-                index = i;
-                return true;
+                if (input?.action != null && input.action.id == reference.action.id)
+                {
+                    index = i;
+                    return true;
+                }
             }
 
-            index = NameToKey((FixedString32Bytes)reference.action.name);
-            return true;
+            for (byte i = 0; i < I.inputActions.Length; i++)
+            {
+                var input = I.inputActions[i];
+                if (input?.action != null && input.action.name == reference.action.name)
+                {
+                    index = i;
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

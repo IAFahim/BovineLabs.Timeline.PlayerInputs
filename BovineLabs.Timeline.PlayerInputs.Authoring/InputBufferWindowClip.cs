@@ -25,8 +25,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     mask[i] = true;
             else
                 foreach (var action in AllowedActions)
+                {
+                    if (action == null) continue;
                     if (MultiInputSettings.TryGetIndex(action, out var id))
+                    {
                         mask[id] = true;
+                    }
+                    else
+                    {
+                        Debug.LogError($"InputBufferWindowClip '{name}' action '{action.name}' not found in MultiInputSettings.", this);
+                    }
+                }
 
             context.Baker.AddComponent(entity, new BufferWindowConfig { AllowedActions = mask });
             base.Bake(entity, context);

@@ -22,8 +22,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             var mask = default(BitArray256);
             if (ActionsToClear != null)
                 foreach (var action in ActionsToClear)
+                {
+                    if (action == null) continue;
                     if (MultiInputSettings.TryGetIndex(action, out var id))
+                    {
                         mask[id] = true;
+                    }
+                    else
+                    {
+                        Debug.LogError($"InputBufferClearClip '{name}' action '{action.name}' not found in MultiInputSettings.", this);
+                    }
+                }
 
             context.Baker.AddComponent(entity, new BufferClearConfig { ActionMask = mask });
             context.Baker.SetComponentEnabled<BufferClearConfig>(entity, false);

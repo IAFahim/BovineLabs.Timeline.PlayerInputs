@@ -172,8 +172,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     {
                         for (var i = history.Length - 1; i >= searchIndex; i--)
                         {
-                            if (consumeMask[i]) continue;
-                            if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
+                            if (consumeMask[i] || history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) continue;
                             consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;

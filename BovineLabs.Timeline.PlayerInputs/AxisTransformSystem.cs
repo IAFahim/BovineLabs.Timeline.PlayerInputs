@@ -135,7 +135,6 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 if (!Axes.TryGetBuffer(consumer, out var axesBuf)) return;
 
-                // ── Input sampling ────────────────────────────────────────────────
                 var axisValue = float2.zero;
                 for (var i = 0; i < axesBuf.Length; i++)
                 {
@@ -144,33 +143,28 @@ namespace BovineLabs.Timeline.PlayerInputs
                     break;
                 }
 
-                if (math.lengthsq(axisValue) > 0.0001f)
-                {
-                    state.HasInput = true;
+                state.HasInput = math.lengthsq(axisValue) > 0.0001f;
+                if (state.HasInput)
                     state.LastInput = axisValue;
-                }
-                else
-                {
-                    state.HasInput = false;
-                    if (!config.Mode.KeepLast()) state.LastInput = float2.zero;
-                }
+                else if (!config.Flags.Has(AxisTransformFlags.KeepLastPosition))
+                    state.LastInput = float2.zero;
 
                 var transform = Transforms[targetEntity];
 
-                if (!state.Initialized)
-                {
-                    state.Origin = transform.Position;
-                    state.CurrentPosition = transform.Position;
-                    state.Velocity = float3.zero;
-                    state.WasInputActive = false;
-                    state.Initialized = true;
-                }
+                var planeNormal = math.normalize(config.Plane);
+                var basis = ComputePlaneBasis(planeNormal, config.Flags, CameraRotation);
+                var inputVec = basis.Right * state.LastInput.x + basis.Forward * state.LastInput.y;
 
-                // ── Edge detection (before WasInputActive update) ────────────────
-                var risingEdge  = state.HasInput && !state.WasInputActive;
+                if (config.Flags.Has(AxisTransformFlags.LocalSpace))
+                    inputVec = math.rotate(transform.Rotation, inputVec);
+                else if (config.Flags.Has(AxisTransformFlags.IgnoreParentRotation) &&
+                         Parents.TryGetComponent(targetEntity, out var parent) &&
+                         Ltws.TryGetComponent(parent.Value, out var parentLtw))
+                    inputVec = math.rotate(math.inverse(parentLtw.Rotation), inputVec);
+
+                var risingEdge = state.HasInput && !state.WasInputActive;
                 var fallingEdge = !state.HasInput && state.WasInputActive;
 
-                // ── Condition events ──────────────────────────────────────────────
                 if (risingEdge && config.OnInputStart != ConditionKey.Null &&
                     TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
                         out var startTarget))
@@ -183,145 +177,199 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 state.WasInputActive = state.HasInput;
 
-                // ── Basis vectors (shared by all modes) ───────────────────────────
-                var planeNormal = math.normalize(config.Plane);
-                float3 right, forward;
-
-                if (config.Mode.IsCameraRelative())
+                if (config.Mode.IsRigidbody())
                 {
-                    var camForward = math.rotate(CameraRotation, math.forward());
-                    var projForward = camForward - math.dot(camForward, planeNormal) * planeNormal;
-
-                    if (math.lengthsq(projForward) > 0.0001f)
-                    {
-                        forward = math.normalize(projForward);
-                        right = math.normalize(math.cross(planeNormal, forward));
-                    }
-                    else
-                    {
-                        var camUp = math.rotate(CameraRotation, math.up());
-                        var projUp = camUp - math.dot(camUp, planeNormal) * planeNormal;
-                        forward = math.normalize(projUp);
-                        right = math.normalize(math.cross(planeNormal, forward));
-                    }
-                }
-                else
-                {
-                    if (math.abs(planeNormal.y) > 0.99f)
-                    {
-                        right = math.right() * math.sign(planeNormal.y);
-                        forward = math.forward() * math.sign(planeNormal.y);
-                    }
-                    else if (math.abs(planeNormal.z) > 0.99f)
-                    {
-                        right = math.right() * math.sign(planeNormal.z);
-                        forward = math.up() * math.sign(planeNormal.z);
-                    }
-                    else
-                    {
-                        right = math.normalize(math.cross(math.up(), planeNormal));
-                        forward = math.normalize(math.cross(planeNormal, right));
-                    }
+                    ApplyRigidbody(config, ref state, targetEntity, inputVec, planeNormal, risingEdge);
+                    return;
                 }
 
-                var inputVec = right * state.LastInput.x + forward * state.LastInput.y;
+                ApplyCarrot(config, ref state, targetEntity, targets, transform, inputVec);
+            }
 
-                if (config.Mode.IsLocal())
-                    inputVec = math.rotate(transform.Rotation, inputVec);
-                else if (config.Mode.IgnoreParentRotation() &&
-                         Parents.TryGetComponent(targetEntity, out var parent) &&
-                         Ltws.TryGetComponent(parent.Value, out var parentLtw))
+            private void ApplyRigidbody(in AxisTransformConfig config, ref AxisTransformState state,
+                Entity targetEntity, float3 inputVec, float3 planeNormal, bool risingEdge)
+            {
+                if (!Velocities.HasComponent(targetEntity)) return;
+                var pv = Velocities[targetEntity];
+
+                if (!state.HasInput && config.DecayRate > 0f)
                 {
-                    var parentRot = new quaternion(parentLtw.Value);
-                    inputVec = math.rotate(math.inverse(parentRot), inputVec);
+                    var perp = math.dot(pv.Linear, planeNormal) * planeNormal;
+                    var planar = pv.Linear - perp;
+                    planar *= math.max(0f, 1f - config.DecayRate * DeltaTime);
+                    pv.Linear = perp + planar;
+                    Velocities[targetEntity] = pv;
+                    return;
                 }
 
                 var lerpT = config.Smoothing > 0f ? math.saturate(DeltaTime * config.Smoothing) : 1f;
 
-                // ── Rigidbody path ────────────────────────────────────────────────
-                if (config.Mode.IsRigidbody())
+                switch (config.Mode)
                 {
-                    if (!Velocities.HasComponent(targetEntity)) return;
-                    var pv = Velocities[targetEntity];
-
-                    if (config.ResetOnNoInput && !state.HasInput)
+                    case AxisTransformMode.RigidbodyVelocity:
                     {
-                        // Zero only the planar component; preserve perpendicular (e.g. gravity).
                         var perp = math.dot(pv.Linear, planeNormal) * planeNormal;
-                        pv.Linear = perp;
-                        Velocities[targetEntity] = pv;
-                        return;
-                    }
-
-                    if (config.Mode.IsRigidbodyVelocity())
-                    {
-                        // Directly lerp toward target planar velocity; perpendicular is untouched.
-                        var perp        = math.dot(pv.Linear, planeNormal) * planeNormal;
-                        var planarNow   = pv.Linear - perp;
+                        var planarNow = pv.Linear - perp;
                         var planarTarget = state.HasInput ? inputVec * config.Range : float3.zero;
                         pv.Linear = perp + math.lerp(planarNow, planarTarget, lerpT);
+                        break;
                     }
-                    else if (config.Mode.IsRigidbodyForce())
+                    case AxisTransformMode.RigidbodyForce:
                     {
                         var inverseMass = Masses.TryGetComponent(targetEntity, out var mass) ? mass.InverseMass : 1f;
                         if (state.HasInput)
                             pv.Linear += inputVec * config.Range * inverseMass * DeltaTime;
                         if (config.Drag > 0f)
                             pv.Linear *= math.max(0f, 1f - config.Drag * DeltaTime);
+                        break;
                     }
-                    else if (config.Mode.IsRigidbodyImpulse() && risingEdge)
+                    case AxisTransformMode.RigidbodyImpulse:
                     {
-                        var inverseMass = Masses.TryGetComponent(targetEntity, out var mass) ? mass.InverseMass : 1f;
-                        pv.Linear += inputVec * config.Range * inverseMass;
+                        if (risingEdge)
+                        {
+                            var inverseMass = Masses.TryGetComponent(targetEntity, out var mass)
+                                ? mass.InverseMass
+                                : 1f;
+                            pv.Linear += inputVec * config.Range * inverseMass;
+                        }
+
+                        break;
                     }
-
-                    // Clamp planar speed; perpendicular (gravity) is unaffected.
-                    if (config.ClampRadius > 0f)
-                    {
-                        var perp   = math.dot(pv.Linear, planeNormal) * planeNormal;
-                        var planar = pv.Linear - perp;
-                        var speedSq = math.lengthsq(planar);
-                        if (speedSq > config.ClampRadius * config.ClampRadius)
-                            planar = planar / math.sqrt(speedSq) * config.ClampRadius;
-                        pv.Linear = perp + planar;
-                    }
-
-                    Velocities[targetEntity] = pv;
-                    return;
                 }
 
-                // ── LocalTransform path ───────────────────────────────────────────
-                if (config.ResetOnNoInput && !state.HasInput)
+                if (config.LeashRadius > 0f)
                 {
-                    state.CurrentPosition = state.Origin;
-                    state.Velocity = float3.zero;
-                    transform.Position = state.CurrentPosition;
-                    Transforms[targetEntity] = transform;
-                    return;
+                    var perp = math.dot(pv.Linear, planeNormal) * planeNormal;
+                    var planar = pv.Linear - perp;
+                    var speedSq = math.lengthsq(planar);
+                    if (speedSq > config.LeashRadius * config.LeashRadius)
+                        planar = planar / math.sqrt(speedSq) * config.LeashRadius;
+                    pv.Linear = perp + planar;
                 }
 
-                if (config.Mode.IsVelocity())
+                Velocities[targetEntity] = pv;
+            }
+
+            private void ApplyCarrot(in AxisTransformConfig config, ref AxisTransformState state,
+                Entity targetEntity, in Targets targets, LocalTransform transform, float3 inputVec)
+            {
+                var anchorPos = ResolveAnchorPosition(config, targetEntity, targets, transform);
+
+                if (!state.Initialized)
                 {
-                    var targetVel = inputVec * config.Range;
-                    state.Velocity = math.lerp(state.Velocity, targetVel, lerpT);
-                    state.CurrentPosition += state.Velocity * DeltaTime;
-                }
-                else
-                {
-                    var targetPos = state.Origin + inputVec * config.Range;
-                    state.CurrentPosition = math.lerp(state.CurrentPosition, targetPos, lerpT);
+                    state.AnchorOrigin = anchorPos;
+                    state.DesiredOffset = transform.Position - anchorPos;
+                    state.SmoothedOffset = state.DesiredOffset;
+                    state.Initialized = true;
                 }
 
-                if (config.ClampRadius > 0f)
+                if (config.AnchorLinkKey != 0)
+                    state.AnchorOrigin = anchorPos;
+
+                switch (config.Mode)
                 {
-                    var offset = state.CurrentPosition - state.Origin;
-                    var distSq = math.lengthsq(offset);
-                    if (distSq > config.ClampRadius * config.ClampRadius)
-                        state.CurrentPosition = state.Origin + offset / math.sqrt(distSq) * config.ClampRadius;
+                    case AxisTransformMode.Position:
+                        state.DesiredOffset = inputVec * config.Range;
+                        break;
+                    case AxisTransformMode.Velocity:
+                        state.DesiredOffset += inputVec * config.Range * DeltaTime;
+                        break;
                 }
 
-                transform.Position = state.CurrentPosition;
+                if (!state.HasInput && config.DecayRate > 0f)
+                {
+                    var decay = math.saturate(config.DecayRate * DeltaTime);
+                    state.DesiredOffset = math.lerp(state.DesiredOffset, float3.zero, decay);
+                }
+
+                if (config.LeashRadius > 0f)
+                {
+                    var distSq = math.lengthsq(state.DesiredOffset);
+                    if (distSq > config.LeashRadius * config.LeashRadius)
+                        state.DesiredOffset = state.DesiredOffset / math.sqrt(distSq) * config.LeashRadius;
+                }
+
+                var lerpT = config.Smoothing > 0f ? math.saturate(DeltaTime * config.Smoothing) : 1f;
+                state.SmoothedOffset = math.lerp(state.SmoothedOffset, state.DesiredOffset, lerpT);
+
+                transform.Position = anchorPos + state.SmoothedOffset;
                 Transforms[targetEntity] = transform;
+            }
+
+            private float3 ResolveAnchorPosition(in AxisTransformConfig config, Entity targetEntity,
+                in Targets targets, in LocalTransform carrotTransform)
+            {
+                if (config.AnchorLinkKey == 0)
+                    return carrotTransform.Position;
+
+                if (!EntityLinkResolver.TryResolve(
+                        targetEntity, targets, config.ReadRootFrom, config.AnchorLinkKey,
+                        Sources, Entries, out var anchorEntity))
+                    return carrotTransform.Position;
+
+                if (!Ltws.TryGetComponent(anchorEntity, out var anchorLtw))
+                    return carrotTransform.Position;
+
+                var anchorWorldPos = anchorLtw.Position;
+
+                if (Parents.TryGetComponent(targetEntity, out var parent) &&
+                    Ltws.TryGetComponent(parent.Value, out var parentLtw))
+                {
+                    var invParentRot = math.inverse(parentLtw.Rotation);
+                    return math.rotate(invParentRot, anchorWorldPos - parentLtw.Position);
+                }
+
+                return anchorWorldPos;
+            }
+
+            private static PlaneBasis ComputePlaneBasis(float3 planeNormal, AxisTransformFlags flags,
+                quaternion cameraRotation)
+            {
+                if (flags.Has(AxisTransformFlags.CameraRelative))
+                {
+                    var camForward = math.rotate(cameraRotation, math.forward());
+                    var projForward = camForward - math.dot(camForward, planeNormal) * planeNormal;
+
+                    if (math.lengthsq(projForward) > 0.0001f)
+                    {
+                        var forward = math.normalize(projForward);
+                        return new PlaneBasis
+                        {
+                            Right = math.normalize(math.cross(planeNormal, forward)),
+                            Forward = forward
+                        };
+                    }
+
+                    var camUp = math.rotate(cameraRotation, math.up());
+                    var projUp = camUp - math.dot(camUp, planeNormal) * planeNormal;
+                    var fallbackForward = math.normalize(projUp);
+                    return new PlaneBasis
+                    {
+                        Right = math.normalize(math.cross(planeNormal, fallbackForward)),
+                        Forward = fallbackForward
+                    };
+                }
+
+                if (math.abs(planeNormal.y) > 0.99f)
+                {
+                    var sign = math.sign(planeNormal.y);
+                    return new PlaneBasis { Right = math.right() * sign, Forward = math.forward() * sign };
+                }
+
+                if (math.abs(planeNormal.z) > 0.99f)
+                {
+                    var sign = math.sign(planeNormal.z);
+                    return new PlaneBasis { Right = math.right() * sign, Forward = math.up() * sign };
+                }
+
+                {
+                    var right = math.normalize(math.cross(math.up(), planeNormal));
+                    return new PlaneBasis
+                    {
+                        Right = right,
+                        Forward = math.normalize(math.cross(planeNormal, right))
+                    };
+                }
             }
 
             private bool TryResolveTarget(Target targetMode, ushort linkKey, Entity self, in Targets targets,
@@ -345,6 +393,12 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 resolved = t;
                 return true;
+            }
+
+            private struct PlaneBasis
+            {
+                public float3 Right;
+                public float3 Forward;
             }
         }
     }

@@ -60,19 +60,16 @@ namespace BovineLabs.Timeline.PlayerInputs
     public partial struct ConsumerBufferMaskSystem : ISystem
     {
         private ComponentLookup<ActiveBufferMask> masks;
-        private EntityLock entityLock;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             masks = state.GetComponentLookup<ActiveBufferMask>();
-            entityLock = new EntityLock(Allocator.Persistent);
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            entityLock.Dispose();
         }
 
         [BurstCompile]
@@ -83,9 +80,8 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.Dependency = new ResetMaskJob().ScheduleParallel(state.Dependency);
             state.Dependency = new AccumulateMaskJob
             {
-                Masks = masks,
-                EntityLock = entityLock
-            }.ScheduleParallel(state.Dependency);
+                Masks = masks
+            }.Schedule(state.Dependency);
         }
 
         [BurstCompile]
@@ -103,18 +99,14 @@ namespace BovineLabs.Timeline.PlayerInputs
         private partial struct AccumulateMaskJob : IJobEntity
         {
             [NativeDisableParallelForRestriction] public ComponentLookup<ActiveBufferMask> Masks;
-            public EntityLock EntityLock;
 
             private void Execute(in BufferWindowConfig config, in TrackBinding binding)
             {
                 if (binding.Value == Entity.Null) return;
 
-                using (EntityLock.Acquire(binding.Value))
-                {
-                    if (!Masks.TryGetComponent(binding.Value, out var mask)) return;
-                    mask.Value = mask.Value.BitOr(config.AllowedActions);
-                    Masks[binding.Value] = mask;
-                }
+                if (!Masks.TryGetComponent(binding.Value, out var mask)) return;
+                mask.Value = mask.Value.BitOr(config.AllowedActions);
+                Masks[binding.Value] = mask;
             }
         }
     }
