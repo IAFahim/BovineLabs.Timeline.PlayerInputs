@@ -155,10 +155,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public float DecayRate;
         public AxisTransformMode Mode;
         public AxisTransformFlags Flags;
-        public Target EventRouteTo;
-        public ushort EventRouteLinkKey;
-        public ConditionKey OnInputStart;
-        public ConditionKey OnInputEnd;
     }
 
     public static class AxisTransformModeExtensions
@@ -182,5 +178,21 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public bool HasInput;
         public bool WasInputActive;
         public bool Initialized;
+    }
+
+    public struct InputEventsConfig : IComponentData
+    {
+        public Target ReadRootFrom;
+        public ushort ConsumerLinkKey;
+        public byte ActionId;
+        public Target EventRouteTo;
+        public ushort EventRouteLinkKey;
+        public ConditionKey OnInputStart;
+        public ConditionKey OnInputEnd;
+    }
+
+    public struct InputEventsState : IComponentData
+    {
+        public bool WasInputActive;
     }
 }

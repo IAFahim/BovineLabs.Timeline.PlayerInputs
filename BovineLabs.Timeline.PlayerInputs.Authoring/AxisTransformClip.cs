@@ -1,5 +1,3 @@
-using BovineLabs.Reaction.Authoring.Conditions;
-using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
@@ -65,12 +63,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Evaluate input relative to Main Camera.")]
         public bool CameraRelative;
 
-        [Header("Events")] public Target EventRouteTo = Target.Self;
-
-        public EntityLinkSchema EventRouteLink;
-        public ConditionEventObject OnInputStart;
-        public ConditionEventObject OnInputEnd;
-
         public override double duration => 1;
         public ClipCaps clipCaps => ClipCaps.None;
 
@@ -83,7 +75,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             }
 
             EntityLinkAuthoringUtility.TryGetKey(AnchorLink, out var anchorLinkKey);
-            EntityLinkAuthoringUtility.TryGetKey(EventRouteLink, out var eventRouteLinkKey);
 
             byte actionId = 0;
             if (Action != null)
@@ -114,11 +105,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Drag = Drag,
                 DecayRate = DecayRate,
                 Mode = Mode,
-                Flags = flags,
-                EventRouteTo = EventRouteTo,
-                EventRouteLinkKey = eventRouteLinkKey,
-                OnInputStart = OnInputStart != null ? OnInputStart.Key : ConditionKey.Null,
-                OnInputEnd = OnInputEnd != null ? OnInputEnd.Key : ConditionKey.Null
+                Flags = flags
             });
 
             context.Baker.AddComponent<AxisTransformState>(entity);

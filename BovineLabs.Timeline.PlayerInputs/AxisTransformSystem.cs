@@ -1,8 +1,6 @@
 using BovineLabs.Bridge.Data.Camera;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
-using BovineLabs.Reaction.Conditions;
-using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.EntityLinks;
@@ -29,7 +27,6 @@ namespace BovineLabs.Timeline.PlayerInputs
         private ComponentLookup<LocalTransform> _transforms;
         private ComponentLookup<Parent> _parents;
         private ComponentLookup<LocalToWorld> _ltws;
-        private ConditionEventWriter.Lookup _writers;
         private ComponentLookup<PhysicsVelocity> _velocities;
         private ComponentLookup<PhysicsMass> _masses;
 
@@ -46,7 +43,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             _transforms = state.GetComponentLookup<LocalTransform>();
             _parents = state.GetComponentLookup<Parent>(true);
             _ltws = state.GetComponentLookup<LocalToWorld>(true);
-            _writers.Create(ref state);
             _velocities = state.GetComponentLookup<PhysicsVelocity>();
             _masses = state.GetComponentLookup<PhysicsMass>(true);
 
@@ -63,7 +59,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             _transforms.Update(ref state);
             _parents.Update(ref state);
             _ltws.Update(ref state);
-            _writers.Update(ref state);
             _velocities.Update(ref state);
             _masses.Update(ref state);
 
@@ -85,7 +80,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Transforms = _transforms,
                 Parents = _parents,
                 Ltws = _ltws,
-                Writers = _writers,
                 Velocities = _velocities,
                 Masses = _masses,
                 DeltaTime = SystemAPI.Time.DeltaTime,
@@ -117,7 +111,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public ComponentLookup<PhysicsMass> Masses;
 
             [NativeDisableParallelForRestriction] public ComponentLookup<LocalTransform> Transforms;
-            [NativeDisableParallelForRestriction] public ConditionEventWriter.Lookup Writers;
             [NativeDisableParallelForRestriction] public ComponentLookup<PhysicsVelocity> Velocities;
 
             public float DeltaTime;
@@ -163,17 +156,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                     inputVec = math.rotate(math.inverse(parentLtw.Rotation), inputVec);
 
                 var risingEdge = state.HasInput && !state.WasInputActive;
-                var fallingEdge = !state.HasInput && state.WasInputActive;
-
-                if (risingEdge && config.OnInputStart != ConditionKey.Null &&
-                    TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
-                        out var startTarget))
-                    if (Writers.TryGet(startTarget, out var w)) w.Trigger(config.OnInputStart, 1);
-
-                if (fallingEdge && config.OnInputEnd != ConditionKey.Null &&
-                    TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
-                        out var endTarget))
-                    if (Writers.TryGet(endTarget, out var w)) w.Trigger(config.OnInputEnd, 1);
 
                 state.WasInputActive = state.HasInput;
 
@@ -370,29 +352,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                         Forward = math.normalize(math.cross(planeNormal, right))
                     };
                 }
-            }
-
-            private bool TryResolveTarget(Target targetMode, ushort linkKey, Entity self, in Targets targets,
-                out Entity resolved)
-            {
-                resolved = Entity.Null;
-                var t = targets.Get(targetMode, self);
-                if (t == Entity.Null) return false;
-
-                if (linkKey == 0)
-                {
-                    resolved = t;
-                    return true;
-                }
-
-                if (EntityLinkResolver.TryResolve(t, linkKey, Sources, Entries, out var linked))
-                {
-                    resolved = linked;
-                    return true;
-                }
-
-                resolved = t;
-                return true;
             }
 
             private struct PlaneBasis
