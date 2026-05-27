@@ -6,6 +6,7 @@ using Unity.Entities;
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(InitializationSystemGroup))]
+    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial class ProviderSyncSystem : SystemBase
     {
         protected override void OnUpdate()
@@ -31,6 +32,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
     [UpdateInGroup(typeof(InitializationSystemGroup))]
     [UpdateAfter(typeof(ProviderSyncSystem))]
+    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ProviderLinkSystem : ISystem
     {
         [BurstCompile]

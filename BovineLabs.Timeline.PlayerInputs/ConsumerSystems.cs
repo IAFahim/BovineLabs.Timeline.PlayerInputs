@@ -11,6 +11,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(InitializationSystemGroup))]
     [UpdateAfter(typeof(ProviderLinkSystem))]
+    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ConsumerSyncSystem : ISystem
     {
         [BurstCompile]
@@ -57,6 +58,7 @@ namespace BovineLabs.Timeline.PlayerInputs
     }
 
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
+    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ConsumerBufferMaskSystem : ISystem
     {
         private ComponentLookup<ActiveBufferMask> masks;
@@ -113,6 +115,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(ConsumerBufferMaskSystem))]
+    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ConsumerHistorySystem : ISystem
     {
         [BurstCompile]
