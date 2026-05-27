@@ -42,15 +42,17 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (!map.TryAdd(id.ValueRO.Value, entity))
                 {
-                    var errorMsg = new FixedString128Bytes();
-                    errorMsg.Append("Duplicate PlayerId ");
-                    errorMsg.Append(id.ValueRO.Value);
-                    errorMsg.Append(" detected for providers.");
-                    UnityEngine.Debug.LogError(errorMsg);
+                    LogError(id.ValueRO.Value);
                 }
             }
 
             state.Dependency = new AssignProviderJob { Map = map }.ScheduleParallel(state.Dependency);
+        }
+
+        [BurstDiscard]
+        private static void LogError(byte id)
+        {
+            UnityEngine.Debug.LogError($"Duplicate PlayerId {id} detected for providers.");
         }
 
         [BurstCompile]

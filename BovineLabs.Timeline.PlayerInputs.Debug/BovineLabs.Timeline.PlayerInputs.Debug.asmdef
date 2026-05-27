@@ -4,6 +4,8 @@
   "references": [
     "BovineLabs.Core",
     "BovineLabs.Core.Extensions",
+    "BovineLabs.Timeline.Core.Debug",
+    "BovineLabs.Timeline.Data",
     "BovineLabs.Quill",
     "PlayerInputs.Data",
     "Unity.Burst",

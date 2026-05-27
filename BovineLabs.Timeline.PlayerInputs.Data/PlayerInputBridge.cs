@@ -95,13 +95,22 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             if (world == null || !world.IsCreated) return false;
 
             manager = world.EntityManager;
-            entity = manager.CreateEntity();
+            try
+            {
+                entity = manager.CreateEntity();
 
-            manager.AddComponentData(entity, new PlayerId { Value = GetPlayerId() });
-            manager.AddComponent<ProviderTag>(entity);
-            manager.AddComponent<InputState>(entity);
-            manager.AddBuffer<InputAxis>(entity);
-            manager.AddComponentObject(entity, new PlayerInputBridgeComponent { Value = this });
+                manager.AddComponentData(entity, new PlayerId { Value = GetPlayerId() });
+                manager.AddComponent<ProviderTag>(entity);
+                manager.AddComponent<InputState>(entity);
+                manager.AddBuffer<InputAxis>(entity);
+                manager.AddComponentObject(entity, new PlayerInputBridgeComponent { Value = this });
+            }
+            catch (InvalidOperationException)
+            {
+                // Wait for AsyncLoadSceneJob to finish
+                entity = Entity.Null;
+                return false;
+            }
 
             return true;
         }
