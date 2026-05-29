@@ -2,8 +2,11 @@
 using BovineLabs.Core;
 using BovineLabs.Quill;
 using BovineLabs.Timeline.PlayerInputs.Data;
+using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -14,173 +17,238 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
     [UpdateInGroup(typeof(DebugSystemGroup))]
     public partial struct DebugPlayerInputSystem : ISystem
     {
+        private const int SlotCount = 256;
+
+        private ComponentLookup<InputState> states;
+        private BufferLookup<InputAxis> axes;
+
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<DrawSystem.Singleton>();
             state.RequireForUpdate<InputRegistry>();
+            states = state.GetComponentLookup<InputState>(true);
+            axes = state.GetBufferLookup<InputAxis>(true);
         }
 
         public void OnUpdate(ref SystemState state)
         {
-            var renderer = SystemAPI.GetSingleton<DrawSystem.Singleton>().CreateDrawer();
-            var chronos = (uint)(SystemAPI.Time.ElapsedTime * 1000.0);
+            states.Update(ref state);
+            axes.Update(ref state);
+
             var registry = SystemAPI.GetSingleton<InputRegistry>();
-            
-            state.Dependency = new RenderDiagnosticsJob
+            var renderer = SystemAPI.GetSingleton<DrawSystem.Singleton>().CreateDrawer();
+
+            var consumerCounts = CollectionHelper.CreateNativeArray<int>(
+                SlotCount, state.WorldUpdateAllocator, NativeArrayOptions.ClearMemory);
+            var overriddenCounts = CollectionHelper.CreateNativeArray<int>(
+                SlotCount, state.WorldUpdateAllocator, NativeArrayOptions.ClearMemory);
+
+            state.Dependency = new CountConsumersJob { Counts = consumerCounts }.Schedule(state.Dependency);
+            state.Dependency = new CountOverriddenJob { Counts = overriddenCounts }.Schedule(state.Dependency);
+
+            state.Dependency = new RenderJob
             {
                 Renderer = renderer,
-                Chronos = chronos,
-                RegistryMap = registry.ProviderByPlayer,
-                InputStates = SystemAPI.GetComponentLookup<InputState>(true),
-                AxesBuffers = SystemAPI.GetBufferLookup<InputAxis>(true)
+                Registry = registry.ProviderByPlayer,
+                Version = registry.Version,
+                States = states,
+                Axes = axes,
+                ConsumerCounts = consumerCounts,
+                OverriddenCounts = overriddenCounts,
+                Joined = SystemAPI.GetSingletonBuffer<PlayerJoined>(true),
+                Left = SystemAPI.GetSingletonBuffer<PlayerLeft>(true),
             }.Schedule(state.Dependency);
         }
 
+        [BurstCompile]
         [WithAll(typeof(ConsumerTag))]
-        private partial struct RenderDiagnosticsJob : IJobEntity
+        private partial struct CountConsumersJob : IJobEntity
+        {
+            public NativeArray<int> Counts;
+
+            private void Execute(in PlayerId id)
+            {
+                Counts[id.Value]++;
+            }
+        }
+
+        [BurstCompile]
+        [WithAll(typeof(ConsumerTag), typeof(Controllable))]
+        private partial struct CountOverriddenJob : IJobEntity
+        {
+            public NativeArray<int> Counts;
+
+            private void Execute(in PlayerId id, EnabledRefRO<PlayerOverride> driving)
+            {
+                if (driving.ValueRO) Counts[id.Value]++;
+            }
+        }
+
+        private struct RenderJob : IJob
         {
             public Drawer Renderer;
-            public uint Chronos;
-            [ReadOnly] public NativeArray<Entity> RegistryMap;
-            [ReadOnly] public ComponentLookup<InputState> InputStates;
-            [ReadOnly] public BufferLookup<InputAxis> AxesBuffers;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
+            public uint Version;
+            [ReadOnly] public ComponentLookup<InputState> States;
+            [ReadOnly] public BufferLookup<InputAxis> Axes;
+            [ReadOnly] public NativeArray<int> ConsumerCounts;
+            [ReadOnly] public NativeArray<int> OverriddenCounts;
+            [ReadOnly] public DynamicBuffer<PlayerJoined> Joined;
+            [ReadOnly] public DynamicBuffer<PlayerLeft> Left;
 
-            private void Execute(Entity entity, in PlayerId id, in DynamicBuffer<InputHistory> history)
+            public void Execute()
             {
-                var origin = new float3(id.Value * 8f, 4f, 0f);
+                RenderSummary();
+                RenderEvents();
 
-                Entity provider = Entity.Null;
-                if (id.Value < RegistryMap.Length) provider = RegistryMap[id.Value];
+                var column = 0;
+                for (var p = 0; p < SlotCount; p++)
+                {
+                    var provider = Registry[p];
+                    if (provider == Entity.Null) continue;
 
-                RenderHeader(origin, entity, id, provider);
-                
-                var panelOrigin = origin + new float3(0, -1f, 0f);
-                
-                if (provider != Entity.Null && InputStates.HasComponent(provider))
-                {
-                    RenderState(panelOrigin + new float3(-2.5f, 0f, 0f), InputStates[provider]);
+                    RenderPlayer((byte)p, provider, column);
+                    column++;
                 }
-                
-                if (provider != Entity.Null && AxesBuffers.HasBuffer(provider))
-                {
-                    RenderAxes(panelOrigin + new float3(0f, 0f, 0f), AxesBuffers[provider]);
-                }
-                
-                RenderHistory(panelOrigin + new float3(2.5f, 0f, 0f), history, Chronos);
             }
 
-            private void RenderHeader(float3 position, Entity entity, PlayerId id, Entity provider)
+            private void RenderSummary()
             {
-                var title = new FixedString64Bytes();
-                title.Append("CONSUMER [");
-                title.Append(id.Value);
-                title.Append("] ENTITY ");
-                title.Append(entity.Index);
+                var occupied = 0;
+                for (var p = 0; p < SlotCount; p++)
+                    if (Registry[p]!= Entity.Null) occupied++;
 
-                Renderer.Text64(position, title, Color.white, 16f);
-                
-                var srcLabel = new FixedString64Bytes();
-                srcLabel.Append("SOURCE: ");
-                srcLabel.Append(provider == Entity.Null ? "NULL" : provider.Index.ToString());
-                
-                Renderer.Text64(position + new float3(0f, -0.4f, 0f), srcLabel, provider == Entity.Null ? Color.red : Color.green, 10f);
+                var title = new FixedString128Bytes();
+                title.Append("INPUT REGISTRY v");
+                title.Append(Version);
+                title.Append(" active ");
+                title.Append(occupied);
+                title.Append('/');
+                title.Append(SlotCount);
 
-                Renderer.Line(position + new float3(-3.5f, -0.7f, 0f), position + new float3(3.5f, -0.7f, 0f), new Color(1f, 1f, 1f, 0.3f));
+                Renderer.Text128(new float3(0f, 8f, 0f), title, Color.white, 18f);
             }
 
-            private void RenderState(float3 position, InputState state)
+            private void RenderEvents()
             {
-                Renderer.Text32(position, "LIVE STATE", new Color(1f, 0.8f, 0.2f), 12f);
-                Renderer.Line(position + new float3(-1f, -0.2f, 0f), position + new float3(1f, -0.2f, 0f), new Color(1f, 0.8f, 0.2f, 0.3f));
+                var origin = new float3(-9f, 8f, 0f);
+                Renderer.Text32(origin, "EVENTS", new Color(1f, 1f, 1f, 0.8f), 12f);
 
-                var cursor = position + new float3(0f, -0.6f, 0f);
+                var cursor = origin + new float3(0f, -0.45f, 0f);
 
-                for (byte i = 0; i < 255; i++)
+                for (var i = 0; i < Joined.Length; i++)
                 {
+                    var line = new FixedString64Bytes();
+                    line.Append("JOIN  P");
+                    line.Append(Joined[i].PlayerId);
+                    line.Append(" -> #");
+                    line.Append(Joined[i].Provider.Index);
+                    Renderer.Text64(cursor, line, new Color(0.2f, 1f, 0.4f), 11f);
+                    cursor.y -= 0.3f;
+                }
+
+                for (var i = 0; i < Left.Length; i++)
+                {
+                    var line = new FixedString64Bytes();
+                    line.Append("LEFT  P");
+                    line.Append(Left[i].PlayerId);
+                    Renderer.Text64(cursor, line, new Color(1f, 0.3f, 0.3f), 11f);
+                    cursor.y -= 0.3f;
+                }
+            }
+
+            private void RenderPlayer(byte id, Entity provider, int column)
+            {
+                var origin = new float3(column * 6f, 6f, 0f);
+
+                var header = new FixedString64Bytes();
+                header.Append("P");
+                header.Append(id);
+                header.Append(" -> prov #");
+                header.Append(provider.Index);
+                Renderer.Text64(origin, header, new Color(0.2f, 1f, 0.4f), 14f);
+
+                var stats = new FixedString64Bytes();
+                stats.Append("consumers ");
+                stats.Append(ConsumerCounts[id]);
+                stats.Append("   driven ");
+                stats.Append(OverriddenCounts[id]);
+                Renderer.Text64(origin + new float3(0f, -0.4f, 0f), stats, new Color(1f, 0.9f, 0.4f), 11f);
+
+                Renderer.Line(origin + new float3(-0.5f, -0.7f, 0f), origin + new float3(4.5f, -0.7f, 0f),
+                    new Color(1f, 1f, 1f, 0.3f));
+
+                if (States.HasComponent(provider))
+                    RenderState(origin + new float3(0f, -1.1f, 0f), States[provider]);
+
+                if (Axes.HasBuffer(provider))
+                    RenderAxes(origin + new float3(3f, -1.1f, 0f), Axes[provider]);
+            }
+
+            private void RenderState(float3 origin, InputState state)
+            {
+                Renderer.Text32(origin, "STATE", new Color(0f, 1f, 1f, 0.9f), 11f);
+
+                var cursor = origin + new float3(0f, -0.35f, 0f);
+                var shown = 0;
+                for (var i = 0; i < SlotCount && shown < 20; i++)
+                {
+                    FixedString32Bytes phase;
+                    Color tint;
+
                     if (state.Down[i])
                     {
-                        RenderSignal(cursor, i, "DOWN", new Color(0f, 1f, 1f, 1f));
-                        cursor.y -= 0.25f;
+                        phase = "DOWN";
+                        tint = new Color(0f, 1f, 1f);
                     }
                     else if (state.Held[i])
                     {
-                        RenderSignal(cursor, i, "HELD", new Color(0f, 1f, 0.5f, 0.8f));
-                        cursor.y -= 0.25f;
+                        phase = "HELD";
+                        tint = new Color(0f, 1f, 0.5f, 0.85f);
                     }
                     else if (state.Up[i])
                     {
-                        RenderSignal(cursor, i, "UP  ", new Color(1f, 0.2f, 0.2f, 1f));
-                        cursor.y -= 0.25f;
+                        phase = "UP";
+                        tint = new Color(1f, 0.3f, 0.3f);
                     }
+                    else
+                    {
+                        continue;
+                    }
+
+                    var line = new FixedString64Bytes();
+                    line.Append('[');
+                    line.Append(phase);
+                    line.Append("] ");
+                    line.Append(MultiInputSettings.KeyToName((byte)i));
+                    Renderer.Text64(cursor, line, tint, 10f);
+                    cursor.y -= 0.25f;
+                    shown++;
                 }
+
+                if (shown == 0)
+                    Renderer.Text32(cursor, "idle", new Color(1f, 1f, 1f, 0.3f), 10f);
             }
 
-            private void RenderSignal(float3 position, byte action, FixedString32Bytes phase, Color tint)
+            private void RenderAxes(float3 origin, DynamicBuffer<InputAxis> buffer)
             {
-                var format = new FixedString64Bytes();
-                format.Append("[");
-                format.Append(phase);
-                format.Append("] ");
-                format.Append(MultiInputSettings.KeyToName(action));
+                Renderer.Text32(origin, "AXES", new Color(0.4f, 0.8f, 1f, 0.9f), 11f);
 
-                Renderer.Text64(position, format, tint, 11f);
-            }
-
-            private void RenderAxes(float3 position, DynamicBuffer<InputAxis> axes)
-            {
-                Renderer.Text32(position, "KINETICS", new Color(0.2f, 0.8f, 1f), 12f);
-                Renderer.Line(position + new float3(-1f, -0.2f, 0f), position + new float3(1f, -0.2f, 0f), new Color(0.2f, 0.8f, 1f, 0.3f));
-
-                var cursor = position + new float3(0f, -1.2f, 0f);
-
-                for (var i = 0; i < axes.Length; i++)
+                var cursor = origin + new float3(0f, -1f, 0f);
+                for (var i = 0; i < buffer.Length; i++)
                 {
-                    var axis = axes[i];
-                    var boundary = new float3(0f, 0f, 1f) * 0.4f;
-                    var vector = new float3(axis.Value.x, axis.Value.y, 0f) * 0.4f;
+                    var axis = buffer[i];
+                    var vec = new float3(axis.Value.x, axis.Value.y, 0f) * 0.4f;
 
-                    Renderer.Circle(cursor, boundary, new Color(1f, 1f, 1f, 0.1f));
-                    Renderer.Line(cursor, cursor + vector, new Color(0f, 1f, 1f, 1f));
-                    Renderer.Point(cursor + vector, 0.08f, new Color(0f, 1f, 1f, 1f));
+                    Renderer.Circle(cursor, new float3(0f, 0f, 1f) * 0.4f, new Color(1f, 1f, 1f, 0.1f));
+                    Renderer.Line(cursor, cursor + vec, new Color(0.4f, 0.8f, 1f));
+                    Renderer.Point(cursor + vec, 0.08f, new Color(0.4f, 0.8f, 1f));
 
                     var label = new FixedString64Bytes();
                     label.Append(MultiInputSettings.KeyToName(axis.ActionId));
+                    Renderer.Text64(cursor + new float3(0f, 0.55f, 0f), label, new Color(1f, 1f, 1f, 0.7f), 10f);
 
-                    Renderer.Text64(cursor + new float3(0f, 0.6f, 0f), label, new Color(1f, 1f, 1f, 0.7f), 10f);
-
-                    cursor.y -= 1.5f;
-                }
-            }
-
-            private void RenderHistory(float3 position, DynamicBuffer<InputHistory> history, uint chronos)
-            {
-                Renderer.Text32(position, "HISTORY", new Color(0.8f, 0.4f, 1f), 12f);
-                Renderer.Line(position + new float3(-1f, -0.2f, 0f), position + new float3(1f, -0.2f, 0f), new Color(0.8f, 0.4f, 1f, 0.3f));
-
-                var cursor = position + new float3(0f, -0.6f, 0f);
-
-                for (var i = history.Length - 1; i >= 0; i--)
-                {
-                    var record = history[i];
-                    var delta = chronos - record.Tick;
-
-                    if (delta > 2000) continue;
-
-                    var opacity = math.clamp(1f - delta / 2000f, 0.1f, 1f);
-                    var phaseStr = record.Phase == InputPhase.Down ? "+ " : "- ";
-                    var tint = record.Phase == InputPhase.Down 
-                        ? new Color(0f, 1f, 1f, opacity) 
-                        : new Color(1f, 0.2f, 0.2f, opacity);
-
-                    var format = new FixedString64Bytes();
-                    format.Append(phaseStr);
-                    format.Append(MultiInputSettings.KeyToName(record.ActionId));
-                    format.Append(" (");
-                    format.Append(delta);
-                    format.Append("ms)");
-
-                    Renderer.Text64(cursor, format, tint, 10f);
-                    cursor.y -= 0.2f;
+                    cursor.y -= 1.4f;
                 }
             }
         }
