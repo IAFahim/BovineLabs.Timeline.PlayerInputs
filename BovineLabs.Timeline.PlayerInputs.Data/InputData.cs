@@ -64,13 +64,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public BitArray256 Value;
     }
 
+    [InternalBufferCapacity(0)]
     public struct InputAxis : IBufferElementData
     {
         public byte ActionId;
         public float2 Value;
     }
 
-    [InternalBufferCapacity(32)]
+    [InternalBufferCapacity(0)]
     public struct InputHistory : IBufferElementData
     {
         public byte ActionId;

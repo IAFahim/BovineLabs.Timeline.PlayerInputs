@@ -151,9 +151,16 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 state.HasInput = math.lengthsq(axisValue) > 0.0001f;
                 if (state.HasInput)
+                {
                     state.LastInput = axisValue;
+                }
                 else if (!config.Flags.Has(AxisTransformFlags.KeepLastPosition))
-                    state.LastInput = float2.zero;
+                {
+                    if (config.DecayRate > 0f)
+                        state.LastInput *= math.exp(-config.DecayRate * DeltaTime);
+                    else
+                        state.LastInput = float2.zero;
+                }
 
                 var transform = Transforms[targetEntity];
 
@@ -169,7 +176,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                     inputVec = math.rotate(math.inverse(parentLtw.Rotation), inputVec);
 
                 var risingEdge = state.HasInput && !state.WasInputActive;
-
                 state.WasInputActive = state.HasInput;
 
                 if (config.Mode.IsRigidbody())
@@ -178,7 +184,19 @@ namespace BovineLabs.Timeline.PlayerInputs
                     return;
                 }
 
-                ApplyCarrot(config, ref state, targetEntity, targets, transform, inputVec);
+                // Resolve accurate anchor
+                Entity anchorEntity = targets.Get(config.ReadRootFrom, targetEntity);
+                if (config.AnchorLinkKey != 0)
+                {
+                    if (EntityLinkResolver.TryResolve(targetEntity, targets, config.ReadRootFrom, config.AnchorLinkKey, Sources, Entries, out var linked))
+                    {
+                        anchorEntity = linked;
+                    }
+                }
+                if (anchorEntity == Entity.Null)
+                    anchorEntity = targetEntity;
+
+                ApplyCarrot(config, ref state, targetEntity, anchorEntity, transform, inputVec);
             }
 
             private void ApplyRigidbody(in AxisTransformConfig config, ref AxisTransformState state,
@@ -187,60 +205,130 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (!Velocities.HasComponent(targetEntity)) return;
                 var pv = Velocities[targetEntity];
 
-                if (!state.HasInput && config.DecayRate > 0f)
+                var targetVel = inputVec * config.Range;
+                var hasEffectiveInput = math.lengthsq(inputVec) > 0.0001f;
+
+                if (!hasEffectiveInput && config.DecayRate > 0f)
                 {
+                    // Isolated planar velocity so things can properly succumb to gravity.
                     var perp = math.dot(pv.Linear, planeNormal) * planeNormal;
                     var planar = pv.Linear - perp;
-                    planar *= math.max(0f, 1f - config.DecayRate * DeltaTime);
+                    planar *= math.exp(-config.DecayRate * DeltaTime);
                     pv.Linear = perp + planar;
                     Velocities[targetEntity] = pv;
                     return;
                 }
 
-                var lerpT = math.clamp(DeltaTime * (1.0f / math.max(0.001f, config.Smoothing)), 0f, 1f);
-                var targetVel = inputVec * config.Range;
-
                 switch (config.Mode)
                 {
                     case AxisTransformMode.RigidbodyVelocity:
-                        pv.Linear = math.lerp(pv.Linear, targetVel, lerpT);
+                        var lerpT = config.Smoothing <= 0.0001f ? 1f : (1f - math.exp(-config.Smoothing * DeltaTime));
+                        var perpVel = math.dot(pv.Linear, planeNormal) * planeNormal;
+                        var planarVel = pv.Linear - perpVel;
+                        planarVel = math.lerp(planarVel, targetVel, lerpT);
+                        pv.Linear = perpVel + planarVel;
                         break;
+                        
                     case AxisTransformMode.RigidbodyForce:
-                        var mass = Masses.TryGetComponent(targetEntity, out var m) ? m.InverseMass : 1f;
-                        if (mass > 0f)
-                            pv.Linear += targetVel * (DeltaTime / mass);
+                        var invMass = Masses.TryGetComponent(targetEntity, out var m) ? m.InverseMass : 1f;
+                        if (invMass > 0f)
+                            pv.Linear += targetVel * (DeltaTime * invMass);
+                        
+                        if (config.Drag > 0f)
+                        {
+                            var perpVelF = math.dot(pv.Linear, planeNormal) * planeNormal;
+                            var planarVelF = pv.Linear - perpVelF;
+                            planarVelF *= math.exp(-config.Drag * DeltaTime);
+                            pv.Linear = perpVelF + planarVelF;
+                        }
                         break;
+                        
                     case AxisTransformMode.RigidbodyImpulse:
                         if (risingEdge)
-                            pv.Linear += targetVel;
+                        {
+                            var invMass2 = Masses.TryGetComponent(targetEntity, out var ms) ? ms.InverseMass : 1f;
+                            pv.Linear += targetVel * invMass2;
+                        }
                         break;
                 }
 
                 Velocities[targetEntity] = pv;
             }
 
+            private bool TryGetUpToDateWorldTransform(Entity entity, out float3 position, out quaternion rotation, out float scale)
+            {
+                // Unparented physics entities get updated directly in LocalTransform natively during physics.
+                if (Transforms.TryGetComponent(entity, out var localTransform) && !Parents.HasComponent(entity))
+                {
+                    position = localTransform.Position;
+                    rotation = localTransform.Rotation;
+                    scale = localTransform.Scale;
+                    return true;
+                }
+
+                // If not physics or it has a parent, fall back to LocalToWorld
+                if (Ltws.TryGetComponent(entity, out var ltw))
+                {
+                    position = ltw.Position;
+                    rotation = ltw.Rotation;
+                    var s = math.length(ltw.Value.c0.xyz);
+                    scale = s > 0 ? s : 1f;
+                    return true;
+                }
+
+                position = float3.zero;
+                rotation = quaternion.identity;
+                scale = 1f;
+                return false;
+            }
+
             private void ApplyCarrot(in AxisTransformConfig config, ref AxisTransformState state,
-                Entity targetEntity, in Targets targets, LocalTransform transform, float3 inputVec)
+                Entity targetEntity, Entity anchorEntity, LocalTransform transform, float3 inputVec)
             {
                 if (!state.Initialized)
                 {
-                    state.AnchorOrigin = targets.Get(config.ReadRootFrom, targetEntity) != Entity.Null
-                        ? Ltws[targets.Get(config.ReadRootFrom, targetEntity)].Position
-                        : transform.Position;
+                    TryGetUpToDateWorldTransform(anchorEntity, out var initPos, out _, out _);
+                    state.AnchorOrigin = initPos;
                     state.DesiredOffset = float3.zero;
                     state.SmoothedOffset = float3.zero;
                     state.Initialized = true;
                 }
 
                 state.DesiredOffset = inputVec * config.LeashRadius;
-                state.SmoothedOffset = math.lerp(state.SmoothedOffset, state.DesiredOffset,
-                    math.clamp(DeltaTime * (1.0f / math.max(0.001f, config.Smoothing)), 0f, 1f));
 
-                var currentAnchor = targets.Get(config.ReadRootFrom, targetEntity) != Entity.Null
-                    ? Ltws[targets.Get(config.ReadRootFrom, targetEntity)].Position
-                    : state.AnchorOrigin;
+                // Frame-rate independent smoothing
+                if (config.Smoothing <= 0.0001f)
+                    state.SmoothedOffset = state.DesiredOffset;
+                else
+                    state.SmoothedOffset = math.lerp(state.SmoothedOffset, state.DesiredOffset, 1f - math.exp(-config.Smoothing * DeltaTime));
 
-                transform.Position = currentAnchor + state.SmoothedOffset;
+                float3 currentAnchorPos;
+                if (anchorEntity == targetEntity)
+                {
+                    currentAnchorPos = state.AnchorOrigin;
+                }
+                else
+                {
+                    TryGetUpToDateWorldTransform(anchorEntity, out currentAnchorPos, out _, out _);
+                }
+
+                float3 targetWorldPos = currentAnchorPos + state.SmoothedOffset;
+
+                // Ensure LocalTransform offset doesn't drift away by computing valid reverse-transform lookup
+                if (Parents.TryGetComponent(targetEntity, out var parent))
+                {
+                    if (TryGetUpToDateWorldTransform(parent.Value, out var pPos, out var pRot, out var pScale))
+                    {
+                        var parentMatrix = float4x4.TRS(pPos, pRot, new float3(pScale));
+                        var invParentMatrix = math.inverse(parentMatrix);
+                        transform.Position = math.transform(invParentMatrix, targetWorldPos);
+                    }
+                }
+                else
+                {
+                    transform.Position = targetWorldPos;
+                }
+
                 Transforms[targetEntity] = transform;
             }
 
