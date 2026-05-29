@@ -9,13 +9,13 @@ using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
-    [UpdateAfter(typeof(ConsumerSyncSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation)]
     public partial struct InputEventsSystem : ISystem
     {
@@ -23,16 +23,19 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
+        private ComponentLookup<PlayerId> _playerIds;
         private ConditionEventWriter.Lookup _writers;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<InputEventsConfig>();
+            state.RequireForUpdate<InputRegistry>();
             _targetsLookup = state.GetComponentLookup<Targets>(true);
             _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
+            _playerIds = state.GetComponentLookup<PlayerId>(true);
             _writers.Create(ref state);
         }
 
@@ -43,14 +46,19 @@ namespace BovineLabs.Timeline.PlayerInputs
             _sources.Update(ref state);
             _entries.Update(ref state);
             _axes.Update(ref state);
+            _playerIds.Update(ref state);
             _writers.Update(ref state);
+
+            var registry = SystemAPI.GetSingleton<InputRegistry>();
 
             state.Dependency = new ApplyJob
             {
                 TargetsLookup = _targetsLookup,
                 Sources = _sources,
                 Entries = _entries,
+                Registry = registry.ProviderByPlayer,
                 Axes = _axes,
+                PlayerIds = _playerIds,
                 Writers = _writers
             }.ScheduleParallel(state.Dependency);
         }
@@ -62,7 +70,11 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public ComponentLookup<Targets> TargetsLookup;
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
             [ReadOnly] public BufferLookup<InputAxis> Axes;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<PlayerId> PlayerIds;
+
             [NativeDisableParallelForRestriction] public ConditionEventWriter.Lookup Writers;
 
             private void Execute(in TrackBinding binding, in InputEventsConfig config, ref InputEventsState state)
@@ -75,7 +87,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                         targetEntity, targets, config.ReadRootFrom, config.ConsumerLinkKey,
                         Sources, Entries, out var consumer)) return;
 
-                if (!Axes.TryGetBuffer(consumer, out var axesBuf)) return;
+                if (!PlayerIds.TryGetComponent(consumer, out var pid)) return;
+                if (!InputAccess.TryGetAxes(Registry, Axes, pid.Value, out var axesBuf)) return;
 
                 var hasInput = false;
                 for (var i = 0; i < axesBuf.Length; i++)
@@ -101,27 +114,16 @@ namespace BovineLabs.Timeline.PlayerInputs
                 state.WasInputActive = hasInput;
             }
 
-            private bool TryResolveTarget(Target targetMode, ushort linkKey, Entity self, in Targets targets,
-                out Entity resolved)
+            private bool TryResolveTarget(Target mode, ushort linkKey, Entity self, in Targets targets, out Entity target)
             {
-                resolved = Entity.Null;
-                var t = targets.Get(targetMode, self);
-                if (t == Entity.Null) return false;
-
-                if (linkKey == 0)
+                if (mode == Target.Self)
                 {
-                    resolved = t;
+                    target = self;
                     return true;
                 }
 
-                if (EntityLinkResolver.TryResolve(t, linkKey, Sources, Entries, out var linked))
-                {
-                    resolved = linked;
-                    return true;
-                }
-
-                resolved = t;
-                return true;
+                target = EntityLinkResolver.TryResolve(self, targets, mode, linkKey, Sources, Entries, out var t) ? t : Entity.Null;
+                return target != Entity.Null;
             }
         }
     }

@@ -8,6 +8,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     {
         public byte PlayerId;
 
+        public bool Controllable;
+        public OverrideTrigger OverrideTrigger = OverrideTrigger.AnyInput;
+        public float ReleaseIdleSeconds = 0.25f;
+
         public class Baker : Baker<InputConsumerAuthoring>
         {
             public override void Bake(InputConsumerAuthoring authoring)
@@ -16,12 +20,22 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
                 AddComponent(entity, new PlayerId { Value = authoring.PlayerId });
                 AddComponent<ConsumerTag>(entity);
-                AddComponent<InputState>(entity);
                 AddComponent<ActiveBufferMask>(entity);
-                AddComponent(entity, new InputSource { Provider = Entity.Null });
-                AddComponent<PlayerMoveInput>(entity);
                 AddBuffer<InputHistory>(entity);
-                AddBuffer<InputAxis>(entity);
+
+                if (authoring.Controllable)
+                {
+                    AddComponent<Controllable>(entity);
+                    AddComponent<PlayerOverride>(entity);
+                    SetComponentEnabled<PlayerOverride>(entity, false);
+                    AddComponent(entity, new OverridePolicy
+                    {
+                        Trigger = authoring.OverrideTrigger,
+                        TriggerActionId = 0,
+                        ReleaseIdleSeconds = authoring.ReleaseIdleSeconds,
+                    });
+                    AddComponent<OverrideState>(entity);
+                }
             }
         }
     }

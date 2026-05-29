@@ -5,6 +5,7 @@ using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Burst.CompilerServices;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
@@ -16,13 +17,16 @@ namespace BovineLabs.Timeline.PlayerInputs
     {
         private ConditionEventWriter.Lookup writers;
         private ComponentLookup<InputState> states;
+        private ComponentLookup<PlayerId> playerIds;
         private BufferLookup<InputHistory> histories;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
+            state.RequireForUpdate<InputRegistry>();
             writers.Create(ref state);
             states = state.GetComponentLookup<InputState>(true);
+            playerIds = state.GetComponentLookup<PlayerId>(true);
             histories = state.GetBufferLookup<InputHistory>();
         }
 
@@ -31,12 +35,17 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             writers.Update(ref state);
             states.Update(ref state);
+            playerIds.Update(ref state);
             histories.Update(ref state);
+
+            var registry = SystemAPI.GetSingleton<InputRegistry>();
 
             state.Dependency = new EvaluateSequenceJob
             {
                 Writers = writers,
+                Registry = registry.ProviderByPlayer,
                 States = states,
+                PlayerIds = playerIds,
                 Histories = histories
             }.Schedule(state.Dependency);
         }
@@ -46,14 +55,17 @@ namespace BovineLabs.Timeline.PlayerInputs
         private partial struct EvaluateSequenceJob : IJobEntity
         {
             public ConditionEventWriter.Lookup Writers;
-            [ReadOnly] public ComponentLookup<InputState> States;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<InputState> States;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<PlayerId> PlayerIds;
             public BufferLookup<InputHistory> Histories;
 
             private void Execute(ref CommandSequenceState commandState, in CommandSequenceConfig config,
                 in TrackBinding binding)
             {
                 if (commandState.IsCompleted || binding.Value == Entity.Null) return;
-                if (!States.TryGetComponent(binding.Value, out var state)) return;
+                if (!PlayerIds.TryGetComponent(binding.Value, out var pid)) return;
+                if (!InputAccess.TryGetState(Registry, States, pid.Value, out var state)) return;
                 if (!Histories.TryGetBuffer(binding.Value, out var history)) return;
 
                 ref var sequences = ref config.Blob.Value.Sequences;
@@ -173,7 +185,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     {
                         for (var i = history.Length - 1; i >= searchIndex; i--)
                         {
-                            if (consumeMask[i] || history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) continue;
+                            if (consumeMask[i] || history[i].ActionId != step.ActionId || (byte)history[i].Phase != (byte)step.Phase) continue;
                             consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;

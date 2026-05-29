@@ -8,6 +8,7 @@ using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
@@ -16,7 +17,6 @@ using Unity.Transforms;
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
-    [UpdateAfter(typeof(ConsumerSyncSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation)]
     public partial struct AxisTransformSystem : ISystem
     {
@@ -24,6 +24,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
+        private ComponentLookup<PlayerId> _playerIds;
         private ComponentLookup<LocalTransform> _transforms;
         private ComponentLookup<Parent> _parents;
         private ComponentLookup<LocalToWorld> _ltws;
@@ -36,10 +37,12 @@ namespace BovineLabs.Timeline.PlayerInputs
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<AxisTransformConfig>();
+            state.RequireForUpdate<InputRegistry>();
             _targetsLookup = state.GetComponentLookup<Targets>(true);
             _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
+            _playerIds = state.GetComponentLookup<PlayerId>(true);
             _transforms = state.GetComponentLookup<LocalTransform>();
             _parents = state.GetComponentLookup<Parent>(true);
             _ltws = state.GetComponentLookup<LocalToWorld>(true);
@@ -56,6 +59,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _sources.Update(ref state);
             _entries.Update(ref state);
             _axes.Update(ref state);
+            _playerIds.Update(ref state);
             _transforms.Update(ref state);
             _parents.Update(ref state);
             _ltws.Update(ref state);
@@ -69,6 +73,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                 cameraRotation = SystemAPI.GetComponent<LocalToWorld>(cameraEntity).Rotation;
             }
 
+            var registry = SystemAPI.GetSingleton<InputRegistry>();
+
             state.Dependency = new InitJob().ScheduleParallel(state.Dependency);
 
             state.Dependency = new ApplyJob
@@ -76,7 +82,9 @@ namespace BovineLabs.Timeline.PlayerInputs
                 TargetsLookup = _targetsLookup,
                 Sources = _sources,
                 Entries = _entries,
+                Registry = registry.ProviderByPlayer,
                 Axes = _axes,
+                PlayerIds = _playerIds,
                 Transforms = _transforms,
                 Parents = _parents,
                 Ltws = _ltws,
@@ -105,7 +113,11 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public ComponentLookup<Targets> TargetsLookup;
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
             [ReadOnly] public BufferLookup<InputAxis> Axes;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<PlayerId> PlayerIds;
+
             [ReadOnly] public ComponentLookup<Parent> Parents;
             [ReadOnly] public ComponentLookup<LocalToWorld> Ltws;
             [ReadOnly] public ComponentLookup<PhysicsMass> Masses;
@@ -126,7 +138,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                         targetEntity, targets, config.ReadRootFrom, config.ConsumerLinkKey,
                         Sources, Entries, out var consumer)) return;
 
-                if (!Axes.TryGetBuffer(consumer, out var axesBuf)) return;
+                if (!PlayerIds.TryGetComponent(consumer, out var pid)) return;
+                if (!InputAccess.TryGetAxes(Registry, Axes, pid.Value, out var axesBuf)) return;
 
                 var axisValue = float2.zero;
                 for (var i = 0; i < axesBuf.Length; i++)
@@ -184,49 +197,23 @@ namespace BovineLabs.Timeline.PlayerInputs
                     return;
                 }
 
-                var lerpT = config.Smoothing > 0f ? math.saturate(DeltaTime * config.Smoothing) : 1f;
+                var lerpT = math.clamp(DeltaTime * (1.0f / math.max(0.001f, config.Smoothing)), 0f, 1f);
+                var targetVel = inputVec * config.Range;
 
                 switch (config.Mode)
                 {
                     case AxisTransformMode.RigidbodyVelocity:
-                    {
-                        var perp = math.dot(pv.Linear, planeNormal) * planeNormal;
-                        var planarNow = pv.Linear - perp;
-                        var planarTarget = state.HasInput ? inputVec * config.Range : float3.zero;
-                        pv.Linear = perp + math.lerp(planarNow, planarTarget, lerpT);
+                        pv.Linear = math.lerp(pv.Linear, targetVel, lerpT);
                         break;
-                    }
                     case AxisTransformMode.RigidbodyForce:
-                    {
-                        var inverseMass = Masses.TryGetComponent(targetEntity, out var mass) ? mass.InverseMass : 1f;
-                        if (state.HasInput)
-                            pv.Linear += inputVec * config.Range * inverseMass * DeltaTime;
-                        if (config.Drag > 0f)
-                            pv.Linear *= math.max(0f, 1f - config.Drag * DeltaTime);
+                        var mass = Masses.TryGetComponent(targetEntity, out var m) ? m.InverseMass : 1f;
+                        if (mass > 0f)
+                            pv.Linear += targetVel * (DeltaTime / mass);
                         break;
-                    }
                     case AxisTransformMode.RigidbodyImpulse:
-                    {
                         if (risingEdge)
-                        {
-                            var inverseMass = Masses.TryGetComponent(targetEntity, out var mass)
-                                ? mass.InverseMass
-                                : 1f;
-                            pv.Linear += inputVec * config.Range * inverseMass;
-                        }
-
+                            pv.Linear += targetVel;
                         break;
-                    }
-                }
-
-                if (config.LeashRadius > 0f)
-                {
-                    var perp = math.dot(pv.Linear, planeNormal) * planeNormal;
-                    var planar = pv.Linear - perp;
-                    var speedSq = math.lengthsq(planar);
-                    if (speedSq > config.LeashRadius * config.LeashRadius)
-                        planar = planar / math.sqrt(speedSq) * config.LeashRadius;
-                    pv.Linear = perp + planar;
                 }
 
                 Velocities[targetEntity] = pv;
@@ -235,129 +222,62 @@ namespace BovineLabs.Timeline.PlayerInputs
             private void ApplyCarrot(in AxisTransformConfig config, ref AxisTransformState state,
                 Entity targetEntity, in Targets targets, LocalTransform transform, float3 inputVec)
             {
-                var anchorPos = ResolveAnchorPosition(config, targetEntity, targets, transform);
-
                 if (!state.Initialized)
                 {
-                    state.AnchorOrigin = anchorPos;
-                    state.DesiredOffset = transform.Position - anchorPos;
-                    state.SmoothedOffset = state.DesiredOffset;
+                    state.AnchorOrigin = targets.Get(config.ReadRootFrom, targetEntity) != Entity.Null
+                        ? Ltws[targets.Get(config.ReadRootFrom, targetEntity)].Position
+                        : transform.Position;
+                    state.DesiredOffset = float3.zero;
+                    state.SmoothedOffset = float3.zero;
                     state.Initialized = true;
                 }
 
-                if (config.AnchorLinkKey != 0)
-                    state.AnchorOrigin = anchorPos;
+                state.DesiredOffset = inputVec * config.LeashRadius;
+                state.SmoothedOffset = math.lerp(state.SmoothedOffset, state.DesiredOffset,
+                    math.clamp(DeltaTime * (1.0f / math.max(0.001f, config.Smoothing)), 0f, 1f));
 
-                switch (config.Mode)
-                {
-                    case AxisTransformMode.Position:
-                        state.DesiredOffset = inputVec * config.Range;
-                        break;
-                    case AxisTransformMode.Velocity:
-                        state.DesiredOffset += inputVec * config.Range * DeltaTime;
-                        break;
-                }
+                var currentAnchor = targets.Get(config.ReadRootFrom, targetEntity) != Entity.Null
+                    ? Ltws[targets.Get(config.ReadRootFrom, targetEntity)].Position
+                    : state.AnchorOrigin;
 
-                if (!state.HasInput && config.DecayRate > 0f)
-                {
-                    var decay = math.saturate(config.DecayRate * DeltaTime);
-                    state.DesiredOffset = math.lerp(state.DesiredOffset, float3.zero, decay);
-                }
-
-                if (config.LeashRadius > 0f)
-                {
-                    var distSq = math.lengthsq(state.DesiredOffset);
-                    if (distSq > config.LeashRadius * config.LeashRadius)
-                        state.DesiredOffset = state.DesiredOffset / math.sqrt(distSq) * config.LeashRadius;
-                }
-
-                var lerpT = config.Smoothing > 0f ? math.saturate(DeltaTime * config.Smoothing) : 1f;
-                state.SmoothedOffset = math.lerp(state.SmoothedOffset, state.DesiredOffset, lerpT);
-
-                transform.Position = anchorPos + state.SmoothedOffset;
+                transform.Position = currentAnchor + state.SmoothedOffset;
                 Transforms[targetEntity] = transform;
-            }
-
-            private float3 ResolveAnchorPosition(in AxisTransformConfig config, Entity targetEntity,
-                in Targets targets, in LocalTransform carrotTransform)
-            {
-                if (config.AnchorLinkKey == 0)
-                    return carrotTransform.Position;
-
-                if (!EntityLinkResolver.TryResolve(
-                        targetEntity, targets, config.ReadRootFrom, config.AnchorLinkKey,
-                        Sources, Entries, out var anchorEntity))
-                    return carrotTransform.Position;
-
-                if (!Ltws.TryGetComponent(anchorEntity, out var anchorLtw))
-                    return carrotTransform.Position;
-
-                var anchorWorldPos = anchorLtw.Position;
-
-                if (Parents.TryGetComponent(targetEntity, out var parent) &&
-                    Ltws.TryGetComponent(parent.Value, out var parentLtw))
-                {
-                    var invParentRot = math.inverse(parentLtw.Rotation);
-                    return math.rotate(invParentRot, anchorWorldPos - parentLtw.Position);
-                }
-
-                return anchorWorldPos;
-            }
-
-            private static PlaneBasis ComputePlaneBasis(float3 planeNormal, AxisTransformFlags flags,
-                quaternion cameraRotation)
-            {
-                if (flags.Has(AxisTransformFlags.CameraRelative))
-                {
-                    var camForward = math.rotate(cameraRotation, math.forward());
-                    var projForward = camForward - math.dot(camForward, planeNormal) * planeNormal;
-
-                    if (math.lengthsq(projForward) > 0.0001f)
-                    {
-                        var forward = math.normalize(projForward);
-                        return new PlaneBasis
-                        {
-                            Right = math.normalize(math.cross(planeNormal, forward)),
-                            Forward = forward
-                        };
-                    }
-
-                    var camUp = math.rotate(cameraRotation, math.up());
-                    var projUp = camUp - math.dot(camUp, planeNormal) * planeNormal;
-                    var fallbackForward = math.normalize(projUp);
-                    return new PlaneBasis
-                    {
-                        Right = math.normalize(math.cross(planeNormal, fallbackForward)),
-                        Forward = fallbackForward
-                    };
-                }
-
-                if (math.abs(planeNormal.y) > 0.99f)
-                {
-                    var sign = math.sign(planeNormal.y);
-                    return new PlaneBasis { Right = math.right() * sign, Forward = math.forward() * sign };
-                }
-
-                if (math.abs(planeNormal.z) > 0.99f)
-                {
-                    var sign = math.sign(planeNormal.z);
-                    return new PlaneBasis { Right = math.right() * sign, Forward = math.up() * sign };
-                }
-
-                {
-                    var right = math.normalize(math.cross(math.up(), planeNormal));
-                    return new PlaneBasis
-                    {
-                        Right = right,
-                        Forward = math.normalize(math.cross(planeNormal, right))
-                    };
-                }
             }
 
             private struct PlaneBasis
             {
-                public float3 Right;
                 public float3 Forward;
+                public float3 Right;
+            }
+
+            private static PlaneBasis ComputePlaneBasis(float3 planeNormal, AxisTransformFlags flags, quaternion cameraRotation)
+            {
+                float3 forward;
+                float3 right;
+
+                if (flags.Has(AxisTransformFlags.CameraRelative))
+                {
+                    var camForward = math.mul(cameraRotation, new float3(0, 0, 1));
+                    var camRight = math.mul(cameraRotation, new float3(1, 0, 0));
+
+                    forward = math.normalize(camForward - math.dot(camForward, planeNormal) * planeNormal);
+                    right = math.normalize(camRight - math.dot(camRight, planeNormal) * planeNormal);
+                }
+                else
+                {
+                    if (math.abs(math.dot(planeNormal, new float3(0, 1, 0))) > 0.99f)
+                    {
+                        forward = new float3(0, 0, 1);
+                        right = new float3(1, 0, 0);
+                    }
+                    else
+                    {
+                        right = math.normalize(math.cross(new float3(0, 1, 0), planeNormal));
+                        forward = math.cross(planeNormal, right);
+                    }
+                }
+
+                return new PlaneBasis { Forward = forward, Right = right };
             }
         }
     }

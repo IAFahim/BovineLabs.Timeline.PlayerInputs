@@ -29,44 +29,4 @@ namespace BovineLabs.Timeline.PlayerInputs
             }
         }
     }
-
-    [UpdateInGroup(typeof(InitializationSystemGroup))]
-    [UpdateAfter(typeof(ProviderSyncSystem))]
-    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
-    public partial struct ProviderLinkSystem : ISystem
-    {
-        [BurstCompile]
-        public void OnUpdate(ref SystemState state)
-        {
-            var map = new NativeHashMap<byte, Entity>(16, state.WorldUpdateAllocator);
-
-            foreach (var (id, entity) in SystemAPI.Query<RefRO<PlayerId>>().WithAll<ProviderTag>().WithEntityAccess())
-            {
-                if (!map.TryAdd(id.ValueRO.Value, entity))
-                {
-                    LogError(id.ValueRO.Value);
-                }
-            }
-
-            state.Dependency = new AssignProviderJob { Map = map }.ScheduleParallel(state.Dependency);
-        }
-
-        [BurstDiscard]
-        private static void LogError(byte id)
-        {
-            UnityEngine.Debug.LogError($"Duplicate PlayerId {id} detected for providers.");
-        }
-
-        [BurstCompile]
-        [WithAll(typeof(ConsumerTag))]
-        private partial struct AssignProviderJob : IJobEntity
-        {
-            [ReadOnly] public NativeHashMap<byte, Entity> Map;
-
-            private void Execute(in PlayerId id, ref InputSource source)
-            {
-                source.Provider = Map.TryGetValue(id.Value, out var provider) ? provider : Entity.Null;
-            }
-        }
-    }
 }
