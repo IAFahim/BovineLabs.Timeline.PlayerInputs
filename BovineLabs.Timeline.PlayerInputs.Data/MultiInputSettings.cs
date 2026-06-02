@@ -21,8 +21,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 for (byte i = 0; i < inputActions.Length; i++)
                 {
                     var binding = inputActions[i];
-                    var name = binding?.action != null ? binding.action.name : $"[Unassigned: {i}]";
-                    yield return new NameValue<byte>(name, i);
+                    var actionName = binding?.action != null ? binding.action.name : $"[Unassigned: {i}]";
+                    yield return new NameValue<byte>(actionName, i);
                 }
             }
         }
