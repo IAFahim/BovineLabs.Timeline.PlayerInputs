@@ -8,7 +8,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     [Serializable]
     [TrackClipType(typeof(InputEventsClip))]
-    [TrackColor(0.9f, 0.9f, 0.2f)]
+    [TrackColor(0.90f, 0.85f, 0.20f)]
     [TrackBindingType(typeof(TargetsAuthoring))]
     [DisplayName("BovineLabs/Player Inputs/Input Events Track")]
     public sealed class InputEventsTrack : DOTSTrack

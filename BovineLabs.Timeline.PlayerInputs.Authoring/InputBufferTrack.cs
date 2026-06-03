@@ -8,7 +8,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     [Serializable]
     [TrackClipType(typeof(InputBufferWindowClip))]
     [TrackClipType(typeof(InputBufferClearClip))]
-    [TrackColor(0.9f, 0.2f, 0.2f)]
+    [TrackColor(0.90f, 0.75f, 0.20f)]
     [TrackBindingType(typeof(InputConsumerAuthoring))]
     [DisplayName("BovineLabs/Player Inputs/Buffer Track")]
     public sealed class InputBufferTrack : DOTSTrack
