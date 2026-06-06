@@ -1,5 +1,4 @@
 using BovineLabs.Core.EntityCommands;
-using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs.Data
 {
@@ -27,7 +26,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 {
                     Trigger = overrideTrigger,
                     TriggerActionId = 0,
-                    ReleaseIdleSeconds = releaseIdleSeconds,
+                    ReleaseIdleSeconds = releaseIdleSeconds
                 });
                 commands.AddComponent<OverrideState>();
             }

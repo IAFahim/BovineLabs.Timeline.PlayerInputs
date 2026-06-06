@@ -1,4 +1,3 @@
-using BovineLabs.Core.Collections;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
@@ -10,7 +9,8 @@ namespace BovineLabs.Timeline.PlayerInputs
     [UpdateInGroup(typeof(InitializationSystemGroup))]
     [UpdateAfter(typeof(InputRegistrySystem))]
     [UpdateAfter(typeof(ProviderSyncSystem))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ControlAuthoritySystem : ISystem
     {
         private ComponentLookup<InputState> states;
@@ -34,7 +34,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 Registry = registry.ProviderByPlayer,
                 States = states,
-                DeltaTime = SystemAPI.Time.DeltaTime,
+                DeltaTime = SystemAPI.Time.DeltaTime
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -42,8 +42,12 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(Controllable))]
         private partial struct AuthorityJob : IJobEntity
         {
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<InputState> States;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public NativeArray<Entity> Registry;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<InputState> States;
+
             public float DeltaTime;
 
             private void Execute(in PlayerId id, in OverridePolicy policy, ref OverrideState authority,
@@ -77,7 +81,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 {
                     OverrideTrigger.AnyInput => !state.Down.AllFalse || !state.Held.AllFalse,
                     OverrideTrigger.Action => state.Down[policy.TriggerActionId] || state.Held[policy.TriggerActionId],
-                    _ => false,
+                    _ => false
                 };
             }
         }

@@ -39,9 +39,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             var renderer = SystemAPI.GetSingleton<DrawSystem.Singleton>().CreateDrawer();
 
             var consumerCounts = CollectionHelper.CreateNativeArray<int>(
-                SlotCount, state.WorldUpdateAllocator, NativeArrayOptions.ClearMemory);
+                SlotCount, state.WorldUpdateAllocator);
             var overriddenCounts = CollectionHelper.CreateNativeArray<int>(
-                SlotCount, state.WorldUpdateAllocator, NativeArrayOptions.ClearMemory);
+                SlotCount, state.WorldUpdateAllocator);
 
             state.Dependency = new CountConsumersJob { Counts = consumerCounts }.Schedule(state.Dependency);
             state.Dependency = new CountOverriddenJob { Counts = overriddenCounts }.Schedule(state.Dependency);
@@ -56,7 +56,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 ConsumerCounts = consumerCounts,
                 OverriddenCounts = overriddenCounts,
                 Joined = SystemAPI.GetSingletonBuffer<PlayerJoined>(true),
-                Left = SystemAPI.GetSingletonBuffer<PlayerLeft>(true),
+                Left = SystemAPI.GetSingletonBuffer<PlayerLeft>(true)
             }.Schedule(state.Dependency);
         }
 
@@ -87,7 +87,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
         private struct RenderJob : IJob
         {
             public Drawer Renderer;
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public NativeArray<Entity> Registry;
+
             public uint Version;
             [ReadOnly] public ComponentLookup<InputState> States;
             [ReadOnly] public BufferLookup<InputAxis> Axes;
@@ -116,7 +119,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             {
                 var occupied = 0;
                 for (var p = 0; p < SlotCount; p++)
-                    if (Registry[p]!= Entity.Null) occupied++;
+                    if (Registry[p] != Entity.Null)
+                        occupied++;
 
                 var title = new FixedString128Bytes();
                 title.Append("INPUT REGISTRY v");

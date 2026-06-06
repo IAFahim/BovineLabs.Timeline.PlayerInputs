@@ -1,5 +1,4 @@
 using BovineLabs.Testing;
-using BovineLabs.Timeline.PlayerInputs;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using NUnit.Framework;
 using Unity.Entities;
@@ -27,7 +26,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         public void Registry_FiresJoinLeaveEvents()
         {
             var sys = World.GetOrCreateSystem<InputRegistrySystem>();
-            
+
             // First frame: Player 7 joins
             var provider = Manager.CreateEntity();
             Manager.AddComponentData(provider, new PlayerId { Value = 7 });

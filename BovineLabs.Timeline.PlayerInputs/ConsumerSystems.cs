@@ -2,13 +2,13 @@ using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
-    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ConsumerBufferMaskSystem : ISystem
     {
         private ComponentLookup<ActiveBufferMask> masks;

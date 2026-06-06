@@ -1,5 +1,4 @@
 using BovineLabs.Core.Authoring.EntityCommands;
-using BovineLabs.Core.EntityCommands;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
@@ -80,13 +79,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             byte actionId = 0;
             if (Action != null)
-            {
                 if (!MultiInputSettings.TryGetIndex(Action, out actionId))
-                {
                     Debug.LogError(
                         $"AxisTransformClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
-                }
-            }
 
             var flags = AxisTransformFlags.None;
             if (IgnoreParentRotation) flags |= AxisTransformFlags.IgnoreParentRotation;

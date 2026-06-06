@@ -7,7 +7,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         Manual = 0,
         AnyInput = 1,
-        Action = 2,
+        Action = 2
     }
 
     public struct InputRegistry : IComponentData

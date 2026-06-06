@@ -114,9 +114,13 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public NativeArray<Entity> Registry;
+
             [ReadOnly] public BufferLookup<InputAxis> Axes;
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<PlayerId> PlayerIds;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<PlayerId> PlayerIds;
 
             [ReadOnly] public ComponentLookup<Parent> Parents;
             [ReadOnly] public ComponentLookup<LocalToWorld> Ltws;
@@ -185,14 +189,12 @@ namespace BovineLabs.Timeline.PlayerInputs
                 }
 
                 // Resolve accurate anchor
-                Entity anchorEntity = targets.Get(config.ReadRootFrom, targetEntity);
+                var anchorEntity = targets.Get(config.ReadRootFrom, targetEntity);
                 if (config.AnchorLinkKey != 0)
-                {
-                    if (EntityLinkResolver.TryResolve(targetEntity, targets, config.ReadRootFrom, config.AnchorLinkKey, Sources, Entries, out var linked))
-                    {
+                    if (EntityLinkResolver.TryResolve(targetEntity, targets, config.ReadRootFrom, config.AnchorLinkKey,
+                            Sources, Entries, out var linked))
                         anchorEntity = linked;
-                    }
-                }
+
                 if (anchorEntity == Entity.Null)
                     anchorEntity = targetEntity;
 
@@ -222,18 +224,18 @@ namespace BovineLabs.Timeline.PlayerInputs
                 switch (config.Mode)
                 {
                     case AxisTransformMode.RigidbodyVelocity:
-                        var lerpT = config.Smoothing <= 0.0001f ? 1f : (1f - math.exp(-config.Smoothing * DeltaTime));
+                        var lerpT = config.Smoothing <= 0.0001f ? 1f : 1f - math.exp(-config.Smoothing * DeltaTime);
                         var perpVel = math.dot(pv.Linear, planeNormal) * planeNormal;
                         var planarVel = pv.Linear - perpVel;
                         planarVel = math.lerp(planarVel, targetVel, lerpT);
                         pv.Linear = perpVel + planarVel;
                         break;
-                        
+
                     case AxisTransformMode.RigidbodyForce:
                         var invMass = Masses.TryGetComponent(targetEntity, out var m) ? m.InverseMass : 1f;
                         if (invMass > 0f)
                             pv.Linear += targetVel * (DeltaTime * invMass);
-                        
+
                         if (config.Drag > 0f)
                         {
                             var perpVelF = math.dot(pv.Linear, planeNormal) * planeNormal;
@@ -241,21 +243,24 @@ namespace BovineLabs.Timeline.PlayerInputs
                             planarVelF *= math.exp(-config.Drag * DeltaTime);
                             pv.Linear = perpVelF + planarVelF;
                         }
+
                         break;
-                        
+
                     case AxisTransformMode.RigidbodyImpulse:
                         if (risingEdge)
                         {
                             var invMass2 = Masses.TryGetComponent(targetEntity, out var ms) ? ms.InverseMass : 1f;
                             pv.Linear += targetVel * invMass2;
                         }
+
                         break;
                 }
 
                 Velocities[targetEntity] = pv;
             }
 
-            private bool TryGetUpToDateWorldTransform(Entity entity, out float3 position, out quaternion rotation, out float scale)
+            private bool TryGetUpToDateWorldTransform(Entity entity, out float3 position, out quaternion rotation,
+                out float scale)
             {
                 // Unparented physics entities get updated directly in LocalTransform natively during physics.
                 if (Transforms.TryGetComponent(entity, out var localTransform) && !Parents.HasComponent(entity))
@@ -300,19 +305,16 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (config.Smoothing <= 0.0001f)
                     state.SmoothedOffset = state.DesiredOffset;
                 else
-                    state.SmoothedOffset = math.lerp(state.SmoothedOffset, state.DesiredOffset, 1f - math.exp(-config.Smoothing * DeltaTime));
+                    state.SmoothedOffset = math.lerp(state.SmoothedOffset, state.DesiredOffset,
+                        1f - math.exp(-config.Smoothing * DeltaTime));
 
                 float3 currentAnchorPos;
                 if (anchorEntity == targetEntity)
-                {
                     currentAnchorPos = state.AnchorOrigin;
-                }
                 else
-                {
                     TryGetUpToDateWorldTransform(anchorEntity, out currentAnchorPos, out _, out _);
-                }
 
-                float3 targetWorldPos = currentAnchorPos + state.SmoothedOffset;
+                var targetWorldPos = currentAnchorPos + state.SmoothedOffset;
 
                 // Ensure LocalTransform offset doesn't drift away by computing valid reverse-transform lookup
                 if (Parents.TryGetComponent(targetEntity, out var parent))
@@ -338,7 +340,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                 public float3 Right;
             }
 
-            private static PlaneBasis ComputePlaneBasis(float3 planeNormal, AxisTransformFlags flags, quaternion cameraRotation)
+            private static PlaneBasis ComputePlaneBasis(float3 planeNormal, AxisTransformFlags flags,
+                quaternion cameraRotation)
             {
                 float3 forward;
                 float3 right;

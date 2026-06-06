@@ -19,8 +19,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public InputActionReference Action;
 
-        [Header("Events")]
-        public Target EventRouteTo = Target.Self;
+        [Header("Events")] public Target EventRouteTo = Target.Self;
+
         public EntityLinkSchema EventRouteLink;
         public ConditionEventObject OnInputStart;
         public ConditionEventObject OnInputEnd;
@@ -40,13 +40,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             byte actionId = 0;
             if (Action != null)
-            {
                 if (!MultiInputSettings.TryGetIndex(Action, out actionId))
-                {
                     Debug.LogError(
                         $"InputEventsClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
-                }
-            }
 
             var commands = new BakerCommands(context.Baker, entity);
             commands.AddComponent(new InputEventsConfig

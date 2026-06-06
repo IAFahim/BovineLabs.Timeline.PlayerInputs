@@ -1,5 +1,3 @@
-using BovineLabs.Core.Collections;
-using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
@@ -11,7 +9,8 @@ namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(ConsumerBufferMaskSystem))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ConsumerHistorySystem : ISystem
     {
         private ComponentLookup<InputState> states;
@@ -34,7 +33,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 Registry = registry.ProviderByPlayer,
                 States = states,
-                Tick = (uint)(SystemAPI.Time.ElapsedTime * 1000.0),
+                Tick = (uint)(SystemAPI.Time.ElapsedTime * 1000.0)
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -42,8 +41,12 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(ConsumerTag))]
         private partial struct RecordHistoryJob : IJobEntity
         {
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<InputState> States;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public NativeArray<Entity> Registry;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<InputState> States;
+
             public uint Tick;
 
             private void Execute(in PlayerId id, in ActiveBufferMask mask, ref DynamicBuffer<InputHistory> history)
@@ -82,7 +85,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     {
                         ActionId = (byte)(offset + bit),
                         Phase = phase,
-                        Tick = tick,
+                        Tick = tick
                     });
                 }
             }

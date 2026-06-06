@@ -29,13 +29,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 {
                     if (action == null) continue;
                     if (MultiInputSettings.TryGetIndex(action, out var id))
-                    {
                         mask[id] = true;
-                    }
                     else
-                    {
-                        Debug.LogError($"InputBufferWindowClip '{name}' action '{action.name}' not found in MultiInputSettings.", this);
-                    }
+                        Debug.LogError(
+                            $"InputBufferWindowClip '{name}' action '{action.name}' not found in MultiInputSettings.",
+                            this);
                 }
 
             var commands = new BakerCommands(context.Baker, entity);

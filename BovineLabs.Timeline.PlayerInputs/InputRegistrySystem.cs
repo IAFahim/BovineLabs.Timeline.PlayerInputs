@@ -2,11 +2,13 @@ using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using UnityEngine;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(InitializationSystemGroup))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct InputRegistrySystem : ISystem
     {
         private const int SlotCount = 256;
@@ -20,7 +22,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.EntityManager.AddComponentData(entity, new InputRegistry
             {
                 ProviderByPlayer = new NativeArray<Entity>(SlotCount, Allocator.Persistent),
-                Version = 0,
+                Version = 0
             });
         }
 
@@ -34,7 +36,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         public void OnUpdate(ref SystemState state)
         {
             var next = CollectionHelper.CreateNativeArray<Entity>(
-                SlotCount, state.WorldUpdateAllocator, NativeArrayOptions.ClearMemory);
+                SlotCount, state.WorldUpdateAllocator);
 
             foreach (var (id, entity) in
                      SystemAPI.Query<RefRO<PlayerId>>().WithAll<ProviderTag>().WithEntityAccess())
@@ -74,7 +76,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstDiscard]
         private static void ReportDuplicate(int slot)
         {
-            UnityEngine.Debug.LogError($"Duplicate provider for PlayerId {slot}; keeping first.");
+            Debug.LogError($"Duplicate provider for PlayerId {slot}; keeping first.");
         }
     }
 }

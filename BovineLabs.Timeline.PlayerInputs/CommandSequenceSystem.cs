@@ -1,25 +1,25 @@
+using System;
 using BovineLabs.Core.Collections;
 using BovineLabs.Reaction.Conditions;
+using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Burst.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-using Unity.Jobs;
-using System;
-using BovineLabs.Reaction.Data.Conditions;
 using Unity.Entities;
+using Unity.Jobs;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(CommandSequenceResetSystem))]
-    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct CommandSequenceSystem : ISystem
     {
-        
-        private BovineLabs.Core.Collections.NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
+        private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
         private NativeParallelHashSet<Entity> _uniqueKeySet;
         private NativeList<Entity> _uniqueKeys;
         private ConditionEventWriter.Lookup writers;
@@ -29,7 +29,6 @@ namespace BovineLabs.Timeline.PlayerInputs
         private BufferLookup<InputHistory> histories;
 
         [BurstCompile]
-        
         public void OnDestroy(ref SystemState state)
         {
             if (_uniqueKeys.IsCreated)
@@ -45,8 +44,8 @@ namespace BovineLabs.Timeline.PlayerInputs
 
         {
             state.RequireForUpdate<InputRegistry>();
-            
-            _eventChanges = new BovineLabs.Core.Collections.NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
+
+            _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
             _uniqueKeySet = new NativeParallelHashSet<Entity>(64, Allocator.Persistent);
             _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
             writers.Create(ref state);
@@ -102,13 +101,18 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(ClipActive))]
         private partial struct GatherJob : IJobEntity
         {
-            
-            public BovineLabs.Core.Collections.NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
+            public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
             public NativeParallelHashSet<Entity>.ParallelWriter UniqueKeys;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<InputState> States;
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<PlayerId> PlayerIds;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public NativeArray<Entity> Registry;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<InputState> States;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<PlayerId> PlayerIds;
+
             public BufferLookup<InputHistory> Histories;
 
             private void Execute(ref CommandSequenceState commandState, in CommandSequenceConfig config,
@@ -236,7 +240,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                     {
                         for (var i = history.Length - 1; i >= searchIndex; i--)
                         {
-                            if (consumeMask[i] || history[i].ActionId != step.ActionId || (byte)history[i].Phase != (byte)step.Phase) continue;
+                            if (consumeMask[i] || history[i].ActionId != step.ActionId ||
+                                (byte)history[i].Phase != (byte)step.Phase) continue;
                             consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;
@@ -322,7 +327,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             public void Execute(int index)
             {
                 var key = Keys[index];
-                if (Unity.Burst.CompilerServices.Hint.Unlikely(!Writers.TryGet(key, out var writer))) return;
+                if (Hint.Unlikely(!Writers.TryGet(key, out var writer))) return;
 
                 var values = new FixedList4096Bytes<EventAmount>();
 

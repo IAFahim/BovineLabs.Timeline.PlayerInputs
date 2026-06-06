@@ -62,18 +62,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     if (actionRef != null)
                     {
                         if (MultiInputSettings.TryGetIndex(actionRef, out var id))
-                        {
                             stepArray[i] = new CommandStep
                             {
                                 ActionId = id,
                                 Mode = seqData.Steps[i].Mode,
                                 Phase = seqData.Steps[i].Phase
                             };
-                        }
                         else
-                        {
-                            Debug.LogError($"CommandSequenceClip '{name}' action '{actionRef.name}' not found in MultiInputSettings.", this);
-                        }
+                            Debug.LogError(
+                                $"CommandSequenceClip '{name}' action '{actionRef.name}' not found in MultiInputSettings.",
+                                this);
                     }
                 }
             }

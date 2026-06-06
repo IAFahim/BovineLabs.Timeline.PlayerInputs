@@ -1,12 +1,11 @@
 using BovineLabs.Timeline.PlayerInputs.Data;
-using Unity.Burst;
-using Unity.Collections;
 using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(InitializationSystemGroup))]
-    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial class ProviderSyncSystem : SystemBase
     {
         protected override void OnUpdate()

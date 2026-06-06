@@ -1,3 +1,5 @@
+using System;
+using BovineLabs.Core.Collections;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Reaction.Conditions;
@@ -8,12 +10,12 @@ using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
+using Unity.Burst.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
-using Unity.Mathematics;
 using Unity.Jobs;
-using System;
+using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
@@ -26,15 +28,14 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<PlayerId> _playerIds;
-        
-        private BovineLabs.Core.Collections.NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
+
+        private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
         private NativeParallelHashSet<Entity> _uniqueKeySet;
         private NativeList<Entity> _uniqueKeys;
         private ConditionEventWriter.Lookup _writers;
 
 
         [BurstCompile]
-        
         public void OnDestroy(ref SystemState state)
         {
             if (_uniqueKeys.IsCreated)
@@ -56,12 +57,11 @@ namespace BovineLabs.Timeline.PlayerInputs
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
-            
-            _eventChanges = new BovineLabs.Core.Collections.NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
+
+            _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
             _uniqueKeySet = new NativeParallelHashSet<Entity>(64, Allocator.Persistent);
             _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
             _writers.Create(ref state);
-
         }
 
         [BurstCompile]
@@ -116,12 +116,16 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public NativeArray<Entity> Registry;
-            [ReadOnly] public BufferLookup<InputAxis> Axes;
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<PlayerId> PlayerIds;
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public NativeArray<Entity> Registry;
 
-            
-            public BovineLabs.Core.Collections.NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
+            [ReadOnly] public BufferLookup<InputAxis> Axes;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<PlayerId> PlayerIds;
+
+
+            public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
             public NativeParallelHashSet<Entity>.ParallelWriter UniqueKeys;
 
 
@@ -152,7 +156,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (risingEdge && config.OnInputStart != ConditionKey.Null &&
                     TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
                         out var startTarget))
-                    
+
                 {
                     EventChanges.Add(startTarget, new EventAmount(config.OnInputStart, 1));
                     UniqueKeys.Add(startTarget);
@@ -161,7 +165,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (fallingEdge && config.OnInputEnd != ConditionKey.Null &&
                     TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
                         out var endTarget))
-                    
+
                 {
                     EventChanges.Add(endTarget, new EventAmount(config.OnInputEnd, 1));
                     UniqueKeys.Add(endTarget);
@@ -170,7 +174,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                 state.WasInputActive = hasInput;
             }
 
-            private bool TryResolveTarget(Target mode, ushort linkKey, Entity self, in Targets targets, out Entity target)
+            private bool TryResolveTarget(Target mode, ushort linkKey, Entity self, in Targets targets,
+                out Entity target)
             {
                 if (mode == Target.Self)
                 {
@@ -178,7 +183,9 @@ namespace BovineLabs.Timeline.PlayerInputs
                     return true;
                 }
 
-                target = EntityLinkResolver.TryResolve(self, targets, mode, linkKey, Sources, Entries, out var t) ? t : Entity.Null;
+                target = EntityLinkResolver.TryResolve(self, targets, mode, linkKey, Sources, Entries, out var t)
+                    ? t
+                    : Entity.Null;
                 return target != Entity.Null;
             }
         }
@@ -207,7 +214,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             public void Execute(int index)
             {
                 var key = Keys[index];
-                if (Unity.Burst.CompilerServices.Hint.Unlikely(!Writers.TryGet(key, out var writer))) return;
+                if (Hint.Unlikely(!Writers.TryGet(key, out var writer))) return;
 
                 var values = new FixedList4096Bytes<EventAmount>();
 

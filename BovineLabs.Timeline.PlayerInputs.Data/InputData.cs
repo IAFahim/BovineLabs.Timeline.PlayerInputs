@@ -39,7 +39,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         Velocity = 1,
         RigidbodyVelocity = 2,
         RigidbodyForce = 3,
-        RigidbodyImpulse = 4,
+        RigidbodyImpulse = 4
     }
 
     [Flags]
@@ -49,7 +49,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         IgnoreParentRotation = 1 << 0,
         KeepLastPosition = 1 << 1,
         LocalSpace = 1 << 2,
-        CameraRelative = 1 << 3,
+        CameraRelative = 1 << 3
     }
 
     public struct InputState : IComponentData
@@ -161,13 +161,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public static class AxisTransformModeExtensions
     {
         public static bool IsRigidbody(this AxisTransformMode m)
-            => m >= AxisTransformMode.RigidbodyVelocity;
+        {
+            return m >= AxisTransformMode.RigidbodyVelocity;
+        }
     }
 
     public static class AxisTransformFlagsExtensions
     {
         public static bool Has(this AxisTransformFlags flags, AxisTransformFlags flag)
-            => (flags & flag) != 0;
+        {
+            return (flags & flag) != 0;
+        }
     }
 
     public struct AxisTransformState : IComponentData
