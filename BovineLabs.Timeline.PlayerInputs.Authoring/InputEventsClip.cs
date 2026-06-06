@@ -1,4 +1,4 @@
-using System;
+using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Reaction.Data.Core;
@@ -48,7 +48,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 }
             }
 
-            context.Baker.AddComponent(entity, new InputEventsConfig
+            var commands = new BakerCommands(context.Baker, entity);
+            commands.AddComponent(new InputEventsConfig
             {
                 ReadRootFrom = ReadRootFrom,
                 ConsumerLinkKey = linkKey,
@@ -59,7 +60,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 OnInputEnd = OnInputEnd != null ? OnInputEnd.Key : ConditionKey.Null
             });
 
-            context.Baker.AddComponent<InputEventsState>(entity);
+            commands.AddComponent<InputEventsState>();
 
             base.Bake(entity, context);
         }

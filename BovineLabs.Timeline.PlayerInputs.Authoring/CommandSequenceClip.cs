@@ -1,4 +1,5 @@
 using System;
+using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Timeline.Authoring;
@@ -80,13 +81,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             var blobRef = builder.CreateBlobAssetReference<CommandBlob>(Allocator.Persistent);
             builder.Dispose();
 
-            context.Baker.AddBlobAsset(ref blobRef, out _);
-            context.Baker.AddComponent(entity, new CommandSequenceConfig
+            var commands = new BakerCommands(context.Baker, entity);
+            commands.AddBlobAsset(ref blobRef, out _);
+            commands.AddComponent(new CommandSequenceConfig
             {
                 Blob = blobRef,
                 RouteEntity = target
             });
-            context.Baker.AddComponent<CommandSequenceState>(entity);
+            commands.AddComponent<CommandSequenceState>();
 
             base.Bake(entity, context);
         }

@@ -1,3 +1,5 @@
+using BovineLabs.Core.Authoring.EntityCommands;
+using BovineLabs.Core.EntityCommands;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
@@ -92,7 +94,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             if (LocalSpace) flags |= AxisTransformFlags.LocalSpace;
             if (CameraRelative) flags |= AxisTransformFlags.CameraRelative;
 
-            context.Baker.AddComponent(entity, new AxisTransformConfig
+            var commands = new BakerCommands(context.Baker, entity);
+            commands.AddComponent(new AxisTransformConfig
             {
                 ReadRootFrom = ReadRootFrom,
                 ConsumerLinkKey = linkKey,
@@ -108,7 +111,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Flags = flags
             });
 
-            context.Baker.AddComponent<AxisTransformState>(entity);
+            commands.AddComponent<AxisTransformState>();
 
             base.Bake(entity, context);
         }

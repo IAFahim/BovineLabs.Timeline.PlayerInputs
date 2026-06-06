@@ -1,4 +1,5 @@
 using System;
+using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Core.Collections;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Data;
@@ -37,7 +38,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     }
                 }
 
-            context.Baker.AddComponent(entity, new BufferWindowConfig { AllowedActions = mask });
+            var commands = new BakerCommands(context.Baker, entity);
+            commands.AddComponent(new BufferWindowConfig { AllowedActions = mask });
             base.Bake(entity, context);
         }
     }
