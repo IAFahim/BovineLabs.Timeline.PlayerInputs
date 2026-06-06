@@ -23,7 +23,9 @@
     "Unity.Timeline",
     "BovineLabs.Timeline.Core.Authoring",
     "BovineLabs.Timeline.PlayerInputs.Data",
-    "BovineLabs.Timeline.EntityLinks.Authoring"
+    "BovineLabs.Timeline.EntityLinks.Authoring",
+    "BovineLabs.Timeline.Grid.Influence.Authoring",
+    "BovineLabs.Timeline.Grid.Influence.Data"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

@@ -27,7 +27,8 @@
     "BovineLabs.Timeline",
     "BovineLabs.Timeline.EntityLinks.Data",
     "BovineLabs.Bridge",
-    "BovineLabs.Bridge.Data"
+    "BovineLabs.Bridge.Data",
+    "BovineLabs.Timeline.Grid.Influence.Data"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

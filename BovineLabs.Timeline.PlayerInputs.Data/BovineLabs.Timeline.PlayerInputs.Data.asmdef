@@ -19,7 +19,8 @@
     "Unity.Physics",
     "Unity.Transforms",
     "BovineLabs.Reaction.Data",
-    "BovineLabs.Reaction"
+    "BovineLabs.Reaction",
+    "BovineLabs.Timeline.Grid.Influence.Data"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
