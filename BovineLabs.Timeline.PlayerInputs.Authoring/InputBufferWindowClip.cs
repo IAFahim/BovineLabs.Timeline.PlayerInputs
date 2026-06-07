@@ -28,7 +28,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 foreach (var action in AllowedActions)
                 {
                     if (action == null) continue;
-                    if (MultiInputSettings.TryGetIndex(action, out var id))
+                    if (BovineLabs.Timeline.PlayerInputs.Authoring.MultiInputSettingsAuthoringUtility.TryGetIndex(action, out var id))
                         mask[id] = true;
                     else
                         Debug.LogError(

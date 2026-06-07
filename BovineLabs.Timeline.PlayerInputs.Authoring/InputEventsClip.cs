@@ -40,7 +40,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             byte actionId = 0;
             if (Action != null)
-                if (!MultiInputSettings.TryGetIndex(Action, out actionId))
+                if (!BovineLabs.Timeline.PlayerInputs.Authoring.MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
                     Debug.LogError(
                         $"InputEventsClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
 

@@ -61,7 +61,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     var actionRef = seqData.Steps[i].Action;
                     if (actionRef != null)
                     {
-                        if (MultiInputSettings.TryGetIndex(actionRef, out var id))
+                        if (BovineLabs.Timeline.PlayerInputs.Authoring.MultiInputSettingsAuthoringUtility.TryGetIndex(actionRef, out var id))
                             stepArray[i] = new CommandStep
                             {
                                 ActionId = id,

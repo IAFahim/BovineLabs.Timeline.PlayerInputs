@@ -27,14 +27,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             }
         }
 
-        public static bool TryGetIndex(InputActionReference reference, out byte index)
+        public bool TryGet(InputActionReference reference, out byte index)
         {
             index = 0;
-            if (I == null || reference?.action == null) return false;
+            if (reference?.action == null) return false;
 
-            for (byte i = 0; i < I.inputActions.Length; i++)
+            for (byte i = 0; i < inputActions.Length; i++)
             {
-                var input = I.inputActions[i];
+                var input = inputActions[i];
                 if (input?.action != null && input.action.id == reference.action.id)
                 {
                     index = i;
@@ -42,9 +42,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 }
             }
 
-            for (byte i = 0; i < I.inputActions.Length; i++)
+            for (byte i = 0; i < inputActions.Length; i++)
             {
-                var input = I.inputActions[i];
+                var input = inputActions[i];
                 if (input?.action != null && input.action.name == reference.action.name)
                 {
                     index = i;
@@ -52,6 +52,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 }
             }
 
+            return false;
+        }
+
+        public static bool TryGetIndex(InputActionReference reference, out byte index)
+        {
+            if (I != null) return I.TryGet(reference, out index);
+            index = 0;
             return false;
         }
     }

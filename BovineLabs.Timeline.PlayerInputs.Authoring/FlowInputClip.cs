@@ -50,7 +50,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
             }
 
             byte actionId = 0;
-            if (Action != null && !MultiInputSettings.TryGetIndex(Action, out actionId))
+            if (Action != null && !BovineLabs.Timeline.PlayerInputs.Authoring.MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
                 Debug.LogError($"FlowInputClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
 
             context.Baker.DependsOn(Field);
