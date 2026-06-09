@@ -25,7 +25,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 foreach (var action in ActionsToClear)
                 {
                     if (action == null) continue;
-                    if (BovineLabs.Timeline.PlayerInputs.Authoring.MultiInputSettingsAuthoringUtility.TryGetIndex(action, out var id))
+                    if (MultiInputSettingsAuthoringUtility.TryGetIndex(action, out var id))
                         mask[id] = true;
                     else
                         Debug.LogError(

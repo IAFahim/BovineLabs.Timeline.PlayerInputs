@@ -9,10 +9,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public static bool TryGetIndex(InputActionReference reference, out byte index)
         {
             var settings = AuthoringSettingsUtility.GetSettings<MultiInputSettings>();
-            if (settings != null)
-            {
-                return settings.TryGet(reference, out index);
-            }
+            if (settings != null) return settings.TryGet(reference, out index);
             index = 0;
             return false;
         }

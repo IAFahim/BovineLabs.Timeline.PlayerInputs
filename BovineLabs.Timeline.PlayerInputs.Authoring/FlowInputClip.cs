@@ -4,7 +4,7 @@ using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Authoring;
 using BovineLabs.Timeline.Grid.Influence.Data.Flows;
-using BovineLabs.Timeline.PlayerInputs.Data;
+using BovineLabs.Timeline.PlayerInputs.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Flow.Data.Builders;
 using Unity.Entities;
 using UnityEngine;
@@ -50,7 +50,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
             }
 
             byte actionId = 0;
-            if (Action != null && !BovineLabs.Timeline.PlayerInputs.Authoring.MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
+            if (Action != null && !MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
                 Debug.LogError($"FlowInputClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
 
             context.Baker.DependsOn(Field);

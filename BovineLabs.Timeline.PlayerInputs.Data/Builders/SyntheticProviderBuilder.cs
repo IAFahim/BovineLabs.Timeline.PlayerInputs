@@ -1,6 +1,5 @@
 using BovineLabs.Core.EntityCommands;
 using BovineLabs.Timeline.PlayerInputs.Data;
-using BovineLabs.Timeline.PlayerInputs.Flow.Data;
 
 namespace BovineLabs.Timeline.PlayerInputs.Flow.Data.Builders
 {

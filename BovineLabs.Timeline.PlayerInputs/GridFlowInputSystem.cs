@@ -8,7 +8,6 @@ using BovineLabs.Timeline.Grid.Influence.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Flows;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using BovineLabs.Timeline.PlayerInputs.Flow.Data;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
@@ -64,13 +63,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
 
             var playerIds = SystemAPI.GetComponentLookup<PlayerId>(true);
             var transforms = SystemAPI.GetComponentLookup<LocalTransform>(true);
-            var axisBuffers = SystemAPI.GetBufferLookup<InputAxis>(false);
+            var axisBuffers = SystemAPI.GetBufferLookup<InputAxis>();
 
             foreach (var axes in SystemAPI.Query<DynamicBuffer<InputAxis>>()
                          .WithAll<ProviderTag, SyntheticProviderTag>())
-            {
                 axes.Clear();
-            }
 
             foreach (var (config, binding, weight) in
                      SystemAPI.Query<RefRO<FlowInputConfig>, RefRO<TrackBinding>, RefRO<ClipWeight>>()

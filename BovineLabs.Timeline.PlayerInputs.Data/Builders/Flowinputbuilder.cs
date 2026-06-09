@@ -1,7 +1,6 @@
 using BovineLabs.Core.EntityCommands;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Grid.Influence.Data.Flows;
-using BovineLabs.Timeline.PlayerInputs.Flow.Data;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.PlayerInputs.Flow.Data.Builders
