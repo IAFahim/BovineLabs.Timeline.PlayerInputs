@@ -14,18 +14,22 @@ namespace BovineLabs.Timeline.PlayerInputs
     public partial struct ConsumerHistorySystem : ISystem
     {
         private ComponentLookup<InputState> states;
+        private ComponentLookup<InputHistoryLimit> limits;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<InputRegistry>();
+            state.RequireForUpdate<SimulationTick>();
             states = state.GetComponentLookup<InputState>(true);
+            limits = state.GetComponentLookup<InputHistoryLimit>(true);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             states.Update(ref state);
+            limits.Update(ref state);
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
@@ -33,7 +37,8 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 Registry = registry.ProviderByPlayer,
                 States = states,
-                Tick = (uint)(SystemAPI.Time.ElapsedTime * 1000.0)
+                Limits = limits,
+                Tick = SystemAPI.GetSingleton<SimulationTick>().Value
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -47,9 +52,12 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] [NativeDisableContainerSafetyRestriction]
             public ComponentLookup<InputState> States;
 
+            [ReadOnly] public ComponentLookup<InputHistoryLimit> Limits;
+
             public uint Tick;
 
-            private void Execute(in PlayerId id, in ActiveBufferMask mask, ref DynamicBuffer<InputHistory> history)
+            private void Execute(Entity entity, in PlayerId id, in ActiveBufferMask mask,
+                ref DynamicBuffer<InputHistory> history)
             {
                 if (mask.Value.AllFalse) return;
                 if (!InputAccess.TryGetState(Registry, States, id.Value, out var state)) return;
@@ -60,8 +68,12 @@ namespace BovineLabs.Timeline.PlayerInputs
                 var totalToAdd = downFiltered.CountBits() + upFiltered.CountBits();
                 if (totalToAdd == 0) return;
 
-                var removeCount = math.max(0, history.Length + totalToAdd - history.Capacity);
-                if (removeCount > 0) history.RemoveRange(0, removeCount);
+                var limit = Limits.TryGetComponent(entity, out var configured)
+                    ? HistoryMath.ClampLimit(configured.Value)
+                    : HistoryMath.DefaultLimit;
+
+                var evict = HistoryMath.EvictCount(history.Length, totalToAdd, limit);
+                if (evict > 0) history.RemoveRange(0, evict);
 
                 Emit(downFiltered.Data1, 0, InputPhase.Down, ref history, Tick);
                 Emit(downFiltered.Data2, 64, InputPhase.Down, ref history, Tick);
@@ -72,6 +84,9 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Emit(upFiltered.Data2, 64, InputPhase.Up, ref history, Tick);
                 Emit(upFiltered.Data3, 128, InputPhase.Up, ref history, Tick);
                 Emit(upFiltered.Data4, 192, InputPhase.Up, ref history, Tick);
+
+                var overflow = HistoryMath.OverflowCount(history.Length, limit);
+                if (overflow > 0) history.RemoveRange(0, overflow);
             }
 
             private static void Emit(ulong data, byte offset, InputPhase phase,

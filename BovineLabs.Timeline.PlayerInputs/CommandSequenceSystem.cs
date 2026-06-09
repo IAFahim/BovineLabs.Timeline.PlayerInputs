@@ -67,9 +67,11 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             _uniqueKeySet.Clear();
 
-            state.Dependency.Complete();
-
-            new GatherJob
+            // Gather runs single-threaded (Schedule, not Run): the previous Run()
+            // forced a blocking main-thread sync, defeating the job pipeline. Parallel
+            // scheduling is unsafe here because CommitConsumes writes InputHistory
+            // buffers that multiple clips may share when bound to the same consumer.
+            state.Dependency = new GatherJob
             {
                 EventChanges = _eventChanges.AsWriter(),
                 UniqueKeys = _uniqueKeySet.AsParallelWriter(),
@@ -77,7 +79,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 States = states,
                 PlayerIds = playerIds,
                 Histories = histories
-            }.Run();
+            }.Schedule(state.Dependency);
 
             state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
 
@@ -133,9 +135,13 @@ namespace BovineLabs.Timeline.PlayerInputs
                     var consumeMask = default(BitArray256);
                     var searchIndex = 0;
                     var matched = true;
+                    // Tick of the most recently matched step; uint.MaxValue means
+                    // "no prior step yet" so the first step has no gap constraint.
+                    var lastMatchTick = uint.MaxValue;
 
                     for (var i = 0; i < seq.Steps.Length; i++)
-                        if (!Evaluate(ref seq.Steps[i], state, history, ref consumeMask, ref searchIndex))
+                        if (!Evaluate(ref seq.Steps[i], state, history, ref consumeMask, ref searchIndex,
+                                ref lastMatchTick))
                         {
                             matched = false;
                             break;
@@ -148,17 +154,19 @@ namespace BovineLabs.Timeline.PlayerInputs
                     EventChanges.Add(config.RouteEntity, new EventAmount(seq.Condition, seq.Value));
                     UniqueKeys.Add(config.RouteEntity);
 
-                    commandState.IsCompleted = true;
+                    if (seq.Repeat == 0) commandState.IsCompleted = true;
                     return;
                 }
             }
 
             private static bool Evaluate(ref CommandStep step, in InputState state,
-                in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask, ref int searchIndex)
+                in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask, ref int searchIndex,
+                ref uint lastMatchTick)
             {
                 switch (step.Mode)
                 {
                     case CommandMode.None:
+                        // Live-state probe: not part of the buffered timing chain.
                         return step.Phase switch
                         {
                             InputPhase.Down => state.Down[step.ActionId],
@@ -174,6 +182,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         {
                             if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                                 history[i].Phase != step.Phase) continue;
+                            if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
                             if (step.Mode == CommandMode.Consume) consumeMask[i] = true;
                             return true;
                         }
@@ -187,6 +196,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         {
                             if (consumeMask[i]) continue;
                             if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
+                            if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
                             consumeMask[i] = true;
                             return true;
                         }
@@ -200,6 +210,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         {
                             if (consumeMask[i]) continue;
                             if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
+                            if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
                             consumeMask[i] = true;
                             return true;
                         }
@@ -214,6 +225,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         {
                             if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                                 history[i].Phase != step.Phase) continue;
+                            if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
                             if (step.Mode == CommandMode.OrderedConsume) consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;
@@ -228,6 +240,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                         {
                             if (consumeMask[i]) continue;
                             if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
+                            if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
                             consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;
@@ -241,7 +254,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                         for (var i = history.Length - 1; i >= searchIndex; i--)
                         {
                             if (consumeMask[i] || history[i].ActionId != step.ActionId ||
-                                (byte)history[i].Phase != (byte)step.Phase) continue;
+                                history[i].Phase != step.Phase) continue;
+                            if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
                             consumeMask[i] = true;
                             searchIndex = i + 1;
                             return true;
@@ -285,6 +299,26 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                     default: return false;
                 }
+            }
+
+            // Enforces the per-step timing window: a matched entry at matchTick must
+            // arrive no later than maxGapTicks after the previously matched step.
+            // History ticks are monotonically non-decreasing, so a forward step that
+            // is older than the previous match (matchTick < lastMatchTick) also fails.
+            // Granularity is one simulation frame: entries recorded in the same frame
+            // share a Tick, so MaxGapTicks counts frames. Intra-frame ordering is the
+            // job of the Ordered* modes via searchIndex, not of this window.
+            // On success, advances lastMatchTick to the matched entry.
+            private static bool WithinWindow(uint matchTick, ushort maxGapTicks, ref uint lastMatchTick)
+            {
+                if (lastMatchTick != uint.MaxValue)
+                {
+                    if (matchTick < lastMatchTick) return false;
+                    if (maxGapTicks != 0 && matchTick - lastMatchTick > maxGapTicks) return false;
+                }
+
+                lastMatchTick = matchTick;
+                return true;
             }
 
             private static void CommitConsumes(DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask)

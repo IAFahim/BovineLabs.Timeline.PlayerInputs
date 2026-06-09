@@ -9,13 +9,18 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             byte playerId,
             bool controllable,
             OverrideTrigger overrideTrigger,
-            float releaseIdleSeconds)
+            float releaseIdleSeconds,
+            ushort historyLimit = HistoryMath.DefaultLimit)
             where T : struct, IEntityCommands
         {
             commands.AddComponent(new PlayerId { Value = playerId });
             commands.AddComponent<ConsumerTag>();
             commands.AddComponent<ActiveBufferMask>();
             commands.AddBuffer<InputHistory>();
+            commands.AddComponent(new InputHistoryLimit
+            {
+                Value = (ushort)HistoryMath.ClampLimit(historyLimit)
+            });
 
             if (controllable)
             {
@@ -30,6 +35,29 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 });
                 commands.AddComponent<OverrideState>();
             }
+        }
+
+        // Adds eight-way direction tracking for one axis action on top of a consumer
+        // built by Build. DirectionInputSystem populates DirectionState each tick.
+        public static void AddDirection<T>(
+            ref T commands,
+            byte actionId,
+            float deadZone,
+            sbyte facing)
+            where T : struct, IEntityCommands
+        {
+            commands.AddComponent(new DirectionConfig
+            {
+                ActionId = actionId,
+                DeadZone = deadZone,
+                Facing = facing
+            });
+            commands.AddComponent(new DirectionState
+            {
+                Current = Direction.Neutral,
+                Previous = Direction.Neutral,
+                ChangedTick = 0
+            });
         }
     }
 }

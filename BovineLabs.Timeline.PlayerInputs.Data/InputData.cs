@@ -71,6 +71,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public float2 Value;
     }
 
+    // Append-only ring of discrete input transitions for one consumer. Records
+    // Down and Up edges only — never Held — because Held is true every frame and
+    // would flood the buffer. Sequences that need a sustained hold must express it
+    // with CommandMode.None (a live-state probe), not a buffered Held step.
     [InternalBufferCapacity(0)]
     public struct InputHistory : IBufferElementData
     {
@@ -107,6 +111,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public byte ActionId;
         public CommandMode Mode;
         public InputPhase Phase;
+
+        // Maximum simulation ticks allowed between this step's match and the
+        // previous matched step. 0 means no timing constraint (link is unbounded).
+        // This is what makes motion inputs (236P) and frame links expressible:
+        // a step that must follow within N deterministic ticks of its predecessor.
+        public ushort MaxGapTicks;
     }
 
     public struct CommandSequence
@@ -114,6 +124,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public BlobArray<CommandStep> Steps;
         public ConditionKey Condition;
         public int Value;
+
+        // Non-zero: the sequence re-arms after firing instead of latching
+        // CommandSequenceState.IsCompleted for the rest of the clip. Pair with
+        // consuming step modes so the matched history is removed on fire;
+        // otherwise a still-matching history retriggers every frame.
+        public byte Repeat;
     }
 
     public struct CommandBlob
@@ -199,5 +215,122 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public struct InputEventsState : IComponentData
     {
         public bool WasInputActive;
+    }
+
+    // Deterministic monotonic frame counter, advanced once per simulation step by
+    // SimulationTickSystem. Replaces wall-clock time for input history and timing
+    // windows so that command recognition is identical on client, server, and replay.
+    public struct SimulationTick : IComponentData
+    {
+        public uint Value;
+    }
+
+    // Quantised eight-way direction derived from a stick/axis, plus Neutral.
+    // The numeric layout follows fighting-game numpad notation so motion inputs
+    // read the way designers think about them (236 = Down, DownForward, Forward).
+    public enum Direction : byte
+    {
+        Neutral = 5,
+        Down = 2,
+        Up = 8,
+        Back = 4,
+        Forward = 6,
+        DownBack = 1,
+        DownForward = 3,
+        UpBack = 7,
+        UpForward = 9
+    }
+
+    // Per-consumer resolved facing-relative direction for one axis action.
+    // Written by DirectionInputSystem, read by command evaluation and gameplay.
+    public struct DirectionState : IComponentData
+    {
+        public Direction Current;
+        public Direction Previous;
+        public uint ChangedTick;
+    }
+
+    // Configures how a consumer's analog axis is quantised into a Direction.
+    // DeadZone gates Neutral; Facing flips Back/Forward when the character faces -X.
+    public struct DirectionConfig : IComponentData
+    {
+        public byte ActionId;
+        public float DeadZone;
+        public sbyte Facing; // +1 faces +X, -1 faces -X
+    }
+
+    // Optional per-consumer cap on InputHistory length. Absent, consumers use
+    // HistoryMath.DefaultLimit. Values are clamped to [1, HistoryMath.MaxLimit];
+    // the upper bound exists because command evaluation tracks consumed entries
+    // in a BitArray256 indexed by history position.
+    public struct InputHistoryLimit : IComponentData
+    {
+        public ushort Value;
+    }
+
+    public static class HistoryMath
+    {
+        public const int DefaultLimit = 64;
+        public const int MaxLimit = 256;
+
+        public static int ClampLimit(int limit)
+        {
+            return math.clamp(limit, 1, MaxLimit);
+        }
+
+        // Number of oldest entries to evict so that length + toAdd fits in limit.
+        // Total: never negative, never exceeds length (you cannot remove entries
+        // that do not exist — the previous capacity-based version did exactly that
+        // on an empty heap buffer whose Capacity starts at zero, and crashed).
+        public static int EvictCount(int length, int toAdd, int limit)
+        {
+            return math.clamp(length + toAdd - limit, 0, length);
+        }
+
+        // Entries to drop from the back after appending when a single frame adds
+        // more than the limit itself (toAdd > limit). Keeps the most recent 'limit'.
+        public static int OverflowCount(int length, int limit)
+        {
+            return math.max(0, length - limit);
+        }
+    }
+
+    public static class DirectionMath
+    {
+        // tan(22.5deg): the half-angle of an octant. A component is "active" when it
+        // exceeds the other component scaled by this, giving clean 45-degree octants.
+        private const float OctantSplit = 0.41421356f;
+
+        // Pure eight-way quantisation of an axis into numpad-notation Direction.
+        // Total: every input maps to exactly one Direction; inside the dead zone
+        // (or at the origin) the result is Neutral. Facing < 0 mirrors X so that
+        // Back/Forward stay relative to the character's facing.
+        public static Direction Quantise(float2 value, float deadZone, sbyte facing)
+        {
+            if (math.lengthsq(value) <= deadZone * deadZone)
+                return Direction.Neutral;
+
+            var x = facing < 0 ? -value.x : value.x;
+            var y = value.y;
+
+            var ax = math.abs(x);
+            var ay = math.abs(y);
+
+            var horiz = ax > ay * OctantSplit ? (int)math.sign(x) : 0;
+            var vert = ay > ax * OctantSplit ? (int)math.sign(y) : 0;
+
+            return (horiz, vert) switch
+            {
+                (0, 1) => Direction.Up,
+                (0, -1) => Direction.Down,
+                (-1, 0) => Direction.Back,
+                (1, 0) => Direction.Forward,
+                (-1, 1) => Direction.UpBack,
+                (1, 1) => Direction.UpForward,
+                (-1, -1) => Direction.DownBack,
+                (1, -1) => Direction.DownForward,
+                _ => Direction.Neutral
+            };
+        }
     }
 }

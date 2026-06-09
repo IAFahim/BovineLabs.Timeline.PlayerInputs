@@ -42,10 +42,15 @@ namespace BovineLabs.Timeline.PlayerInputs
                      SystemAPI.Query<RefRO<PlayerId>>().WithAll<ProviderTag>().WithEntityAccess())
             {
                 var slot = id.ValueRO.Value;
-                if (next[slot] != Entity.Null)
+                var existing = next[slot];
+                if (existing != Entity.Null)
                 {
+                    // Deterministic tie-break: keep the lower entity so the registry
+                    // is independent of archetype/query iteration order across
+                    // structural changes. Without this, which duplicate "wins" could
+                    // differ between client and server for the same world state.
                     ReportDuplicate(slot);
-                    continue;
+                    if (existing.Index <= entity.Index) continue;
                 }
 
                 next[slot] = entity;
