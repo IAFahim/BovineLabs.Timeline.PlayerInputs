@@ -1,0 +1,7 @@
+[
+  {
+    "id": "unity-track-player-inputs",
+    "displayName": "Track Player Inputs",
+    "description": "Master of the BovineLabs.Timeline.PlayerInputs track family — CommandSequenceTrack/Clip (the input->ConditionEvent chain that turns a key/stick combo into a reaction trigger), InputEventsTrack (raw start/end edges of one action -> events), InputBufferTrack (window/clear: what gets recorded into the input history the sequences read), FlowInputTrack (a fake field-driven axis), and InputConsumerAuthoring (the bind target that reads a joined player). Owns the must-have-an-active-Buffer-Window-or-nothing-records trap, the live-probe-vs-buffered-transition rule, Repeatable-without-Consume retrigger, and the route/link resolution. Portable to any project containing the package; worked example from vex-ee. Use when a designer asks \\\"do X when the player presses/holds this\\\" or \\\"fire a fireball motion (236P)\\\"."
+  }
+]

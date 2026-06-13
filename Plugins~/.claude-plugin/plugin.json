@@ -1,0 +1,8 @@
+{
+  "name": "bovinelabs-timeline-playerinputs",
+  "description": "Vex Unity agent skills shipped with BovineLabs Timeline Player Inputs.",
+  "version": "1.0.0",
+  "author": {
+    "name": "BovineLabs"
+  }
+}
