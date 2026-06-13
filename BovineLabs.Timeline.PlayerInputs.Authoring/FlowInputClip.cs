@@ -15,19 +15,28 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
 {
     public sealed class FlowInputClip : DOTSClip, ITimelineClipAsset
     {
-        [Header("Field")] public GridFieldSchemaObject Field;
+        [Header("Field")]
+        [Tooltip("Grid field schema sampled to synthesise the fake axis.")]
+        public GridFieldSchemaObject Field;
 
+        [Tooltip("Direction the flow follows the field gradient: Descend goes downhill, Ascend uphill.")]
         public FlowBias Bias = FlowBias.Descend;
 
-        [Header("Routing")] public Target ReadRootFrom = Target.Owner;
+        [Header("Routing")]
+        [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
+        public Target ReadRootFrom = Target.Owner;
 
+        [Tooltip("Link to the input consumer whose action axis this fake input replaces.")]
         public EntityLinkSchema ConsumerLink;
 
         [Tooltip("Movement action whose axis this fake input replaces. " +
                  "Must match the ActionId the consumer's AxisTransform clip reads.")]
         public InputActionReference Action;
 
-        [Header("Shaping")] [Range(0f, 1f)] public float Gain = 1f;
+        [Header("Shaping")]
+        [Range(0f, 1f)]
+        [Tooltip("Scales the synthesised axis magnitude. 1 = full flow, 0 = no input.")]
+        public float Gain = 1f;
 
         [Tooltip("Sample point relative to the bound target.")]
         public Vector3 LocalOffset;

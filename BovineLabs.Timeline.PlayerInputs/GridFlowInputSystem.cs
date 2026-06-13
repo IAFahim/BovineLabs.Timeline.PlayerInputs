@@ -64,6 +64,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             var playerIds = SystemAPI.GetComponentLookup<PlayerId>(true);
             var transforms = SystemAPI.GetComponentLookup<LocalTransform>(true);
             var axisBuffers = SystemAPI.GetBufferLookup<InputAxis>();
+            var synthetic = SystemAPI.GetComponentLookup<SyntheticProviderTag>(true);
 
             foreach (var axes in SystemAPI.Query<DynamicBuffer<InputAxis>>()
                          .WithAll<ProviderTag, SyntheticProviderTag>())
@@ -91,6 +92,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
 
                 var provider = registry[playerId.Value];
                 if (provider == Entity.Null || !axisBuffers.HasBuffer(provider))
+                    continue;
+
+                if (!synthetic.HasComponent(provider))
                     continue;
 
                 if (!reg.KeyToSlot.TryGetValue(cfg.FieldKey, out var slotIndex))

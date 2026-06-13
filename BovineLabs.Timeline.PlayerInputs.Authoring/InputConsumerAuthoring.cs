@@ -7,10 +7,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public class InputConsumerAuthoring : MonoBehaviour
     {
+        [Tooltip("Which joined player this consumer reads input from.")]
         public byte PlayerId;
 
+        [Tooltip("When enabled, this consumer can be taken over by a timeline so authored input overrides the live player.")]
         public bool Controllable;
+
+        [Tooltip("Only takes effect when Controllable is enabled. Selects which input edge hands control to the override.")]
         public OverrideTrigger OverrideTrigger = OverrideTrigger.AnyInput;
+
+        [Tooltip("Only takes effect when Controllable is enabled. Seconds of input idle before control is released back.")]
         public float ReleaseIdleSeconds = 0.25f;
 
         [Range(1, 256)]
@@ -18,14 +24,18 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public ushort HistoryLimit = 64;
 
         [Header("Direction (optional)")]
+        [Tooltip("Enable to quantise a movement axis into an eight-way Direction each tick.")]
         public bool TrackDirection;
 
         [Tooltip("Axis action quantised into an eight-way Direction each tick.")]
         public UnityEngine.InputSystem.InputActionReference DirectionAction;
 
-        [Range(0f, 1f)] public float DirectionDeadZone = 0.3f;
+        [Range(0f, 1f)]
+        [Tooltip("Axis magnitude below this is treated as no direction.")]
+        public float DirectionDeadZone = 0.3f;
 
-        [Tooltip("+1 if the character faces +X, -1 if it faces -X. Flips Back/Forward.")]
+        [Tooltip("Only the sign matters: >=0 faces +X (+1 forward), <0 faces -X (-1 back). " +
+                 "Other magnitudes are coerced to +/-1 at bake. Flips Back/Forward.")]
         public sbyte DirectionFacing = 1;
 
         public class Baker : Baker<InputConsumerAuthoring>

@@ -79,6 +79,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             var p = new ToolParams(@params);
             var op = (p.Get("op", "list") ?? "list").Trim().ToLowerInvariant();
 
+            // Make injected input survive while Unity is unfocused. No player-loop nudges
+            // (those drop events) — just the three settings that, together, let the normal
+            // play loop process injected input in the background.
+            EnsureInputAwake();
+
             switch (op)
             {
                 case "list": return List();
@@ -238,22 +243,42 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             var pi = PlayerAt(playerIndex, out var err);
             if (pi == null) return err;
 
-            // Never let Game-View focus gate injected device input.
-            InputSystem.settings.editorInputBehaviorInPlayMode =
-                InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
-
             string provider = p.Get("provider", null);
             string controlPath = p.Get("control", null);
             string actionName = p.Get("action", "Jump");
+            float value = p.GetFloat("value", 1f) ?? 1f;
+            float x = p.GetFloat("x", value) ?? value;
+            float y = p.GetFloat("y", 0f) ?? 0f;
+            bool released = op == "release";
+
+            var devices = FilterDevices(pi.devices, provider);
+            if (devices.Count == 0)
+                return new ErrorResponse("Player has no paired device" +
+                    (string.IsNullOrEmpty(provider) ? "." : $" matching provider '{provider}'. See `list`."));
+
+            // A keyboard 'Move' (and similar) is a 2D-vector composite of button parts
+            // (up/down/left/right keys), NOT a single Vector2 stick — so drive the part
+            // keys from x/y. (Gamepad sticks resolve to a real Vector2 and take the path
+            // below.) Part names/paths are read from the action's own bindings, not hardcoded.
+            if (string.IsNullOrEmpty(controlPath))
+            {
+                var act = pi.actions != null ? pi.actions.FindAction(actionName, throwIfNotFound: false) : null;
+                if (act == null) return new ErrorResponse($"Player has no action named '{actionName}'. See `list`.");
+                if (!act.enabled) act.Enable();
+                if (IsButtonComposite(act, devices))
+                {
+                    int n = DriveComposite(act, devices, x, y, released);
+                    if (n == 0) return new ErrorResponse($"Could not resolve composite parts for '{actionName}' on the player's device(s).");
+                    string vlabel = released ? "(0,0)" : $"({x},{y})";
+                    return new SuccessResponse($"{(released ? "Released" : "Set")} '{actionName}' = {vlabel} via {n} key(s) on player {playerIndex}.");
+                }
+            }
 
             var control = ResolveControl(pi, controlPath, actionName, provider, out var why);
             if (control == null) return new ErrorResponse(why);
 
-            float value = p.GetFloat("value", 1f) ?? 1f;
-            bool released = op == "release";
             var floatControl = control as InputControl<float>;
             var vec2Control = control as InputControl<Vector2>;
-
             if (floatControl == null && vec2Control == null)
                 return new ErrorResponse($"Control '{control.path}' is {control.valueType.Name}; only float (button/axis) and Vector2 (stick) are supported.");
 
@@ -266,9 +291,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 return new SuccessResponse($"Released '{label}' on player {playerIndex} ({control.path}).");
             }
 
-            string what = vec2Control != null
-                ? $"({p.GetFloat("x", value) ?? value},{p.GetFloat("y", 0f) ?? 0f})"
-                : value.ToString();
+            string what = vec2Control != null ? $"({x},{y})" : value.ToString();
 
             if (op == "press")
                 return new SuccessResponse($"Pressed '{label}'={what} on player {playerIndex} ({control.path}). op=release to let go.");
@@ -278,6 +301,80 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             Pending.Add(new PendingRelease { Control = control, ReleaseAtFrame = Time.frameCount + holdFrames });
             EnsureHooked();
             return new SuccessResponse($"Tapped '{label}'={what} on player {playerIndex} ({control.path}); auto-release in {holdFrames} frames.");
+        }
+
+        // Set the three settings that together let injected input be processed while Unity
+        // is unfocused: keep the play loop running, keep devices alive on focus loss, and
+        // route editor input to the game view regardless of focus. These reset on domain
+        // reload, so we re-assert them on every call. No QueuePlayerLoopUpdate — forcing
+        // the loop at request time discards the queued events.
+        private static void EnsureInputAwake()
+        {
+            if (Application.isPlaying)
+                Application.runInBackground = true;
+            var s = InputSystem.settings;
+            if (s.backgroundBehavior != InputSettings.BackgroundBehavior.IgnoreFocus)
+                s.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
+            if (s.editorInputBehaviorInPlayMode != InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView)
+                s.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+        }
+
+        // True when, ON THE CHOSEN DEVICES, the action is a Vector2 made of button parts
+        // (e.g. keyboard WASD) rather than a single Vector2 control (a gamepad stick). Being
+        // device-aware lets a player with both keyboard+gamepad pick the right path per provider.
+        private static bool IsButtonComposite(InputAction action, List<InputDevice> devices)
+        {
+            foreach (var c in action.controls)
+                if (c is InputControl<Vector2> && devices.Contains(c.device)) return false; // a real stick on our device
+            foreach (var b in action.bindings)
+            {
+                if (!b.isPartOfComposite) continue;
+                foreach (var d in devices)
+                    if (InputControlPath.TryFindControl(d, b.effectivePath) is InputControl<float>) return true;
+            }
+            return false;
+        }
+
+        // Drive a 2D-vector button composite from x/y: press the up/down/left/right part
+        // keys (resolved from the action's own bindings) and zero the rest. released=true
+        // zeroes all four.
+        private static int DriveComposite(InputAction action, List<InputDevice> devices, float x, float y, bool released)
+        {
+            var want = new Dictionary<string, float> { { "up", 0f }, { "down", 0f }, { "left", 0f }, { "right", 0f } };
+            if (!released)
+            {
+                if (y > 0f) want["up"] = Mathf.Abs(y);
+                else if (y < 0f) want["down"] = Mathf.Abs(y);
+                if (x > 0f) want["right"] = Mathf.Abs(x);
+                else if (x < 0f) want["left"] = Mathf.Abs(x);
+            }
+            // Collect every part control + its target value, grouped by device. All parts
+            // on one device MUST be written into a SINGLE state event — separate per-key
+            // events each snapshot the whole device and clobber each other (net zero).
+            var byDevice = new Dictionary<InputDevice, List<KeyValuePair<InputControl<float>, float>>>();
+            foreach (var b in action.bindings)
+            {
+                if (!b.isPartOfComposite) continue;
+                var nm = (b.name ?? "").ToLowerInvariant();
+                if (!want.ContainsKey(nm)) continue;
+                foreach (var d in devices)
+                {
+                    if (!(InputControlPath.TryFindControl(d, b.effectivePath) is InputControl<float> fc)) continue;
+                    if (!byDevice.TryGetValue(d, out var list)) { list = new List<KeyValuePair<InputControl<float>, float>>(); byDevice[d] = list; }
+                    list.Add(new KeyValuePair<InputControl<float>, float>(fc, want[nm]));
+                    break;
+                }
+            }
+            int driven = 0;
+            foreach (var kv in byDevice)
+            {
+                using (StateEvent.From(kv.Key, out var eventPtr))
+                {
+                    foreach (var cv in kv.Value) { cv.Key.WriteValueIntoEvent(cv.Value, eventPtr); driven++; }
+                    InputSystem.QueueEvent(eventPtr);
+                }
+            }
+            return driven;
         }
 
         // Resolve the control to drive: explicit control path first, else the action's control

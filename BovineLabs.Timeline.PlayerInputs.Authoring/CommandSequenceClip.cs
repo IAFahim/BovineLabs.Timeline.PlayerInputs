@@ -16,8 +16,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     [Serializable]
     public struct CommandStepData
     {
+        [Tooltip("Input action this step must match.")]
         public InputActionReference Action;
+
+        [Tooltip("How this step reads history: None probes live state, Contains/Consume families match buffered transitions.")]
         public CommandMode Mode;
+
+        [Tooltip("Which transition to match: Down on press, Up on release, Held while sustained.")]
         public InputPhase Phase;
 
         [Tooltip("Max simulation ticks allowed between this step and the previous matched step. " +
@@ -29,8 +34,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
     [Serializable]
     public class CommandSequenceData
     {
+        [Tooltip("Ordered steps that must all match for this sequence to fire.")]
         public CommandStepData[] Steps = Array.Empty<CommandStepData>();
+
+        [Tooltip("Condition event fired at the routed entity when the sequence matches.")]
         public ConditionEventObject Condition;
+
+        [Tooltip("Value carried by the fired condition event.")]
         public int Value = 1;
 
         [Tooltip("On: the sequence re-arms after firing and can trigger again while the clip stays active " +
@@ -42,7 +52,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         "Sequences are evaluated top-to-bottom. High priority should be first. First successful match triggers event and completes sequence clip.")]
     public sealed class CommandSequenceClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Sequences evaluated top-to-bottom; the first that matches fires and completes the clip.")]
         public CommandSequenceData[] Sequences = Array.Empty<CommandSequenceData>();
+
+        [Tooltip("Link whose entity receives the fired condition events. Defaults to the clip target when unset.")]
         public EntityLinkSchema RouteTo;
 
         public override double duration => .5f;

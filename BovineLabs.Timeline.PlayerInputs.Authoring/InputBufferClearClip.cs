@@ -35,7 +35,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             var commands = new BakerCommands(context.Baker, entity);
             commands.AddComponent(new BufferClearConfig { ActionMask = mask });
-            commands.SetComponentEnabled<BufferClearConfig>(false);
             base.Bake(entity, context);
         }
     }

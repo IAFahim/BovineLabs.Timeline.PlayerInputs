@@ -7,6 +7,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
 {
     public class SyntheticProviderAuthoring : MonoBehaviour
     {
+        [Tooltip("Player slot this synthetic provider feeds input into.")]
         public byte PlayerId;
 
         public class Baker : Baker<SyntheticProviderAuthoring>

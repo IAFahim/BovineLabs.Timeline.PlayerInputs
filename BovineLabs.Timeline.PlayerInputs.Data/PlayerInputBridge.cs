@@ -43,7 +43,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             CurrentAxes.Clear();
             foreach (var axis in axes)
             {
-                var isVec2 = axis.Action.expectedControlType == "Vector2";
+                var isVec2 = IsTwoDimensional(axis.Action);
                 var val = isVec2
                     ? (float2)axis.Action.ReadValue<Vector2>()
                     : new float2(axis.Action.ReadValue<float>(), 0f);
@@ -72,6 +72,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
                 if (action.type == InputActionType.Button) buttons.Add((i, action));
                 else if (action.type == InputActionType.Value) axes.Add((i, action));
+                else if (action.type == InputActionType.PassThrough)
+                {
+                    if (IsTwoDimensional(action)) axes.Add((i, action));
+                    else buttons.Add((i, action));
+                }
             }
 
             initialized = true;
@@ -113,6 +118,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             }
 
             return true;
+        }
+
+        private static bool IsTwoDimensional(InputAction action)
+        {
+            var type = action.expectedControlType;
+            if (type == "Vector2" || type == "Stick" || type == "Dpad") return true;
+            if (!string.IsNullOrEmpty(type)) return false;
+
+            var controls = action.controls;
+            for (var i = 0; i < controls.Count; i++)
+                if (controls[i].valueType == typeof(Vector2)) return true;
+
+            return false;
         }
 
         private static bool TryFindAction(PlayerInput input, InputActionReference reference, out InputAction action)

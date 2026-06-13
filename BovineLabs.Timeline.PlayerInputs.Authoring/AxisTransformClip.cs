@@ -12,13 +12,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public sealed class AxisTransformClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
+
+        [Tooltip("Link to the input consumer whose action axis drives this clip.")]
         public EntityLinkSchema ConsumerLink;
 
         [Tooltip("Entity whose world position the carrot is tethered to. " +
                  "Without this, leash clamps relative to the carrot's initial position.")]
         public EntityLinkSchema AnchorLink;
 
+        [Tooltip("Movement action whose [-1,1] axis drives this clip.")]
         public InputActionReference Action;
 
         [Tooltip("Scales [-1,1] input range. Range=5 means output spans [-5,5]. " +

@@ -14,15 +14,26 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public sealed class InputEventsClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
+
+        [Tooltip("Link to the input consumer whose action this clip watches.")]
         public EntityLinkSchema ConsumerLink;
 
+        [Tooltip("Input action whose start/end edges fire the events below.")]
         public InputActionReference Action;
 
-        [Header("Events")] public Target EventRouteTo = Target.Self;
+        [Header("Events")]
+        [Tooltip("Where to resolve the entity that receives the fired events from.")]
+        public Target EventRouteTo = Target.Self;
 
+        [Tooltip("Link used to resolve the event target when EventRouteTo needs one.")]
         public EntityLinkSchema EventRouteLink;
+
+        [Tooltip("Condition event fired when the action input begins.")]
         public ConditionEventObject OnInputStart;
+
+        [Tooltip("Condition event fired when the action input ends.")]
         public ConditionEventObject OnInputEnd;
 
         public override double duration => 1;
