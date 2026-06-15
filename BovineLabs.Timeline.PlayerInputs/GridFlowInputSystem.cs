@@ -115,11 +115,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (math.all(gradient == float2.zero))
                     continue;
 
-                Upsert(axisBuffers[provider], cfg.ActionId, gradient * (cfg.Gain * weight.ValueRO.Value));
+                Accumulate(axisBuffers[provider], cfg.ActionId, gradient * (cfg.Gain * weight.ValueRO.Value));
             }
         }
 
-        private static void Upsert(DynamicBuffer<InputAxis> axes, byte actionId, float2 value)
+        // Accumulate, don't overwrite: multiple FlowInput clips (e.g. a crossfade) can drive the
+        // same provider action in one frame. Summing the weighted contributions blends them and is
+        // order-independent, where last-writer-wins would collapse to one clip and depend on the
+        // non-deterministic query iteration order. The buffer is cleared once per frame above.
+        private static void Accumulate(DynamicBuffer<InputAxis> axes, byte actionId, float2 value)
         {
             for (var i = 0; i < axes.Length; i++)
             {
@@ -127,7 +131,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                     continue;
 
                 var entry = axes[i];
-                entry.Value = value;
+                entry.Value += value;
                 axes[i] = entry;
                 return;
             }

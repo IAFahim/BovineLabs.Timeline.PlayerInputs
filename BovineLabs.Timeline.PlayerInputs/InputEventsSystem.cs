@@ -78,6 +78,11 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             _uniqueKeySet.Clear();
 
+            // Edge detection is stateful (WasInputActive). Reset it on the first active frame so a
+            // clip re-activated while the input is still held emits a fresh start edge instead of
+            // inheriting the previous activation's state (missed OnInputStart / spurious OnInputEnd).
+            state.Dependency = new InitJob().ScheduleParallel(state.Dependency);
+
             state.Dependency = new GatherJob
             {
                 EventChanges = _eventChanges.AsWriter(),
@@ -106,6 +111,17 @@ namespace BovineLabs.Timeline.PlayerInputs
             }.Schedule(_uniqueKeys, 64, state.Dependency);
 
             state.Dependency = _eventChanges.Clear(state.Dependency);
+        }
+
+        [BurstCompile]
+        [WithAll(typeof(ClipActive))]
+        [WithNone(typeof(ClipActivePrevious))]
+        private partial struct InitJob : IJobEntity
+        {
+            private void Execute(ref InputEventsState state)
+            {
+                state.WasInputActive = false;
+            }
         }
 
         [BurstCompile]

@@ -10,7 +10,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             bool controllable,
             OverrideTrigger overrideTrigger,
             float releaseIdleSeconds,
-            ushort historyLimit = HistoryMath.DefaultLimit)
+            ushort historyLimit = HistoryMath.DefaultLimit,
+            byte overrideTriggerActionId = 0)
             where T : struct, IEntityCommands
         {
             commands.AddComponent(new PlayerId { Value = playerId });
@@ -30,7 +31,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 commands.AddComponent(new OverridePolicy
                 {
                     Trigger = overrideTrigger,
-                    TriggerActionId = 0,
+                    TriggerActionId = overrideTriggerActionId,
                     ReleaseIdleSeconds = releaseIdleSeconds
                 });
                 commands.AddComponent<OverrideState>();

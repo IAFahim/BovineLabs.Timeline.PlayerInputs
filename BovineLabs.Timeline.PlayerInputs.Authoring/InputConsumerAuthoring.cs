@@ -16,6 +16,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Only takes effect when Controllable is enabled. Selects which input edge hands control to the override.")]
         public OverrideTrigger OverrideTrigger = OverrideTrigger.AnyInput;
 
+        [Tooltip("Only used when Controllable and OverrideTrigger=Action: the action whose press/hold hands control to the override.")]
+        public UnityEngine.InputSystem.InputActionReference OverrideAction;
+
         [Tooltip("Only takes effect when Controllable is enabled. Seconds of input idle before control is released back.")]
         public float ReleaseIdleSeconds = 0.25f;
 
@@ -44,13 +47,23 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             {
                 var entity = GetEntity(TransformUsageFlags.None);
                 var commands = new BakerCommands(this, entity);
+
+                byte overrideActionId = 0;
+                if (authoring.Controllable && authoring.OverrideTrigger == OverrideTrigger.Action &&
+                    authoring.OverrideAction != null &&
+                    !MultiInputSettingsAuthoringUtility.TryGetIndex(authoring.OverrideAction, out overrideActionId))
+                    UnityEngine.Debug.LogError(
+                        $"InputConsumerAuthoring override action '{authoring.OverrideAction.name}' " +
+                        "not found in MultiInputSettings.", authoring);
+
                 InputConsumerBuilder.Build(
                     ref commands,
                     authoring.PlayerId,
                     authoring.Controllable,
                     authoring.OverrideTrigger,
                     authoring.ReleaseIdleSeconds,
-                    authoring.HistoryLimit);
+                    authoring.HistoryLimit,
+                    overrideActionId);
 
                 if (authoring.TrackDirection)
                 {
