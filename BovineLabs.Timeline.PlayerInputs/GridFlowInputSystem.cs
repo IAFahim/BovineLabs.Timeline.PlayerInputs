@@ -115,6 +115,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (math.all(gradient == float2.zero))
                     continue;
 
+                // An unresolved-action flow clip bakes ActionId 255 (the reserved sentinel). Writing it
+                // would alias any other misconfigured 255 feature sharing this synthetic provider, so skip.
+                if (cfg.ActionId == byte.MaxValue)
+                    continue;
+
                 Accumulate(axisBuffers[provider], cfg.ActionId, gradient * (cfg.Gain * weight.ValueRO.Value));
             }
         }

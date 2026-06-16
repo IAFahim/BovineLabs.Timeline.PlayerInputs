@@ -49,12 +49,23 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 var commands = new BakerCommands(this, entity);
 
                 byte overrideActionId = 0;
-                if (authoring.Controllable && authoring.OverrideTrigger == OverrideTrigger.Action &&
-                    authoring.OverrideAction != null &&
-                    !MultiInputSettingsAuthoringUtility.TryGetIndex(authoring.OverrideAction, out overrideActionId))
-                    UnityEngine.Debug.LogError(
-                        $"InputConsumerAuthoring override action '{authoring.OverrideAction.name}' " +
-                        "not found in MultiInputSettings.", authoring);
+                if (authoring.Controllable && authoring.OverrideTrigger == OverrideTrigger.Action)
+                {
+                    if (authoring.OverrideAction == null)
+                    {
+                        overrideActionId = byte.MaxValue;
+                        UnityEngine.Debug.LogError(
+                            $"InputConsumerAuthoring '{authoring.name}' uses OverrideTrigger=Action but no OverrideAction is " +
+                            "assigned; override will never engage.", authoring);
+                    }
+                    else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(authoring.OverrideAction, out overrideActionId))
+                    {
+                        overrideActionId = byte.MaxValue;
+                        UnityEngine.Debug.LogError(
+                            $"InputConsumerAuthoring override action '{authoring.OverrideAction.name}' " +
+                            "not found in MultiInputSettings.", authoring);
+                    }
+                }
 
                 InputConsumerBuilder.Build(
                     ref commands,
@@ -67,12 +78,18 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
                 if (authoring.TrackDirection)
                 {
-                    byte actionId = 0;
-                    if (authoring.DirectionAction != null &&
-                        !MultiInputSettingsAuthoringUtility.TryGetIndex(authoring.DirectionAction, out actionId))
+                    byte actionId = byte.MaxValue;
+                    if (authoring.DirectionAction == null)
+                        UnityEngine.Debug.LogError(
+                            $"InputConsumerAuthoring '{authoring.name}' has TrackDirection enabled but no DirectionAction " +
+                            "assigned; no direction will be produced.", authoring);
+                    else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(authoring.DirectionAction, out actionId))
+                    {
+                        actionId = byte.MaxValue;
                         UnityEngine.Debug.LogError(
                             $"InputConsumerAuthoring direction action '{authoring.DirectionAction.name}' " +
                             "not found in MultiInputSettings.", authoring);
+                    }
 
                     var facing = authoring.DirectionFacing >= 0 ? (sbyte)1 : (sbyte)-1;
                     InputConsumerBuilder.AddDirection(ref commands, actionId, authoring.DirectionDeadZone, facing);

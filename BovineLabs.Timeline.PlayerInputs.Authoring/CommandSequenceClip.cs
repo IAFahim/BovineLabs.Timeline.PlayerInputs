@@ -88,33 +88,49 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 for (var i = 0; i < seqData.Steps.Length; i++)
                 {
                     var actionRef = seqData.Steps[i].Action;
-                    if (actionRef != null)
-                    {
-                        if (MultiInputSettingsAuthoringUtility.TryGetIndex(actionRef, out var id))
-                        {
-                            var stepMode = seqData.Steps[i].Mode;
-                            var stepPhase = seqData.Steps[i].Phase;
-                            if (stepMode != CommandMode.None && stepPhase == InputPhase.Held)
-                                Debug.LogError(
-                                    $"CommandSequenceClip '{name}' step {i} uses a buffered mode with the Held " +
-                                    "phase, which can never match: input history records Down/Up transitions only. " +
-                                    "Use CommandMode.None for a sustained-hold probe.", this);
 
-                            stepArray[i] = new CommandStep
-                            {
-                                ActionId = id,
-                                Mode = stepMode,
-                                Phase = stepPhase,
-                                MaxGapTicks = seqData.Steps[i].MaxGapTicks
-                            };
-                        }
-                        else
-                        {
-                            Debug.LogError(
-                                $"CommandSequenceClip '{name}' action '{actionRef.name}' not found in MultiInputSettings.",
-                                this);
-                        }
+                    // A null or unresolved action must FAIL CLOSED, not silently bake to ActionId 0
+                    // (which would gate the step on whatever action is index 0). byte.MaxValue can never
+                    // match a real action in any mode (live-state bitsets are 256-wide; buffered history
+                    // only ever holds real ids), so the misconfigured sequence becomes inert.
+                    byte id = byte.MaxValue;
+                    if (actionRef == null)
+                    {
+                        Debug.LogError(
+                            $"CommandSequenceClip '{name}' sequence {s} step {i} has no Action assigned; " +
+                            "the step can never match and the sequence will not fire.", this);
                     }
+                    else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(actionRef, out id))
+                    {
+                        id = byte.MaxValue;
+                        Debug.LogError(
+                            $"CommandSequenceClip '{name}' action '{actionRef.name}' not found in MultiInputSettings; " +
+                            "the step can never match.", this);
+                    }
+
+                    var stepMode = seqData.Steps[i].Mode;
+                    var stepPhase = seqData.Steps[i].Phase;
+                    if (id == byte.MaxValue)
+                    {
+                        // FAIL CLOSED for EVERY mode: force a live-state probe (Mode.None) of the reserved
+                        // id 255. Buffered positive modes are inert on a missing id, but the Not* family
+                        // PASSES on absence (would fail OPEN and fire every frame) — a live probe of the
+                        // never-set bit 255 is inert in all modes. (Reserves action index 255 as the sentinel.)
+                        stepMode = CommandMode.None;
+                    }
+                    else if (stepMode != CommandMode.None && stepPhase == InputPhase.Held)
+                        Debug.LogError(
+                            $"CommandSequenceClip '{name}' step {i} uses a buffered mode with the Held " +
+                            "phase, which can never match: input history records Down/Up transitions only. " +
+                            "Use CommandMode.None for a sustained-hold probe.", this);
+
+                    stepArray[i] = new CommandStep
+                    {
+                        ActionId = id,
+                        Mode = stepMode,
+                        Phase = stepPhase,
+                        MaxGapTicks = seqData.Steps[i].MaxGapTicks
+                    };
                 }
             }
 

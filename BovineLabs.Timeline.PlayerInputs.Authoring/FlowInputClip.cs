@@ -58,9 +58,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
                 return;
             }
 
-            byte actionId = 0;
-            if (Action != null && !MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
+            byte actionId = byte.MaxValue;
+            if (Action == null)
+                Debug.LogError($"FlowInputClip '{name}' has no Action assigned; the fake axis will drive no action.", this);
+            else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
+            {
+                actionId = byte.MaxValue;
                 Debug.LogError($"FlowInputClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
+            }
 
             context.Baker.DependsOn(Field);
 

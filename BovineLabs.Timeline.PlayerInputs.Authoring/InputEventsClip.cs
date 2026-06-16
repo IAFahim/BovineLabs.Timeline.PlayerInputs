@@ -49,11 +49,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             EntityLinkAuthoringUtility.TryGetKey(EventRouteLink, out var eventRouteLinkKey);
 
-            byte actionId = 0;
-            if (Action != null)
-                if (!MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
-                    Debug.LogError(
-                        $"InputEventsClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
+            byte actionId = byte.MaxValue;
+            if (Action == null)
+                Debug.LogError($"InputEventsClip '{name}' has no Action assigned; it will watch no action and fire no events.", this);
+            else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
+            {
+                actionId = byte.MaxValue;
+                Debug.LogError($"InputEventsClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
+            }
 
             var commands = new BakerCommands(context.Baker, entity);
             commands.AddComponent(new InputEventsConfig

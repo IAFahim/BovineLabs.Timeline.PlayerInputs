@@ -81,11 +81,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             EntityLinkAuthoringUtility.TryGetKey(AnchorLink, out var anchorLinkKey);
 
-            byte actionId = 0;
-            if (Action != null)
-                if (!MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
-                    Debug.LogError(
-                        $"AxisTransformClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
+            byte actionId = byte.MaxValue;
+            if (Action == null)
+                Debug.LogError($"AxisTransformClip '{name}' has no Action assigned; it will read no axis (the clip does nothing).", this);
+            else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
+            {
+                actionId = byte.MaxValue;
+                Debug.LogError($"AxisTransformClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
+            }
 
             var flags = AxisTransformFlags.None;
             if (IgnoreParentRotation) flags |= AxisTransformFlags.IgnoreParentRotation;
