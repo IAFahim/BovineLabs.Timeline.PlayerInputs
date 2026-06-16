@@ -1,4 +1,6 @@
 using BovineLabs.Core.Authoring.EntityCommands;
+using BovineLabs.Reaction.Authoring.Conditions;
+using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
@@ -68,6 +70,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Evaluate input relative to Main Camera.")]
         public bool CameraRelative;
 
+        [Header("Events")]
+        [Tooltip("Where to resolve the entity that receives the fired events from.")]
+        public Target EventRouteTo = Target.Self;
+
+        [Tooltip("Link used to resolve the event target when EventRouteTo needs one.")]
+        public EntityLinkSchema EventRouteLink;
+
+        [Tooltip("Condition event fired when the axis leaves neutral (input begins).")]
+        public ConditionEventObject OnAxisStart;
+
+        [Tooltip("Condition event fired when the axis returns to neutral (input is off / released).")]
+        public ConditionEventObject OnAxisStop;
+
         public override double duration => 1;
         public ClipCaps clipCaps => ClipCaps.None;
 
@@ -82,6 +97,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             }
 
             EntityLinkAuthoringUtility.TryGetKey(AnchorLink, out var anchorLinkKey);
+            EntityLinkAuthoringUtility.TryGetKey(EventRouteLink, out var eventRouteLinkKey);
 
             byte actionId = byte.MaxValue;
             if (Action == null)
@@ -112,7 +128,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Drag = Drag,
                 DecayRate = DecayRate,
                 Mode = Mode,
-                Flags = flags
+                Flags = flags,
+                EventRouteTo = EventRouteTo,
+                EventRouteLinkKey = eventRouteLinkKey,
+                OnAxisStart = OnAxisStart != null ? OnAxisStart.Key : ConditionKey.Null,
+                OnAxisStop = OnAxisStop != null ? OnAxisStop.Key : ConditionKey.Null
             });
 
             commands.AddComponent<AxisTransformState>();

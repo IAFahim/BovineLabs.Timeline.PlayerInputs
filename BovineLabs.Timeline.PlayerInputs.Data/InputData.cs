@@ -140,7 +140,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public struct CommandSequenceConfig : IComponentData
     {
         public BlobAssetReference<CommandBlob> Blob;
-        public Entity RouteEntity;
+
+        // "Get from": where to resolve the entity that owns ConsumerLink, then the link to the input
+        // consumer (PlayerId holder) whose history/state the sequence reads.
+        public Target ReadRootFrom;
+        public ushort ConsumerLinkKey;
+
+        // "Route to": where the matched sequence's condition event is fired (Self = the bound entity).
+        public Target EventRouteTo;
+        public ushort EventRouteLinkKey;
     }
 
     public struct CommandSequenceState : IComponentData
@@ -150,11 +158,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
     public struct BufferWindowConfig : IComponentData
     {
+        public Target ReadRootFrom;
+        public ushort ConsumerLinkKey;
         public BitArray256 AllowedActions;
     }
 
     public struct BufferClearConfig : IComponentData, IEnableableComponent
     {
+        public Target ReadRootFrom;
+        public ushort ConsumerLinkKey;
         public BitArray256 ActionMask;
     }
 
@@ -172,6 +184,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public float DecayRate;
         public AxisTransformMode Mode;
         public AxisTransformFlags Flags;
+
+        // "Route to": where the axis edge events are fired (Self = the bound entity).
+        public Target EventRouteTo;
+        public ushort EventRouteLinkKey;
+
+        // Fired when the axis leaves neutral (rising edge) / returns to neutral (falling edge).
+        // OnAxisStop is the "axis input is off" event. ConditionKey.Null = no event.
+        public ConditionKey OnAxisStart;
+        public ConditionKey OnAxisStop;
     }
 
     public static class AxisTransformModeExtensions

@@ -1,6 +1,9 @@
 using BovineLabs.Bridge.Data.Camera;
+using BovineLabs.Core.Collections;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
+using BovineLabs.Reaction.Conditions;
+using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.EntityLinks;
@@ -10,6 +13,7 @@ using Unity.Burst;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
@@ -33,6 +37,22 @@ namespace BovineLabs.Timeline.PlayerInputs
 
         private EntityQuery _cameraQuery;
 
+        private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
+        private NativeParallelHashSet<Entity> _uniqueKeySet;
+        private NativeList<Entity> _uniqueKeys;
+        private ConditionEventWriter.Lookup _writers;
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+            if (_uniqueKeys.IsCreated)
+            {
+                _eventChanges.Dispose();
+                _uniqueKeySet.Dispose();
+                _uniqueKeys.Dispose();
+            }
+        }
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
@@ -50,6 +70,11 @@ namespace BovineLabs.Timeline.PlayerInputs
             _masses = state.GetComponentLookup<PhysicsMass>(true);
 
             _cameraQuery = SystemAPI.QueryBuilder().WithAll<CameraMain, LocalToWorld>().Build();
+
+            _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
+            _uniqueKeySet = new NativeParallelHashSet<Entity>(64, Allocator.Persistent);
+            _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
+            _writers.Create(ref state);
         }
 
         [BurstCompile]
@@ -65,6 +90,9 @@ namespace BovineLabs.Timeline.PlayerInputs
             _ltws.Update(ref state);
             _velocities.Update(ref state);
             _masses.Update(ref state);
+            _writers.Update(ref state);
+
+            _uniqueKeySet.Clear();
 
             var cameraRotation = quaternion.identity;
             if (!_cameraQuery.IsEmpty)
@@ -91,8 +119,27 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Velocities = _velocities,
                 Masses = _masses,
                 DeltaTime = SystemAPI.Time.DeltaTime,
-                CameraRotation = cameraRotation
+                CameraRotation = cameraRotation,
+                EventChanges = _eventChanges.AsWriter(),
+                UniqueKeys = _uniqueKeySet.AsParallelWriter()
             }.ScheduleParallel(state.Dependency);
+
+            state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
+
+            state.Dependency = new CollectEventKeysJob
+            {
+                UniqueKeys = _uniqueKeys,
+                UniqueKeySet = _uniqueKeySet
+            }.Schedule(state.Dependency);
+
+            state.Dependency = new TriggerEventsJob
+            {
+                Keys = _uniqueKeys.AsDeferredJobArray(),
+                GroupChanges = reader,
+                Writers = _writers
+            }.Schedule(_uniqueKeys, 64, state.Dependency);
+
+            state.Dependency = _eventChanges.Clear(state.Dependency);
         }
 
         [BurstCompile]
@@ -136,6 +183,9 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             public float DeltaTime;
             public quaternion CameraRotation;
+
+            public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
+            public NativeParallelHashSet<Entity>.ParallelWriter UniqueKeys;
 
             private void Execute(in TrackBinding binding, in AxisTransformConfig config, ref AxisTransformState state)
             {
@@ -185,7 +235,24 @@ namespace BovineLabs.Timeline.PlayerInputs
                     inputVec = math.rotate(math.inverse(parentLtw.Rotation), inputVec);
 
                 var risingEdge = state.HasInput && !state.WasInputActive;
+                var fallingEdge = !state.HasInput && state.WasInputActive;
                 state.WasInputActive = state.HasInput;
+
+                if (risingEdge && config.OnAxisStart != ConditionKey.Null &&
+                    InputRouting.TryResolveRoute(targetEntity, targets, config.EventRouteTo, config.EventRouteLinkKey,
+                        Sources, Entries, out var startTarget))
+                {
+                    EventChanges.Add(startTarget, new EventAmount(config.OnAxisStart, 1));
+                    UniqueKeys.Add(startTarget);
+                }
+
+                if (fallingEdge && config.OnAxisStop != ConditionKey.Null &&
+                    InputRouting.TryResolveRoute(targetEntity, targets, config.EventRouteTo, config.EventRouteLinkKey,
+                        Sources, Entries, out var stopTarget))
+                {
+                    EventChanges.Add(stopTarget, new EventAmount(config.OnAxisStop, 1));
+                    UniqueKeys.Add(stopTarget);
+                }
 
                 if (config.Mode.IsRigidbody())
                 {

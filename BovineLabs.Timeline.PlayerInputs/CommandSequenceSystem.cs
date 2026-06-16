@@ -1,11 +1,13 @@
-using System;
 using BovineLabs.Core.Collections;
+using BovineLabs.Core.Extensions;
+using BovineLabs.Core.Iterators;
 using BovineLabs.Reaction.Conditions;
-using BovineLabs.Reaction.Data.Conditions;
+using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Data;
+using BovineLabs.Timeline.EntityLinks;
+using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
-using Unity.Burst.CompilerServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -24,6 +26,9 @@ namespace BovineLabs.Timeline.PlayerInputs
         private NativeList<Entity> _uniqueKeys;
         private ConditionEventWriter.Lookup writers;
 
+        private UnsafeComponentLookup<Targets> targetsLookup;
+        private UnsafeComponentLookup<EntityLinkSource> sources;
+        private UnsafeBufferLookup<EntityLinkEntry> entries;
         private ComponentLookup<InputState> states;
         private ComponentLookup<PlayerId> playerIds;
         private BufferLookup<InputHistory> histories;
@@ -50,6 +55,9 @@ namespace BovineLabs.Timeline.PlayerInputs
             _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
             writers.Create(ref state);
 
+            targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
+            sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
+            entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             states = state.GetComponentLookup<InputState>(true);
             playerIds = state.GetComponentLookup<PlayerId>(true);
             histories = state.GetBufferLookup<InputHistory>();
@@ -59,6 +67,9 @@ namespace BovineLabs.Timeline.PlayerInputs
         public void OnUpdate(ref SystemState state)
         {
             writers.Update(ref state);
+            targetsLookup.Update(ref state);
+            sources.Update(ref state);
+            entries.Update(ref state);
             states.Update(ref state);
             playerIds.Update(ref state);
             histories.Update(ref state);
@@ -75,6 +86,9 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 EventChanges = _eventChanges.AsWriter(),
                 UniqueKeys = _uniqueKeySet.AsParallelWriter(),
+                TargetsLookup = targetsLookup,
+                Sources = sources,
+                Entries = entries,
                 Registry = registry.ProviderByPlayer,
                 States = states,
                 PlayerIds = playerIds,
@@ -83,13 +97,13 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
 
-            state.Dependency = new GetKeysJob
+            state.Dependency = new CollectEventKeysJob
             {
                 UniqueKeys = _uniqueKeys,
                 UniqueKeySet = _uniqueKeySet
             }.Schedule(state.Dependency);
 
-            state.Dependency = new ApplyJob
+            state.Dependency = new TriggerEventsJob
             {
                 Keys = _uniqueKeys.AsDeferredJobArray(),
                 GroupChanges = reader,
@@ -106,6 +120,10 @@ namespace BovineLabs.Timeline.PlayerInputs
             public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
             public NativeParallelHashSet<Entity>.ParallelWriter UniqueKeys;
 
+            [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
+            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
+            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+
             [ReadOnly] [NativeDisableContainerSafetyRestriction]
             public NativeArray<Entity> Registry;
 
@@ -121,9 +139,15 @@ namespace BovineLabs.Timeline.PlayerInputs
                 in TrackBinding binding)
             {
                 if (commandState.IsCompleted || binding.Value == Entity.Null) return;
-                if (!PlayerIds.TryGetComponent(binding.Value, out var pid)) return;
+                if (!TargetsLookup.TryGetComponent(binding.Value, out var targets)) return;
+
+                if (!EntityLinkResolver.TryResolve(
+                        binding.Value, targets, config.ReadRootFrom, config.ConsumerLinkKey,
+                        Sources, Entries, out var consumer)) return;
+
+                if (!PlayerIds.TryGetComponent(consumer, out var pid)) return;
                 if (!InputAccess.TryGetState(Registry, States, pid.Value, out var state)) return;
-                if (!Histories.TryGetBuffer(binding.Value, out var history)) return;
+                if (!Histories.TryGetBuffer(consumer, out var history)) return;
 
                 ref var sequences = ref config.Blob.Value.Sequences;
 
@@ -151,8 +175,12 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                     CommitConsumes(history, ref consumeMask);
 
-                    EventChanges.Add(config.RouteEntity, new EventAmount(seq.Condition, seq.Value));
-                    UniqueKeys.Add(config.RouteEntity);
+                    if (InputRouting.TryResolveRoute(binding.Value, targets, config.EventRouteTo,
+                            config.EventRouteLinkKey, Sources, Entries, out var routeTarget))
+                    {
+                        EventChanges.Add(routeTarget, new EventAmount(seq.Condition, seq.Value));
+                        UniqueKeys.Add(routeTarget);
+                    }
 
                     if (seq.Repeat == 0) commandState.IsCompleted = true;
                     return;
@@ -172,89 +200,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                 }
 
                 history.Length = write;
-            }
-        }
-
-        [BurstCompile]
-        private struct GetKeysJob : IJob
-        {
-            public NativeList<Entity> UniqueKeys;
-            [ReadOnly] public NativeParallelHashSet<Entity> UniqueKeySet;
-
-            public void Execute()
-            {
-                UniqueKeys.Clear();
-                foreach (var key in UniqueKeySet)
-                    UniqueKeys.Add(key);
-            }
-        }
-
-        [BurstCompile]
-        private struct ApplyJob : IJobParallelForDefer
-        {
-            [ReadOnly] public NativeArray<Entity> Keys;
-            [ReadOnly] public NativeParallelMultiHashMap<Entity, EventAmount>.ReadOnly GroupChanges;
-            [NativeDisableParallelForRestriction] public ConditionEventWriter.Lookup Writers;
-
-            public void Execute(int index)
-            {
-                var key = Keys[index];
-                if (Hint.Unlikely(!Writers.TryGet(key, out var writer))) return;
-
-                var values = new FixedList4096Bytes<EventAmount>();
-
-                if (GroupChanges.TryGetFirstValue(key, out var value, out var it))
-                {
-                    AddOrAccumulate(ref values, value, ref writer);
-
-                    while (GroupChanges.TryGetNextValue(out value, ref it))
-                        AddOrAccumulate(ref values, value, ref writer);
-                }
-
-                foreach (var e in values) writer.Trigger(e.Event, e.Amount);
-            }
-
-            private static void AddOrAccumulate(ref FixedList4096Bytes<EventAmount> values, EventAmount value,
-                ref ConditionEventWriter writer)
-            {
-                for (var i = 0; i < values.Length; i++)
-                    if (values[i].Event.Equals(value.Event))
-                    {
-                        var existing = values[i];
-                        existing.Amount += value.Amount;
-                        values[i] = existing;
-                        return;
-                    }
-
-                if (values.Length < values.Capacity)
-                {
-                    values.Add(value);
-                    return;
-                }
-
-                writer.Trigger(value.Event, value.Amount);
-            }
-        }
-
-        private struct EventAmount : IEquatable<EventAmount>
-        {
-            public readonly ConditionKey Event;
-            public int Amount;
-
-            public EventAmount(ConditionKey evt, int amount)
-            {
-                Event = evt;
-                Amount = amount;
-            }
-
-            public bool Equals(EventAmount other)
-            {
-                return Event.Equals(other.Event);
-            }
-
-            public override int GetHashCode()
-            {
-                return Event.GetHashCode();
             }
         }
     }

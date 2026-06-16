@@ -1,7 +1,9 @@
 using System;
 using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Core.Collections;
+using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Authoring;
+using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine;
@@ -12,6 +14,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public sealed class InputBufferWindowClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
+        public Target ReadRootFrom = Target.Owner;
+
+        [Tooltip("Link to the input consumer whose buffer this window opens.")]
+        public EntityLinkSchema ConsumerLink;
+
         [Tooltip("Empty means ALL inputs buffered. Specifics mean ONLY those are buffered.")]
         public InputActionReference[] AllowedActions = Array.Empty<InputActionReference>();
 
@@ -21,6 +29,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public override void Bake(Entity entity, BakingContext context)
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
+
+            if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var consumerLinkKey))
+            {
+                Debug.LogError($"InputBufferWindowClip '{name}' missing ConsumerLink schema.", this);
+                return;
+            }
 
             var mask = default(BitArray256);
             if (AllowedActions == null || AllowedActions.Length == 0)
@@ -39,7 +53,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 }
 
             var commands = new BakerCommands(context.Baker, entity);
-            commands.AddComponent(new BufferWindowConfig { AllowedActions = mask });
+            commands.AddComponent(new BufferWindowConfig
+            {
+                ReadRootFrom = ReadRootFrom,
+                ConsumerLinkKey = consumerLinkKey,
+                AllowedActions = mask
+            });
             base.Bake(entity, context);
         }
     }

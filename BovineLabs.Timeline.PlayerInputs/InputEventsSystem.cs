@@ -97,13 +97,13 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
 
-            state.Dependency = new GetKeysJob
+            state.Dependency = new CollectEventKeysJob
             {
                 UniqueKeys = _uniqueKeys,
                 UniqueKeySet = _uniqueKeySet
             }.Schedule(state.Dependency);
 
-            state.Dependency = new ApplyJob
+            state.Dependency = new TriggerEventsJob
             {
                 Keys = _uniqueKeys.AsDeferredJobArray(),
                 GroupChanges = reader,
@@ -170,122 +170,22 @@ namespace BovineLabs.Timeline.PlayerInputs
                 var fallingEdge = !hasInput && state.WasInputActive;
 
                 if (risingEdge && config.OnInputStart != ConditionKey.Null &&
-                    TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
-                        out var startTarget))
-
+                    InputRouting.TryResolveRoute(targetEntity, targets, config.EventRouteTo, config.EventRouteLinkKey,
+                        Sources, Entries, out var startTarget))
                 {
                     EventChanges.Add(startTarget, new EventAmount(config.OnInputStart, 1));
                     UniqueKeys.Add(startTarget);
                 }
 
                 if (fallingEdge && config.OnInputEnd != ConditionKey.Null &&
-                    TryResolveTarget(config.EventRouteTo, config.EventRouteLinkKey, targetEntity, targets,
-                        out var endTarget))
-
+                    InputRouting.TryResolveRoute(targetEntity, targets, config.EventRouteTo, config.EventRouteLinkKey,
+                        Sources, Entries, out var endTarget))
                 {
                     EventChanges.Add(endTarget, new EventAmount(config.OnInputEnd, 1));
                     UniqueKeys.Add(endTarget);
                 }
 
                 state.WasInputActive = hasInput;
-            }
-
-            private bool TryResolveTarget(Target mode, ushort linkKey, Entity self, in Targets targets,
-                out Entity target)
-            {
-                if (mode == Target.Self)
-                {
-                    target = self;
-                    return true;
-                }
-
-                target = EntityLinkResolver.TryResolve(self, targets, mode, linkKey, Sources, Entries, out var t)
-                    ? t
-                    : Entity.Null;
-                return target != Entity.Null;
-            }
-        }
-
-        [BurstCompile]
-        private struct GetKeysJob : IJob
-        {
-            public NativeList<Entity> UniqueKeys;
-            [ReadOnly] public NativeParallelHashSet<Entity> UniqueKeySet;
-
-            public void Execute()
-            {
-                UniqueKeys.Clear();
-                foreach (var key in UniqueKeySet)
-                    UniqueKeys.Add(key);
-            }
-        }
-
-        [BurstCompile]
-        private struct ApplyJob : IJobParallelForDefer
-        {
-            [ReadOnly] public NativeArray<Entity> Keys;
-            [ReadOnly] public NativeParallelMultiHashMap<Entity, EventAmount>.ReadOnly GroupChanges;
-            [NativeDisableParallelForRestriction] public ConditionEventWriter.Lookup Writers;
-
-            public void Execute(int index)
-            {
-                var key = Keys[index];
-                if (Hint.Unlikely(!Writers.TryGet(key, out var writer))) return;
-
-                var values = new FixedList4096Bytes<EventAmount>();
-
-                if (GroupChanges.TryGetFirstValue(key, out var value, out var it))
-                {
-                    AddOrAccumulate(ref values, value, ref writer);
-
-                    while (GroupChanges.TryGetNextValue(out value, ref it))
-                        AddOrAccumulate(ref values, value, ref writer);
-                }
-
-                foreach (var e in values) writer.Trigger(e.Event, e.Amount);
-            }
-
-            private static void AddOrAccumulate(ref FixedList4096Bytes<EventAmount> values, EventAmount value,
-                ref ConditionEventWriter writer)
-            {
-                for (var i = 0; i < values.Length; i++)
-                    if (values[i].Event.Equals(value.Event))
-                    {
-                        var existing = values[i];
-                        existing.Amount += value.Amount;
-                        values[i] = existing;
-                        return;
-                    }
-
-                if (values.Length < values.Capacity)
-                {
-                    values.Add(value);
-                    return;
-                }
-
-                writer.Trigger(value.Event, value.Amount);
-            }
-        }
-
-        private struct EventAmount : IEquatable<EventAmount>
-        {
-            public readonly ConditionKey Event;
-            public int Amount;
-
-            public EventAmount(ConditionKey evt, int amount)
-            {
-                Event = evt;
-                Amount = amount;
-            }
-
-            public bool Equals(EventAmount other)
-            {
-                return Event.Equals(other.Event);
-            }
-
-            public override int GetHashCode()
-            {
-                return Event.GetHashCode();
             }
         }
     }
