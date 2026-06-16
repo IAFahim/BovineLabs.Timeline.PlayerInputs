@@ -20,6 +20,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public override void Bake(Entity entity, BakingContext context)
         {
+            MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
+
             var mask = default(BitArray256);
             if (ActionsToClear != null)
                 foreach (var action in ActionsToClear)

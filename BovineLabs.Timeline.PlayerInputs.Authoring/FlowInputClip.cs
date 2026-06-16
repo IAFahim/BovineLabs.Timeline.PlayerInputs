@@ -46,6 +46,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
 
         public override void Bake(Entity entity, BakingContext context)
         {
+            MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
+
             if (Field == null)
             {
                 Debug.LogError($"FlowInputClip '{name}' has no Field schema assigned. Clip will be skipped.", this);

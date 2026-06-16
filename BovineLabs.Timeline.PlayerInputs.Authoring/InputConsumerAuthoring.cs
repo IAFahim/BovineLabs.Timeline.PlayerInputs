@@ -45,6 +45,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         {
             public override void Bake(InputConsumerAuthoring authoring)
             {
+                MultiInputSettingsAuthoringUtility.DependsOnSettings(this);
+
                 var entity = GetEntity(TransformUsageFlags.None);
                 var commands = new BakerCommands(this, entity);
 

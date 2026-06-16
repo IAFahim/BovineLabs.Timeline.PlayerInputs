@@ -63,6 +63,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public override void Bake(Entity entity, BakingContext context)
         {
+            MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
+
             var target = context.Target;
             if (RouteTo != null && context.TryResolveLink(RouteTo, out var linked))
                 target = context.Baker.GetEntity(linked, TransformUsageFlags.None);

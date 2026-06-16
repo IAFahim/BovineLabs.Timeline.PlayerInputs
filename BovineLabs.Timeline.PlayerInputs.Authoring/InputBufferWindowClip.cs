@@ -20,6 +20,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public override void Bake(Entity entity, BakingContext context)
         {
+            MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
+
             var mask = default(BitArray256);
             if (AllowedActions == null || AllowedActions.Length == 0)
                 for (var i = 0; i < 256; i++)

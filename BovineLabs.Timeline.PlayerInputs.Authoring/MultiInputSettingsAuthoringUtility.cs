@@ -1,11 +1,19 @@
 using BovineLabs.Core.Authoring.Settings;
 using BovineLabs.Timeline.PlayerInputs.Data;
+using Unity.Entities;
 using UnityEngine.InputSystem;
 
 namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public static class MultiInputSettingsAuthoringUtility
     {
+        // Register the MultiInputSettings action registry as a bake dependency so adding/reordering input
+        // actions (which shifts the baked ActionId indices) re-triggers baking of the consuming clips.
+        public static void DependsOnSettings(IBaker baker)
+        {
+            baker.DependsOn(AuthoringSettingsUtility.GetSettings<MultiInputSettings>());
+        }
+
         public static bool TryGetIndex(InputActionReference reference, out byte index)
         {
             var settings = AuthoringSettingsUtility.GetSettings<MultiInputSettings>();

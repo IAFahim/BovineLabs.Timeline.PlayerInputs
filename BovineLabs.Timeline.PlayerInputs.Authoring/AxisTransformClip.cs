@@ -73,6 +73,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         public override void Bake(Entity entity, BakingContext context)
         {
+            MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
+
             if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var linkKey))
             {
                 Debug.LogError($"AxisTransformClip '{name}' missing ConsumerLink schema.");
