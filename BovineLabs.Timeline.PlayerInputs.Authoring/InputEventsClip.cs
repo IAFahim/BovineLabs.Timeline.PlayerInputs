@@ -61,6 +61,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             }
 
             var commands = new BakerCommands(context.Baker, entity);
+            context.Baker.DependsOn(OnInputStart);
+            context.Baker.DependsOn(OnInputEnd);
             commands.AddComponent(new InputEventsConfig
             {
                 ReadRootFrom = ReadRootFrom,

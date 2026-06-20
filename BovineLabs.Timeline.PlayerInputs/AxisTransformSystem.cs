@@ -371,7 +371,25 @@ namespace BovineLabs.Timeline.PlayerInputs
                     state.Initialized = true;
                 }
 
-                state.DesiredOffset = inputVec * config.LeashRadius;
+                // Range scales the [-1,1] input to the offset (matches the rigidbody path and the tooltip);
+                // LeashRadius then clamps the offset distance, with 0 meaning unlimited. Previously LeashRadius
+                // was used as the scale, so Range did nothing and LeashRadius=0 ("unlimited") froze the carrot.
+                // Position sets the target offset directly; Velocity integrates input into the offset over time
+                // (input becomes a rate), so holding a direction keeps moving the carrot until released/clamped.
+                float3 offset;
+                if (config.Mode == AxisTransformMode.Velocity)
+                    offset = state.DesiredOffset + (inputVec * config.Range * DeltaTime);
+                else
+                    offset = inputVec * config.Range;
+
+                if (config.LeashRadius > 0f)
+                {
+                    var len = math.length(offset);
+                    if (len > config.LeashRadius)
+                        offset *= config.LeashRadius / len;
+                }
+
+                state.DesiredOffset = offset;
 
                 // Frame-rate independent smoothing
                 if (config.Smoothing <= 0.0001f)

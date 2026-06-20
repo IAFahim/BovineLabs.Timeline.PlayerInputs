@@ -114,7 +114,11 @@ namespace BovineLabs.Timeline.PlayerInputs
             in UnsafeComponentLookup<EntityLinkSource> sources, in UnsafeBufferLookup<EntityLinkEntry> entries,
             out Entity target)
         {
-            if (routeTo is Target.Self or Target.None)
+            // Only short-circuit to self when there's no link to follow. When a routeLinkKey is set we must
+            // resolve through EntityLinkResolver even for Self/None so EventRouteLink (e.g. an Essence Link)
+            // is honored - matching the consumer read path which always follows the link. Without this, Self
+            // returned the bound entity (the input consumer) and the link was silently ignored.
+            if (routeLinkKey == 0 && routeTo is Target.Self or Target.None)
             {
                 target = self;
                 return true;

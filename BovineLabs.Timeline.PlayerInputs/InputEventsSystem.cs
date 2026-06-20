@@ -48,7 +48,6 @@ namespace BovineLabs.Timeline.PlayerInputs
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
-
         {
             state.RequireForUpdate<InputEventsConfig>();
             state.RequireForUpdate<InputRegistry>();

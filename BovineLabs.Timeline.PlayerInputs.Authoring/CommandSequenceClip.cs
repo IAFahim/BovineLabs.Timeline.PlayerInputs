@@ -142,6 +142,20 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                             "phase, which can never match: input history records Down/Up transitions only. " +
                             "Use CommandMode.None for a sustained-hold probe.", this);
 
+                    // No-surprise guardrail: MaxGapTicks only gates buffered match modes against the PREVIOUS
+                    // matched step. It is inert on the first step (no previous match), on None (live probe), and
+                    // on the Not* family (absence checks) - warn so a designer never assumes a window is enforced.
+                    var maxGap = seqData.Steps[i].MaxGapTicks;
+                    if (maxGap != 0 && id != byte.MaxValue &&
+                        (i == 0 || stepMode is CommandMode.None or CommandMode.NotContains
+                            or CommandMode.NotFirst or CommandMode.NotLast))
+                    {
+                        Debug.LogWarning(
+                            $"CommandSequenceClip '{name}' sequence {s} step {i}: MaxGapTicks={maxGap} has no effect " +
+                            "here. The timing window only applies to buffered match modes on a step after the first; " +
+                            "first steps, None probes and Not* modes ignore it.", this);
+                    }
+
                     stepArray[i] = new CommandStep
                     {
                         ActionId = id,

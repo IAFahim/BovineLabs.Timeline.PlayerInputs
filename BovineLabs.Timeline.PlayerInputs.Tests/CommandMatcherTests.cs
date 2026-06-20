@@ -127,6 +127,24 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
             Assert.IsFalse(EvalOnce(Step(CommandMode.None, 6, InputPhase.Down), history, state));
         }
 
+        [Test]
+        public void Contains_SkipsOutOfWindowEntry_AndMatchesLaterInWindowEntry()
+        {
+            // A@0, B@3, A@5. First step matches B@3 (lastTick=3). The second step (Contains A, gap 10) must NOT
+            // give up on the older A@0 (which is before lastTick) but keep scanning and find the valid A@5.
+            var history = History((1, InputPhase.Down, 0), (2, InputPhase.Down, 3), (1, InputPhase.Down, 5));
+            var mask = default(BitArray256);
+            var searchIndex = 0;
+            var lastTick = uint.MaxValue;
+
+            var first = Step(CommandMode.Contains, 2);
+            Assert.IsTrue(CommandMatcher.Evaluate(ref first, default, history, ref mask, ref searchIndex, ref lastTick));
+
+            var second = Step(CommandMode.Contains, 1, InputPhase.Down, 10);
+            Assert.IsTrue(CommandMatcher.Evaluate(ref second, default, history, ref mask, ref searchIndex,
+                ref lastTick));
+        }
+
         private DynamicBuffer<InputHistory> History(params (byte action, InputPhase phase, uint tick)[] entries)
         {
             var entity = Manager.CreateEntity(typeof(InputHistory));

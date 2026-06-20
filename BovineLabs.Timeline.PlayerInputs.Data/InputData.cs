@@ -238,9 +238,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public bool WasInputActive;
     }
 
-    // Deterministic monotonic frame counter, advanced once per simulation step by
-    // SimulationTickSystem. Replaces wall-clock time for input history and timing
-    // windows so that command recognition is identical on client, server, and replay.
+    // Monotonic counter advanced once per update by SimulationTickSystem (currently a per-FRAME
+    // counter, not a fixed-step one). Used instead of wall-clock time for input history and timing
+    // windows. NOTE: because it counts frames at the variable update rate, it is NOT guaranteed
+    // identical across client/server/replay - do not rely on it for netcode/replay determinism
+    // until SimulationTickSystem is driven from a fixed simulation step.
     public struct SimulationTick : IComponentData
     {
         public uint Value;

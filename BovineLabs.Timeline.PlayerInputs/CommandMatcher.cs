@@ -62,7 +62,10 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                     history[i].Phase != step.Phase) continue;
-                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
+                // Skip an out-of-window match and keep scanning; a later entry of the same action may fall
+                // inside the window. History ticks are non-decreasing, so this never accepts an entry the old
+                // early-return would have rejected - it only recovers valid matches that were previously dropped.
+                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) continue;
                 if (consume) consumeMask[i] = true;
                 return true;
             }
@@ -107,7 +110,10 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                     history[i].Phase != step.Phase) continue;
-                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
+                // See EvaluateContains: skip an out-of-window match and keep scanning forward (searchIndex still
+                // only advances on a real match, so ordering is preserved). Recovers valid matches, accepts none
+                // the early-return wouldn't have.
+                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) continue;
                 if (consume) consumeMask[i] = true;
                 searchIndex = i + 1;
                 return true;
