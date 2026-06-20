@@ -17,35 +17,35 @@ namespace BovineLabs.Timeline.PlayerInputs
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ConsumerBufferMaskSystem : ISystem
     {
-        private UnsafeComponentLookup<Targets> targetsLookup;
-        private UnsafeComponentLookup<EntityLinkSource> sources;
-        private UnsafeBufferLookup<EntityLinkEntry> entries;
-        private ComponentLookup<ActiveBufferMask> masks;
+        private UnsafeComponentLookup<Targets> _targetsLookup;
+        private UnsafeComponentLookup<EntityLinkSource> _sources;
+        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<ActiveBufferMask> _masks;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
-            sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
-            masks = state.GetComponentLookup<ActiveBufferMask>();
+            _targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
+            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _masks = state.GetComponentLookup<ActiveBufferMask>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            targetsLookup.Update(ref state);
-            sources.Update(ref state);
-            entries.Update(ref state);
-            masks.Update(ref state);
+            _targetsLookup.Update(ref state);
+            _sources.Update(ref state);
+            _entries.Update(ref state);
+            _masks.Update(ref state);
 
             state.Dependency = new ResetMaskJob().ScheduleParallel(state.Dependency);
             state.Dependency = new AccumulateMaskJob
             {
-                TargetsLookup = targetsLookup,
-                Sources = sources,
-                Entries = entries,
-                Masks = masks
+                TargetsLookup = _targetsLookup,
+                Sources = _sources,
+                Entries = _entries,
+                Masks = _masks
             }.Schedule(state.Dependency);
         }
 

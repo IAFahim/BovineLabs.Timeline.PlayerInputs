@@ -12,8 +12,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct DirectionInputSystem : ISystem
     {
-        private ComponentLookup<InputState> states;
-        private BufferLookup<InputAxis> axes;
+        private ComponentLookup<InputState> _states;
+        private BufferLookup<InputAxis> _axes;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -21,22 +21,22 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.RequireForUpdate<InputRegistry>();
             state.RequireForUpdate<SimulationTick>();
             state.RequireForUpdate<DirectionConfig>();
-            states = state.GetComponentLookup<InputState>(true);
-            axes = state.GetBufferLookup<InputAxis>(true);
+            _states = state.GetComponentLookup<InputState>(true);
+            _axes = state.GetBufferLookup<InputAxis>(true);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            states.Update(ref state);
-            axes.Update(ref state);
+            _states.Update(ref state);
+            _axes.Update(ref state);
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
             state.Dependency = new QuantiseJob
             {
                 Registry = registry.ProviderByPlayer,
-                Axes = axes,
+                Axes = _axes,
                 Tick = SystemAPI.GetSingleton<SimulationTick>().Value
             }.ScheduleParallel(state.Dependency);
         }

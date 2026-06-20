@@ -13,27 +13,27 @@ namespace BovineLabs.Timeline.PlayerInputs
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ControlAuthoritySystem : ISystem
     {
-        private ComponentLookup<InputState> states;
+        private ComponentLookup<InputState> _states;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<InputRegistry>();
             state.RequireForUpdate<Controllable>();
-            states = state.GetComponentLookup<InputState>(true);
+            _states = state.GetComponentLookup<InputState>(true);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            states.Update(ref state);
+            _states.Update(ref state);
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
             state.Dependency = new AuthorityJob
             {
                 Registry = registry.ProviderByPlayer,
-                States = states,
+                States = _states,
                 DeltaTime = SystemAPI.Time.DeltaTime
             }.ScheduleParallel(state.Dependency);
         }

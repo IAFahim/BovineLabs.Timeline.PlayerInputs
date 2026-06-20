@@ -24,14 +24,14 @@ namespace BovineLabs.Timeline.PlayerInputs
         private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
         private NativeParallelHashSet<Entity> _uniqueKeySet;
         private NativeList<Entity> _uniqueKeys;
-        private ConditionEventWriter.Lookup writers;
+        private ConditionEventWriter.Lookup _writers;
 
-        private UnsafeComponentLookup<Targets> targetsLookup;
-        private UnsafeComponentLookup<EntityLinkSource> sources;
-        private UnsafeBufferLookup<EntityLinkEntry> entries;
-        private ComponentLookup<InputState> states;
-        private ComponentLookup<PlayerId> playerIds;
-        private BufferLookup<InputHistory> histories;
+        private UnsafeComponentLookup<Targets> _targetsLookup;
+        private UnsafeComponentLookup<EntityLinkSource> _sources;
+        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<InputState> _states;
+        private ComponentLookup<PlayerId> _playerIds;
+        private BufferLookup<InputHistory> _histories;
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
@@ -53,26 +53,26 @@ namespace BovineLabs.Timeline.PlayerInputs
             _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
             _uniqueKeySet = new NativeParallelHashSet<Entity>(64, Allocator.Persistent);
             _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
-            writers.Create(ref state);
+            _writers.Create(ref state);
 
-            targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
-            sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
-            states = state.GetComponentLookup<InputState>(true);
-            playerIds = state.GetComponentLookup<PlayerId>(true);
-            histories = state.GetBufferLookup<InputHistory>();
+            _targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
+            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _states = state.GetComponentLookup<InputState>(true);
+            _playerIds = state.GetComponentLookup<PlayerId>(true);
+            _histories = state.GetBufferLookup<InputHistory>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            writers.Update(ref state);
-            targetsLookup.Update(ref state);
-            sources.Update(ref state);
-            entries.Update(ref state);
-            states.Update(ref state);
-            playerIds.Update(ref state);
-            histories.Update(ref state);
+            _writers.Update(ref state);
+            _targetsLookup.Update(ref state);
+            _sources.Update(ref state);
+            _entries.Update(ref state);
+            _states.Update(ref state);
+            _playerIds.Update(ref state);
+            _histories.Update(ref state);
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
@@ -86,13 +86,13 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 EventChanges = _eventChanges.AsWriter(),
                 UniqueKeys = _uniqueKeySet.AsParallelWriter(),
-                TargetsLookup = targetsLookup,
-                Sources = sources,
-                Entries = entries,
+                TargetsLookup = _targetsLookup,
+                Sources = _sources,
+                Entries = _entries,
                 Registry = registry.ProviderByPlayer,
-                States = states,
-                PlayerIds = playerIds,
-                Histories = histories
+                States = _states,
+                PlayerIds = _playerIds,
+                Histories = _histories
             }.Schedule(state.Dependency);
 
             state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
@@ -107,7 +107,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 Keys = _uniqueKeys.AsDeferredJobArray(),
                 GroupChanges = reader,
-                Writers = writers
+                Writers = _writers
             }.Schedule(_uniqueKeys, 64, state.Dependency);
 
             state.Dependency = _eventChanges.Clear(state.Dependency);

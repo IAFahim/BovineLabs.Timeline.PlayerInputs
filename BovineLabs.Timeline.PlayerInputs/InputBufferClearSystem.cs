@@ -18,33 +18,33 @@ namespace BovineLabs.Timeline.PlayerInputs
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct InputBufferClearSystem : ISystem
     {
-        private UnsafeComponentLookup<Targets> targetsLookup;
-        private UnsafeComponentLookup<EntityLinkSource> sources;
-        private UnsafeBufferLookup<EntityLinkEntry> entries;
-        private BufferLookup<InputHistory> histories;
+        private UnsafeComponentLookup<Targets> _targetsLookup;
+        private UnsafeComponentLookup<EntityLinkSource> _sources;
+        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private BufferLookup<InputHistory> _histories;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
-            sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
-            histories = state.GetBufferLookup<InputHistory>();
+            _targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
+            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _histories = state.GetBufferLookup<InputHistory>();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            targetsLookup.Update(ref state);
-            sources.Update(ref state);
-            entries.Update(ref state);
-            histories.Update(ref state);
+            _targetsLookup.Update(ref state);
+            _sources.Update(ref state);
+            _entries.Update(ref state);
+            _histories.Update(ref state);
             state.Dependency = new ClearBufferJob
             {
-                TargetsLookup = targetsLookup,
-                Sources = sources,
-                Entries = entries,
-                Histories = histories
+                TargetsLookup = _targetsLookup,
+                Sources = _sources,
+                Entries = _entries,
+                Histories = _histories
             }.Schedule(state.Dependency);
         }
 

@@ -13,31 +13,31 @@ namespace BovineLabs.Timeline.PlayerInputs
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ConsumerHistorySystem : ISystem
     {
-        private ComponentLookup<InputState> states;
-        private ComponentLookup<InputHistoryLimit> limits;
+        private ComponentLookup<InputState> _states;
+        private ComponentLookup<InputHistoryLimit> _limits;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<InputRegistry>();
             state.RequireForUpdate<SimulationTick>();
-            states = state.GetComponentLookup<InputState>(true);
-            limits = state.GetComponentLookup<InputHistoryLimit>(true);
+            _states = state.GetComponentLookup<InputState>(true);
+            _limits = state.GetComponentLookup<InputHistoryLimit>(true);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            states.Update(ref state);
-            limits.Update(ref state);
+            _states.Update(ref state);
+            _limits.Update(ref state);
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
             state.Dependency = new RecordHistoryJob
             {
                 Registry = registry.ProviderByPlayer,
-                States = states,
-                Limits = limits,
+                States = _states,
+                Limits = _limits,
                 Tick = SystemAPI.GetSingleton<SimulationTick>().Value
             }.ScheduleParallel(state.Dependency);
         }
