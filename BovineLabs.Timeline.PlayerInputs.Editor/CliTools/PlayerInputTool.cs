@@ -256,30 +256,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 return new ErrorResponse("Player has no paired device" +
                     (string.IsNullOrEmpty(provider) ? "." : $" matching provider '{provider}'. See `list`."));
 
-            // A keyboard 'Move' (and similar) is a 2D-vector composite of button parts
-            // (up/down/left/right keys), NOT a single Vector2 stick — so drive the part
-            // keys from x/y. (Gamepad sticks resolve to a real Vector2 and take the path
-            // below.) Part names/paths are read from the action's own bindings, not hardcoded.
-            if (string.IsNullOrEmpty(controlPath))
-            {
-                var act = pi.actions != null ? pi.actions.FindAction(actionName, throwIfNotFound: false) : null;
-                if (act == null) return new ErrorResponse($"Player has no action named '{actionName}'. See `list`.");
-                if (!act.enabled) act.Enable();
-                if (IsButtonComposite(act, devices))
-                {
-                    int n = DriveComposite(act, devices, x, y, released);
-                    if (n == 0) return new ErrorResponse($"Could not resolve composite parts for '{actionName}' on the player's device(s).");
-                    string vlabel = released ? "(0,0)" : $"({x},{y})";
-                    return new SuccessResponse($"{(released ? "Released" : "Set")} '{actionName}' = {vlabel} via {n} key(s) on player {playerIndex}.");
-                }
-            }
+            var compositeResult = TryDriveButtonComposite(pi, devices, controlPath, actionName, playerIndex, x, y, released);
+            if (compositeResult != null) return compositeResult;
 
             var control = ResolveControl(pi, controlPath, actionName, provider, out var why);
             if (control == null) return new ErrorResponse(why);
 
-            var floatControl = control as InputControl<float>;
             var vec2Control = control as InputControl<Vector2>;
-            if (floatControl == null && vec2Control == null)
+            if (control is not InputControl<float> && vec2Control == null)
                 return new ErrorResponse($"Control '{control.path}' is {control.valueType.Name}; only float (button/axis) and Vector2 (stick) are supported.");
 
             ApplyValue(control, released ? 0f : value, p, released);
@@ -301,6 +285,28 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             Pending.Add(new PendingRelease { Control = control, ReleaseAtFrame = Time.frameCount + holdFrames });
             EnsureHooked();
             return new SuccessResponse($"Tapped '{label}'={what} on player {playerIndex} ({control.path}); auto-release in {holdFrames} frames.");
+        }
+
+        // A keyboard 'Move' (and similar) is a 2D-vector composite of button parts
+        // (up/down/left/right keys), NOT a single Vector2 stick — so drive the part
+        // keys from x/y. (Gamepad sticks resolve to a real Vector2 and take the path
+        // below.) Part names/paths are read from the action's own bindings, not hardcoded.
+        // Returns a response when the action is a button composite (handled here), or null
+        // when the caller should fall through to the normal single-control path.
+        private static object TryDriveButtonComposite(PlayerInput pi, List<InputDevice> devices,
+            string controlPath, string actionName, int playerIndex, float x, float y, bool released)
+        {
+            if (!string.IsNullOrEmpty(controlPath)) return null;
+
+            var act = pi.actions != null ? pi.actions.FindAction(actionName, throwIfNotFound: false) : null;
+            if (act == null) return new ErrorResponse($"Player has no action named '{actionName}'. See `list`.");
+            if (!act.enabled) act.Enable();
+            if (!IsButtonComposite(act, devices)) return null;
+
+            int n = DriveComposite(act, devices, x, y, released);
+            if (n == 0) return new ErrorResponse($"Could not resolve composite parts for '{actionName}' on the player's device(s).");
+            string vlabel = released ? "(0,0)" : $"({x},{y})";
+            return new SuccessResponse($"{(released ? "Released" : "Set")} '{actionName}' = {vlabel} via {n} key(s) on player {playerIndex}.");
         }
 
         // Set the three settings that together let injected input be processed while Unity

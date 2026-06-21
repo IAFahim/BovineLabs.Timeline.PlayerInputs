@@ -11,10 +11,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     [RequireComponent(typeof(PlayerInput))]
     public sealed class PlayerInputBridge : MonoBehaviour
     {
+        // Magnitude² above which an axis (stick/move) counts as actuated ("pressed"). Matches the
+        // InputEventsClip rising/falling-edge threshold so an axis fires the same start/end timing whether
+        // a designer reads it via InputEventsTrack or via a CommandSequence None Down/Up/Held step.
+        private const float ActuationThresholdSq = 0.0001f;
+
         public int PlayerIdOverride = -1;
         public BitArray256 CurrentDown;
         public BitArray256 CurrentHeld;
         public BitArray256 CurrentUp;
+
+        // Previous-frame actuation state per axis id, so an axis can synthesise Down (left neutral),
+        // Up (returned to neutral) and Held edges - a Value/Vector2 action has no button edges of its own.
+        private BitArray256 axisActuated;
 
         private readonly List<(byte Id, InputAction Action)> axes = new();
         private readonly List<(byte Id, InputAction Action)> buttons = new();
@@ -48,8 +57,20 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                     ? (float2)axis.Action.ReadValue<Vector2>()
                     : new float2(axis.Action.ReadValue<float>(), 0f);
 
-                if (math.lengthsq(val) > 0.0001f)
+                var actuated = math.lengthsq(val) > ActuationThresholdSq;
+
+                if (actuated)
+                {
                     CurrentAxes.Add(new InputAxis { ActionId = axis.Id, Value = val });
+                    CurrentHeld[axis.Id] = true;
+                    if (!axisActuated[axis.Id]) CurrentDown[axis.Id] = true; // left neutral this frame
+                }
+                else if (axisActuated[axis.Id])
+                {
+                    CurrentUp[axis.Id] = true; // returned to neutral this frame
+                }
+
+                axisActuated[axis.Id] = actuated;
             }
         }
 
@@ -64,6 +85,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             CurrentDown = default;
             CurrentHeld = default;
             CurrentUp = default;
+            axisActuated = default;
 
             for (byte i = 0; i < MultiInputSettings.I.InputActions.Count; i++)
             {

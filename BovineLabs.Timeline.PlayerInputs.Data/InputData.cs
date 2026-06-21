@@ -141,6 +141,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         public BlobAssetReference<CommandBlob> Blob;
 
+        // Union of the action ids this clip reads from HISTORY - the combo modes only (Contains/Consume/
+        // Ordered* families); None/Held/Not* are excluded (CommandSequenceClip.ReadsHistory). While the
+        // clip is active and not yet completed, ConsumerBufferMaskSystem ORs this into the consumer's
+        // ActiveBufferMask so a combo self-buffers its own actions' Down/Up edges with no separate
+        // InputBufferWindow track. None Down/Up/Held is a live probe and never goes through here.
+        public BitArray256 Actions;
+
         // "Get from": where to resolve the entity that owns ConsumerLink, then the link to the input
         // consumer (PlayerId holder) whose history/state the sequence reads.
         public Target ReadRootFrom;

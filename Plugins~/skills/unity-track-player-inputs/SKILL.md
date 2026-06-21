@@ -152,19 +152,32 @@ AxisTransform reads), `Gain`(`[0,1]`, default 1), `LocalOffset`(Vector3 sample p
 
 ### Edge cases & traps (each source-proven, vex-ee 2026-06)
 
-- **DON'T expect a CommandSequence to fire with no Buffer Window open** — the #1
-  silent dead-end. `ActiveBufferMask` is reset to empty every tick and rebuilt only
-  from *active* `InputBufferWindowClip`s; no active window → nothing recorded into
-  history → buffered modes never match. Author an `InputBufferWindowClip` on an
-  `InputBufferTrack` (same consumer) **spanning the listening window** alongside the
-  CommandSequence clip. (Live-probe `CommandMode.None` steps are the only exception.)
+- **A CommandSequence clip now AUTO-BUFFERS its own combo actions** (reworked 2026-06).
+  At bake the clip records the union of action ids used by its *history-reading* modes
+  (`Contains`/`Consume`/`Ordered*` families) into `CommandSequenceConfig.Actions`;
+  `ConsumerBufferMaskSystem` ORs that into the consumer's `ActiveBufferMask` while the
+  clip is active and not yet completed. **So buffered/combo modes work with NO separate
+  `InputBufferWindowClip` track** — the old #1 silent dead-end is gone for a clip's own
+  actions. Author an explicit `InputBufferWindowClip` only to record actions BEFORE the
+  combo clip is active, or actions no step references (e.g. to make a `Not*` check see an
+  action it doesn't itself read — `None`/`Held`/`Not*` actions are deliberately NOT
+  auto-buffered, to avoid polluting the shared per-consumer history).
+- **`CommandMode.None` is a pure LIVE-STATE probe for every phase** (`Down`=press frame,
+  `Up`=release frame, `Held`=while sustained). It never touches the shared history, so it
+  can't steal or contaminate another clip's edges — but it only matches when the clip is
+  **ACTIVE on the edge frame**. For "fire on press/release", size the clip to span the
+  input, or give it `ClipCaps.Looping` (now enabled) and loop it so it listens every
+  frame. History-backed matching is only for the explicit combo modes.
 - **DON'T put `Phase.Held` on a buffered mode — it can NEVER match** — history records
-  Down/Up edges only, never Held; the baker emits a `LogError` if you do. A sustained
-  hold must be a `CommandMode.None` live probe (`Phase.Held`).
-- **DON'T leave `Repeatable=true` with no Consume-family step** — the matched history
-  still matches next frame, so it **retriggers every frame**. The baker warns. Pair
-  Repeatable with at least one `Consume`/`*Consume` step (so the match is removed), or
-  set Repeatable off (fires once per clip activation).
+  Down/Up edges only, never Held; the baker emits a `LogError` AND now neutralises the
+  step (fail-closed) so it doesn't uselessly self-buffer. A sustained hold must be a
+  `CommandMode.None` live probe (`Phase.Held`).
+- **DON'T leave `Repeatable=true` without a TRANSIENT trigger** — a Repeatable sequence
+  fires once per frame ALL steps match, so it **re-fires every frame** unless one step's
+  truth goes false again next frame: a `Consume`-family step (removes the matched history)
+  or a `None` `Down`/`Up` edge (live bit set one frame only). A `None Held` probe or a
+  non-consuming `Contains` stays true and spams the event — the baker warns. Pair
+  Repeatable with a Consume step or a None edge, or set Repeatable off.
 - **DO use the Ordered family for real combos** — plain `Contains`/`Consume` match
   anywhere in history regardless of order; `OrderedConsume`+`MaxGapTicks` is what
   expresses a true timed sequence (down, down-forward, forward + punch = 236P).

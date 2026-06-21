@@ -1,5 +1,6 @@
 using System;
 using BovineLabs.Core.Authoring.EntityCommands;
+using BovineLabs.Core.Collections;
 using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Reaction.Data.Core;
@@ -71,7 +72,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public EntityLinkSchema EventRouteLink;
 
         public override double duration => .5f;
-        public ClipCaps clipCaps => ClipCaps.None;
+
+        // Looping lets a designer place a short recogniser clip and loop it so it stays ClipActive every
+        // frame - a continuous listening window. A live None Down/Up/Held step then catches every edge
+        // while the loop is active, so even a one-frame clip looped over a span reacts to any press/release.
+        public ClipCaps clipCaps => ClipCaps.Looping;
 
         public override void Bake(Entity entity, BakingContext context)
         {
@@ -89,6 +94,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             ref var root = ref builder.ConstructRoot<CommandBlob>();
             var seqArray = builder.Allocate(ref root.Sequences, Sequences.Length);
 
+            // Union of action ids this clip reads from HISTORY (the combo modes only). Drives the clip's
+            // self-buffering so a designer never wires a separate InputBufferWindow track for a combo's own
+            // actions. Deliberately EXCLUDES None (live probe), Held, and the Not* absence checks: those do
+            // not read recorded edges, so recording their actions would only pollute the shared per-consumer
+            // history (a None/Held/Not* action self-buffering would make another clip's NotContains on the
+            // same action self-trip, and would evict edges a sibling combo still needs).
+            var actions = default(BitArray256);
+
             for (var s = 0; s < Sequences.Length; s++)
             {
                 var seqData = Sequences[s];
@@ -96,15 +109,21 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 seqArray[s].Value = seqData.Value;
                 seqArray[s].Repeat = seqData.Repeatable ? (byte)1 : (byte)0;
 
-                if (seqData.Repeatable && HasHistoryStepWithoutConsume(seqData.Steps))
+                if (seqData.Repeatable && !HasTransientTrigger(seqData.Steps))
                     Debug.LogWarning(
-                        $"CommandSequenceClip '{name}' sequence {s} is Repeatable but no step consumes history. " +
-                        "It will retrigger every frame while the history still matches. Use a Consume-family " +
-                        "mode on at least one step, or disable Repeatable.", this);
+                        $"CommandSequenceClip '{name}' sequence {s} is Repeatable but nothing makes its match " +
+                        "transient, so it re-fires the event EVERY frame the match holds (a sustained None Held " +
+                        "probe, or a non-consuming Contains, stays true across frames). Add a Consume-family mode " +
+                        "or a None Down/Up edge step (both go false again after one frame), or disable Repeatable.",
+                        this);
 
                 var stepArray = builder.Allocate(ref seqArray[s].Steps, seqData.Steps.Length);
                 for (var i = 0; i < seqData.Steps.Length; i++)
+                {
                     stepArray[i] = BakeStep(seqData.Steps[i], s, i);
+                    if (stepArray[i].ActionId != byte.MaxValue && ReadsHistory(stepArray[i].Mode))
+                        actions[stepArray[i].ActionId] = true;
+                }
             }
 
             var blobRef = builder.CreateBlobAssetReference<CommandBlob>(Allocator.Persistent);
@@ -115,6 +134,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             commands.AddComponent(new CommandSequenceConfig
             {
                 Blob = blobRef,
+                Actions = actions,
                 ReadRootFrom = ReadRootFrom,
                 ConsumerLinkKey = consumerLinkKey,
                 EventRouteTo = EventRouteTo,
@@ -170,11 +190,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     $"CommandSequenceClip '{name}' step {stepIndex} uses a buffered mode with the Held " +
                     "phase, which can never match: input history records Down/Up transitions only. " +
                     "Use CommandMode.None for a sustained-hold probe.", this);
+
+                // Neutralise the mis-authored step (fail closed, same as the unresolved-action path): a
+                // buffered Held step can never match, and leaving its real ActionId would still self-buffer
+                // that action uselessly into the shared history. The sentinel excludes it from both.
+                id = byte.MaxValue;
             }
 
-            // No-surprise guardrail: MaxGapTicks only gates buffered match modes against the PREVIOUS
-            // matched step. It is inert on the first step (no previous match), on None (live probe), and
-            // on the Not* family (absence checks) - warn so a designer never assumes a window is enforced.
+            // No-surprise guardrail: MaxGapTicks only gates a history match against the PREVIOUS matched
+            // step. It is inert on the first step (no previous match), on None (a live probe that never
+            // reads history) and on the Not* family (absence checks) - warn so a designer never assumes a
+            // timing window is enforced where it is not.
             var maxGap = stepData.MaxGapTicks;
             if (maxGap != 0 && id != byte.MaxValue &&
                 (stepIndex == 0 || stepMode is CommandMode.None or CommandMode.NotContains
@@ -182,7 +208,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             {
                 Debug.LogWarning(
                     $"CommandSequenceClip '{name}' sequence {seq} step {stepIndex}: MaxGapTicks={maxGap} has no effect " +
-                    "here. The timing window only applies to buffered match modes on a step after the first; " +
+                    "here. The timing window only applies to a step after the first that reads history; " +
                     "first steps, None probes and Not* modes ignore it.", this);
             }
 
@@ -195,9 +221,35 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             };
         }
 
-        private static bool HasHistoryStepWithoutConsume(CommandStepData[] steps)
+        // True for the modes that read recorded InputHistory (the combo modes). None is a live probe and
+        // the Not* family are absence checks - neither needs the clip to record its action into history.
+        private static bool ReadsHistory(CommandMode mode)
         {
-            var hasHistoryStep = false;
+            switch (mode)
+            {
+                case CommandMode.Contains:
+                case CommandMode.Consume:
+                case CommandMode.FirstConsume:
+                case CommandMode.LastConsume:
+                case CommandMode.OrderedContains:
+                case CommandMode.OrderedConsume:
+                case CommandMode.OrderedFirstConsume:
+                case CommandMode.OrderedLastConsume:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        // A Repeatable sequence fires once per frame that ALL its steps match. To fire once per EVENT
+        // rather than every frame, at least one step's truth must be transient - false again the next
+        // frame - so the AND'd match drops between events. Transient triggers:
+        //   - a Consume-family step: it removes the matched history entry, so next frame it is gone.
+        //   - a None Down/Up edge: the live Down/Up bit is set for exactly one frame.
+        // A None Held probe (true every frame held) and a non-consuming Contains (lingers in history) are
+        // NOT transient; a Repeatable sequence built only from those re-fires the event every frame.
+        private static bool HasTransientTrigger(CommandStepData[] steps)
+        {
             foreach (var step in steps)
             {
                 switch (step.Mode)
@@ -208,15 +260,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     case CommandMode.OrderedConsume:
                     case CommandMode.OrderedFirstConsume:
                     case CommandMode.OrderedLastConsume:
-                        return false;
-                    case CommandMode.Contains:
-                    case CommandMode.OrderedContains:
-                        hasHistoryStep = true;
-                        break;
+                        return true;
+                    case CommandMode.None when step.Phase != InputPhase.Held:
+                        return true;
                 }
             }
 
-            return hasHistoryStep;
+            return false;
         }
     }
 }

@@ -14,6 +14,13 @@ namespace BovineLabs.Timeline.PlayerInputs
             switch (step.Mode)
             {
                 case CommandMode.None:
+                    // None is the designer-friendly default: a live-state probe of the consumer's
+                    // current frame. Down fires on the press frame, Up on the release frame, Held while
+                    // the action is sustained. It reads ONLY this clip's own live view - it never touches
+                    // the shared per-consumer history - so it cannot steal, consume or contaminate edges
+                    // another clip is reading. It matches whenever the clip is ACTIVE on the edge frame;
+                    // size the clip to span the input, or loop it (ClipCaps.Looping) to listen every
+                    // frame. History-backed matching is for the explicit combo modes below.
                     return EvaluateLiveState(in step, in state);
                 case CommandMode.Contains:
                 case CommandMode.Consume:

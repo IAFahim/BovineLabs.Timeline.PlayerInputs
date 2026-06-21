@@ -117,14 +117,46 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         }
 
         [Test]
-        public void None_ProbesLiveInputState()
+        public void None_ProbesLiveInputState_AllPhases_IgnoresHistory()
         {
-            var history = History();
+            // None is a pure live-state probe of the current frame for every phase, and never consults the
+            // shared history (so it can never steal or contaminate a sibling clip's recorded edges).
+            var state = default(InputState);
+            state.Down[5] = true;
+            state.Held[6] = true;
+            state.Up[7] = true;
+
+            // A populated history of the SAME actions/phases must not change a live probe's answer.
+            var history = History((5, InputPhase.Down, 0), (6, InputPhase.Down, 0), (7, InputPhase.Up, 0));
+
+            Assert.IsTrue(EvalOnce(Step(CommandMode.None, 5, InputPhase.Down), history, state));
+            Assert.IsTrue(EvalOnce(Step(CommandMode.None, 6, InputPhase.Held), history, state));
+            Assert.IsTrue(EvalOnce(Step(CommandMode.None, 7, InputPhase.Up), history, state));
+
+            // Live bit not set -> no match, regardless of what history holds.
+            Assert.IsFalse(EvalOnce(Step(CommandMode.None, 8, InputPhase.Down), history, state));
+            Assert.IsFalse(EvalOnce(Step(CommandMode.None, 5, InputPhase.Up), history, state));
+        }
+
+        [Test]
+        public void None_DoesNotConsumeHistory()
+        {
+            // A None probe leaves the shared history untouched: a buffered Consume step on the same entry
+            // still finds it afterward (proves None never claims a recorded edge).
+            var history = History((5, InputPhase.Down, 0));
             var state = default(InputState);
             state.Down[5] = true;
 
-            Assert.IsTrue(EvalOnce(Step(CommandMode.None, 5, InputPhase.Down), history, state));
-            Assert.IsFalse(EvalOnce(Step(CommandMode.None, 6, InputPhase.Down), history, state));
+            var mask = default(BitArray256);
+            var searchIndex = 0;
+            var lastTick = uint.MaxValue;
+            var none = Step(CommandMode.None, 5, InputPhase.Down);
+            Assert.IsTrue(CommandMatcher.Evaluate(ref none, state, history, ref mask, ref searchIndex, ref lastTick));
+
+            // History entry survived -> a Consume still matches it.
+            var consume = Step(CommandMode.Consume, 5);
+            Assert.IsTrue(CommandMatcher.Evaluate(ref consume, state, history, ref mask, ref searchIndex,
+                ref lastTick));
         }
 
         [Test]
