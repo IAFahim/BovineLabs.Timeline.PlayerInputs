@@ -16,6 +16,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics;
+using Unity.Physics.Extensions;
 using Unity.Transforms;
 
 namespace BovineLabs.Timeline.PlayerInputs
@@ -252,6 +253,47 @@ namespace BovineLabs.Timeline.PlayerInputs
                 {
                     EventChanges.Add(stopTarget, new EventAmount(config.OnAxisStop, 1));
                     UniqueKeys.Add(stopTarget);
+                }
+
+                if (config.Mode == AxisTransformMode.Rotation)
+                {
+                    // Rotation turns the ANCHOR entity (the body AnchorLink points at) - NOT the bound carrot
+                    // marker, which only carries the consumer link. (Position mode moves the bound marker
+                    // relative to the anchor; Rotation turns the anchor itself.) Fall back to the bound entity.
+                    var rotTarget = targetEntity;
+                    if (config.AnchorLinkKey != 0 &&
+                        EntityLinkResolver.TryResolve(targetEntity, targets, config.ReadRootFrom,
+                            config.AnchorLinkKey, Sources, Entries, out var linkedRot))
+                        rotTarget = linkedRot;
+
+                    // Axis.x -> yaw RATE about the plane normal. Driving a rate (not a position offset) is what
+                    // makes mouse delta AND a held stick both work: mouse speed or stick deflection map to turn
+                    // speed, and it stops when input returns to zero (so set KeepLastPosition OFF for mouse delta).
+                    var yawRate = math.radians(state.LastInput.x * config.Range);
+
+                    if (Velocities.HasComponent(rotTarget) && Masses.TryGetComponent(rotTarget, out var rotMass) &&
+                        Transforms.HasComponent(rotTarget))
+                    {
+                        // Dynamic body: drive the yaw component of WORLD-space angular velocity, leaving any
+                        // tumble (pitch/roll) to physics. Stomping LocalTransform.Rotation would fight the solver.
+                        var pv = Velocities[rotTarget];
+                        var bodyRot = Transforms[rotTarget].Rotation;
+                        var world = pv.GetAngularVelocityWorldSpace(rotMass, bodyRot);
+                        var perp = world - math.dot(world, planeNormal) * planeNormal;
+                        world = perp + planeNormal * yawRate;
+                        pv.SetAngularVelocityWorldSpace(rotMass, bodyRot, world);
+                        Velocities[rotTarget] = pv;
+                    }
+                    else if (Transforms.HasComponent(rotTarget))
+                    {
+                        // Non-physics target: integrate yaw straight into the transform.
+                        var t = Transforms[rotTarget];
+                        t.Rotation = math.normalize(
+                            math.mul(quaternion.AxisAngle(planeNormal, yawRate * DeltaTime), t.Rotation));
+                        Transforms[rotTarget] = t;
+                    }
+
+                    return;
                 }
 
                 if (config.Mode.IsRigidbody())

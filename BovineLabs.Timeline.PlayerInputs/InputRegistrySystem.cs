@@ -45,10 +45,23 @@ namespace BovineLabs.Timeline.PlayerInputs
                 var existing = next[slot];
                 if (existing != Entity.Null)
                 {
-                    // Deterministic tie-break: keep the lower entity so the registry
-                    // is independent of archetype/query iteration order across
-                    // structural changes. Without this, which duplicate "wins" could
-                    // differ between client and server for the same world state.
+                    // A retiring provider (a player who just left, kept one tick to deliver its closing
+                    // release) must still occupy its slot when it is the ONLY provider for that id - that is
+                    // how consumers read the release. But if a fresh, live provider also claims the id (a
+                    // same-id leave+rejoin overlap), the live one must win: route the rejoined player's input,
+                    // not the dying corpse. This is the expected overlap, so it is NOT a duplicate error.
+                    var existingRetiring = SystemAPI.HasComponent<ProviderRetiring>(existing);
+                    var entityRetiring = SystemAPI.HasComponent<ProviderRetiring>(entity);
+                    if (existingRetiring != entityRetiring)
+                    {
+                        if (entityRetiring) continue;   // keep the live existing, ignore the corpse
+                        next[slot] = entity;            // replace the corpse with the live provider
+                        continue;
+                    }
+
+                    // Two live (or two retiring) providers for one id is a genuine misconfiguration.
+                    // Deterministic tie-break: keep the lower entity so the registry is independent of
+                    // archetype/query iteration order across structural changes (client/server agree).
                     ReportDuplicate(slot);
                     if (existing.Index <= entity.Index) continue;
                 }

@@ -39,7 +39,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         Velocity = 1,
         RigidbodyVelocity = 2,
         RigidbodyForce = 3,
-        RigidbodyImpulse = 4
+        RigidbodyImpulse = 4,
+
+        // Rotate the target instead of moving it: the X axis yaws around the Plane normal. Range = degrees
+        // per second at full deflection. Lets a Vector2 axis (e.g. mouse Look) drive rotation.
+        Rotation = 5,
     }
 
     [Flags]
@@ -89,6 +93,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     }
 
     public struct ProviderTag : IComponentData
+    {
+    }
+
+    // A leaving player's provider is tagged with this instead of being destroyed immediately. Its InputState
+    // carries a closing Up for everything that was held, so consumers (CommandSequence waiting on a release)
+    // get one tick to read it; ProviderRetireSystem then destroys the entity. See PlayerInputBridge.OnDisable.
+    public struct ProviderRetiring : IComponentData
     {
     }
 
