@@ -104,66 +104,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
                 var stepArray = builder.Allocate(ref seqArray[s].Steps, seqData.Steps.Length);
                 for (var i = 0; i < seqData.Steps.Length; i++)
-                {
-                    var actionRef = seqData.Steps[i].Action;
-
-                    // A null or unresolved action must FAIL CLOSED, not silently bake to ActionId 0
-                    // (which would gate the step on whatever action is index 0). byte.MaxValue can never
-                    // match a real action in any mode (live-state bitsets are 256-wide; buffered history
-                    // only ever holds real ids), so the misconfigured sequence becomes inert.
-                    byte id = byte.MaxValue;
-                    if (actionRef == null)
-                    {
-                        Debug.LogError(
-                            $"CommandSequenceClip '{name}' sequence {s} step {i} has no Action assigned; " +
-                            "the step can never match and the sequence will not fire.", this);
-                    }
-                    else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(actionRef, out id))
-                    {
-                        id = byte.MaxValue;
-                        Debug.LogError(
-                            $"CommandSequenceClip '{name}' action '{actionRef.name}' not found in MultiInputSettings; " +
-                            "the step can never match.", this);
-                    }
-
-                    var stepMode = seqData.Steps[i].Mode;
-                    var stepPhase = seqData.Steps[i].Phase;
-                    if (id == byte.MaxValue)
-                    {
-                        // FAIL CLOSED for EVERY mode: force a live-state probe (Mode.None) of the reserved
-                        // id 255. Buffered positive modes are inert on a missing id, but the Not* family
-                        // PASSES on absence (would fail OPEN and fire every frame) — a live probe of the
-                        // never-set bit 255 is inert in all modes. (Reserves action index 255 as the sentinel.)
-                        stepMode = CommandMode.None;
-                    }
-                    else if (stepMode != CommandMode.None && stepPhase == InputPhase.Held)
-                        Debug.LogError(
-                            $"CommandSequenceClip '{name}' step {i} uses a buffered mode with the Held " +
-                            "phase, which can never match: input history records Down/Up transitions only. " +
-                            "Use CommandMode.None for a sustained-hold probe.", this);
-
-                    // No-surprise guardrail: MaxGapTicks only gates buffered match modes against the PREVIOUS
-                    // matched step. It is inert on the first step (no previous match), on None (live probe), and
-                    // on the Not* family (absence checks) - warn so a designer never assumes a window is enforced.
-                    var maxGap = seqData.Steps[i].MaxGapTicks;
-                    if (maxGap != 0 && id != byte.MaxValue &&
-                        (i == 0 || stepMode is CommandMode.None or CommandMode.NotContains
-                            or CommandMode.NotFirst or CommandMode.NotLast))
-                    {
-                        Debug.LogWarning(
-                            $"CommandSequenceClip '{name}' sequence {s} step {i}: MaxGapTicks={maxGap} has no effect " +
-                            "here. The timing window only applies to buffered match modes on a step after the first; " +
-                            "first steps, None probes and Not* modes ignore it.", this);
-                    }
-
-                    stepArray[i] = new CommandStep
-                    {
-                        ActionId = id,
-                        Mode = stepMode,
-                        Phase = stepPhase,
-                        MaxGapTicks = seqData.Steps[i].MaxGapTicks
-                    };
-                }
+                    stepArray[i] = BakeStep(seqData.Steps[i], s, i);
             }
 
             var blobRef = builder.CreateBlobAssetReference<CommandBlob>(Allocator.Persistent);
@@ -182,6 +123,76 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             commands.AddComponent<CommandSequenceState>();
 
             base.Bake(entity, context);
+        }
+
+        // Resolve a step's action to its baked id, or byte.MaxValue (the reserved sentinel) on a null/unknown
+        // action. A null or unresolved action must FAIL CLOSED, not silently bake to ActionId 0 (which would
+        // gate the step on whatever action is index 0). byte.MaxValue can never match a real action in any mode
+        // (live-state bitsets are 256-wide; buffered history only ever holds real ids), so the step is inert.
+        private byte ResolveActionId(InputActionReference actionRef, int seq, int stepIndex)
+        {
+            if (actionRef == null)
+            {
+                Debug.LogError(
+                    $"CommandSequenceClip '{name}' sequence {seq} step {stepIndex} has no Action assigned; " +
+                    "the step can never match and the sequence will not fire.", this);
+                return byte.MaxValue;
+            }
+
+            if (!MultiInputSettingsAuthoringUtility.TryGetIndex(actionRef, out var id))
+            {
+                Debug.LogError(
+                    $"CommandSequenceClip '{name}' action '{actionRef.name}' not found in MultiInputSettings; " +
+                    "the step can never match.", this);
+                return byte.MaxValue;
+            }
+
+            return id;
+        }
+
+        private CommandStep BakeStep(in CommandStepData stepData, int seq, int stepIndex)
+        {
+            var id = ResolveActionId(stepData.Action, seq, stepIndex);
+            var stepMode = stepData.Mode;
+            var stepPhase = stepData.Phase;
+
+            if (id == byte.MaxValue)
+            {
+                // FAIL CLOSED for EVERY mode: force a live-state probe (Mode.None) of the reserved
+                // id 255. Buffered positive modes are inert on a missing id, but the Not* family
+                // PASSES on absence (would fail OPEN and fire every frame) — a live probe of the
+                // never-set bit 255 is inert in all modes. (Reserves action index 255 as the sentinel.)
+                stepMode = CommandMode.None;
+            }
+            else if (stepMode != CommandMode.None && stepPhase == InputPhase.Held)
+            {
+                Debug.LogError(
+                    $"CommandSequenceClip '{name}' step {stepIndex} uses a buffered mode with the Held " +
+                    "phase, which can never match: input history records Down/Up transitions only. " +
+                    "Use CommandMode.None for a sustained-hold probe.", this);
+            }
+
+            // No-surprise guardrail: MaxGapTicks only gates buffered match modes against the PREVIOUS
+            // matched step. It is inert on the first step (no previous match), on None (live probe), and
+            // on the Not* family (absence checks) - warn so a designer never assumes a window is enforced.
+            var maxGap = stepData.MaxGapTicks;
+            if (maxGap != 0 && id != byte.MaxValue &&
+                (stepIndex == 0 || stepMode is CommandMode.None or CommandMode.NotContains
+                    or CommandMode.NotFirst or CommandMode.NotLast))
+            {
+                Debug.LogWarning(
+                    $"CommandSequenceClip '{name}' sequence {seq} step {stepIndex}: MaxGapTicks={maxGap} has no effect " +
+                    "here. The timing window only applies to buffered match modes on a step after the first; " +
+                    "first steps, None probes and Not* modes ignore it.", this);
+            }
+
+            return new CommandStep
+            {
+                ActionId = id,
+                Mode = stepMode,
+                Phase = stepPhase,
+                MaxGapTicks = stepData.MaxGapTicks
+            };
         }
 
         private static bool HasHistoryStepWithoutConsume(CommandStepData[] steps)
