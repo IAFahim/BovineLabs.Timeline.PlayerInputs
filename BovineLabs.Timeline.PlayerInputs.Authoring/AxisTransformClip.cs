@@ -48,6 +48,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                  "the last input direction.")]
         public float Smoothing;
 
+        [Tooltip("Aim only: if > 0, the sphere also moves to (aim direction x this radius) around the body - it " +
+                 "sits at the arrow's tip and holds there on release. 0 = rotate in place only.")]
+        public float AimRadius;
+
         [Header("Options")]
         [Tooltip("Interpret the stick relative to the Main Camera instead of world axes.")]
         public bool CameraRelative = true;
@@ -95,6 +99,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Range = Range,
                 Plane = Plane,
                 Smoothing = Smoothing,
+                AimRadius = AimRadius,
                 LeashRadius = LeashRadius,
                 Mode = Mode,
                 Flags = flags

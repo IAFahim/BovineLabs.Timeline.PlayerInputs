@@ -175,6 +175,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     state.HeldWorldPosition = parented
                         ? parentPos + math.rotate(parentRot, t.Position * parentScale)
                         : t.Position;
+                    state.HasAimed = false;
                     state.Initialized = true;
                 }
 
@@ -223,11 +224,23 @@ namespace BovineLabs.Timeline.PlayerInputs
                         var worldDesired = quaternion.LookRotationSafe(math.normalize(inputVec), planeNormal);
                         var lerpT = config.Smoothing <= 0.0001f ? 1f : 1f - math.exp(-config.Smoothing * DeltaTime);
                         state.HeldWorldRotation = math.slerp(state.HeldWorldRotation, worldDesired, lerpT);
+                        state.HasAimed = true;
                     }
 
                     t.Rotation = parented
                         ? math.mul(math.inverse(parentRot), state.HeldWorldRotation)
                         : state.HeldWorldRotation;
+
+                    // AimRadius: also slide the sphere out to the arrow's tip (held aim dir x radius) around the body
+                    // and HOLD there - the held rotation already holds, so the position holds with it.
+                    if (config.AimRadius > 0.0001f && state.HasAimed)
+                    {
+                        var worldOffset = math.mul(state.HeldWorldRotation, math.forward()) * config.AimRadius;
+                        t.Position = parented
+                            ? math.rotate(math.inverse(parentRot), worldOffset) / parentScale
+                            : worldOffset;
+                    }
+
                     writeTransform = true;
                 }
 

@@ -183,6 +183,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         // AIM: turn speed toward the stick direction (0 = instant snap). MOVE ignores it.
         public float Smoothing;
 
+        // AIM: if > 0, the carrot also TRANSLATES to (held aim direction × this radius) around the body, so the
+        // sphere sits at the arrow's tip and holds there on release. 0 = rotation-only (legacy). MOVE ignores it.
+        public float AimRadius;
+
         // MOVE: max lead distance from the body. 0 = unlimited. AIM ignores it.
         public float LeashRadius;
 
@@ -206,6 +210,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         // driving and re-derived to parent-local each frame so the body travels to a FIXED world point and stops.
         public float3 HeldWorldPosition;
         public bool Initialized;
+
+        // AIM + AimRadius: true once the stick has been pushed at least once this activation, so the radial offset
+        // only kicks in after the first aim (no startup jump onto the ring before the player has aimed).
+        public bool HasAimed;
     }
 
     public struct InputEventsConfig : IComponentData
