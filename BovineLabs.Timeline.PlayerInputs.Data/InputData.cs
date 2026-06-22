@@ -33,18 +33,27 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         NotLast = 34
     }
 
+    // A carrot driver does ONE verb. Move drives the carrot's POSITION from the stick (the Pos carrot the body
+    // chases via its Force/Linear PID); Aim drives the carrot's FACING (the Rot carrot the body turns to via its
+    // Angular PID). The physics body is never written here - that lives in BovineLabs.Timeline.Physics.
+    public enum AxisTransformMode : byte
+    {
+        Move = 0,
+        Aim = 1
+    }
+
     [Flags]
     public enum AxisTransformFlags : byte
     {
         None = 0,
 
-        Translate = 1 << 0,
+        // Interpret the stick relative to the main camera's ground projection instead of world axes.
+        CameraRelative = 1 << 0,
 
-        FaceDirection = 1 << 1,
-
-        CameraRelative = 1 << 2,
-
-        HoldLastPosition = 1 << 3
+        // MOVE only: when the stick is released, keep the carrot at its last lead point instead of snapping it
+        // back onto the body. Off (default) the lead recenters on the body so the body stops and can't diverge.
+        // AIM ignores this - it ALWAYS holds the last input direction (you keep facing where you aimed).
+        KeepLead = 1 << 1
     }
 
     public struct InputState : IComponentData
@@ -165,14 +174,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         public byte ActionId;
 
+        // MOVE: lead distance at full stick deflection. AIM ignores it (only the stick DIRECTION is used).
         public float Range;
 
+        // Plane the stick moves/turns on; its normal is the ground up. Up=(0,1,0) => XZ plane.
         public float3 Plane;
 
+        // AIM: turn speed toward the stick direction (0 = instant snap). MOVE ignores it.
         public float Smoothing;
 
+        // MOVE: max lead distance from the body. 0 = unlimited. AIM ignores it.
         public float LeashRadius;
 
+        public AxisTransformMode Mode;
         public AxisTransformFlags Flags;
     }
 
@@ -187,6 +201,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     public struct AxisTransformState : IComponentData
     {
         public quaternion HeldWorldRotation;
+
+        // MOVE + KeepLead: the world-space lead point the carrot is pinned to on release. Tracked live while
+        // driving and re-derived to parent-local each frame so the body travels to a FIXED world point and stops.
+        public float3 HeldWorldPosition;
         public bool Initialized;
     }
 

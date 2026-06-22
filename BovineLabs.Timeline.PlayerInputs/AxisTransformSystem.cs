@@ -164,34 +164,60 @@ namespace BovineLabs.Timeline.PlayerInputs
                 var t = Transforms[carrot];
                 var writeTransform = false;
 
-                var parented = TryGetParentWorld(carrot, out _, out var parentRot, out var parentScale);
+                var parented = TryGetParentWorld(carrot, out var parentPos, out var parentRot, out var parentScale);
 
                 if (!state.Initialized)
                 {
                     state.HeldWorldRotation = parented ? math.mul(parentRot, t.Rotation) : t.Rotation;
+
+                    // Seed the held world position from the carrot's current world pose so a Move clip that
+                    // starts already-released holds where it is rather than snapping to a stale/zero point.
+                    state.HeldWorldPosition = parented
+                        ? parentPos + math.rotate(parentRot, t.Position * parentScale)
+                        : t.Position;
                     state.Initialized = true;
                 }
 
-                var holdOnRelease = !hasInput && config.Flags.Has(AxisTransformFlags.HoldLastPosition);
-
-                if (config.Flags.Has(AxisTransformFlags.Translate) && !holdOnRelease)
+                if (config.Mode == AxisTransformMode.Move)
                 {
-                    var worldOffset = inputVec * config.Range;
-                    if (config.LeashRadius > 0f)
+                    // MOVE: the stick offsets the carrot ahead of the body (the Pos carrot the body chases).
+                    var keepLead = config.Flags.Has(AxisTransformFlags.KeepLead);
+
+                    if (hasInput)
                     {
-                        var len = math.length(worldOffset);
-                        if (len > config.LeashRadius)
-                            worldOffset *= config.LeashRadius / len;
+                        var worldOffset = inputVec * config.Range;
+                        if (config.LeashRadius > 0f)
+                        {
+                            var len = math.length(worldOffset);
+                            if (len > config.LeashRadius)
+                                worldOffset *= config.LeashRadius / len;
+                        }
+
+                        // Offset-relative parent-local (parent origin cancels analytically; exact 0 at zero input).
+                        t.Position = parented ? math.rotate(math.inverse(parentRot), worldOffset) / parentScale : worldOffset;
+                        // Track the live world lead point so a release captures exactly where the carrot was.
+                        state.HeldWorldPosition = parented ? parentPos + math.rotate(parentRot, worldOffset) : worldOffset;
+                    }
+                    else if (keepLead)
+                    {
+                        // Released, KeepLead: pin to the captured WORLD point, re-derived to parent-local each
+                        // frame. As the body travels to it the offset shrinks and the body STOPS - no runaway.
+                        t.Position = parented
+                            ? math.rotate(math.inverse(parentRot), state.HeldWorldPosition - parentPos) / parentScale
+                            : state.HeldWorldPosition;
+                    }
+                    else
+                    {
+                        // Released, default: snap the lead back onto the body (local zero) so the body stops.
+                        t.Position = float3.zero;
                     }
 
-                    t.Position = parented
-                        ? math.rotate(math.inverse(parentRot), worldOffset) / parentScale
-                        : worldOffset;
                     writeTransform = true;
                 }
-
-                if (config.Flags.Has(AxisTransformFlags.FaceDirection))
+                else
                 {
+                    // AIM: the stick points the carrot's facing (the Rot carrot the body turns to). The indicator
+                    // accumulates in WORLD space and is HELD on release - you keep facing where you last aimed.
                     if (hasInput)
                     {
                         var worldDesired = quaternion.LookRotationSafe(math.normalize(inputVec), planeNormal);

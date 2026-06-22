@@ -25,32 +25,31 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Action whose [-1,1] / stick axis drives this clip.")]
         public InputActionReference Action;
 
-        [Tooltip("Plane the axis moves/turns on (its normal is the ground up). Up=(0,1,0) moves on XZ.")]
+        [Tooltip("What this clip drives. Move = push the carrot ahead of the body (the body chases it). " +
+                 "Aim = point the carrot's facing (the body turns to it). Bind Move to your Pos carrot, Aim to Rot.")]
+        public AxisTransformMode Mode = AxisTransformMode.Move;
+
+        [Tooltip("Plane the stick moves/turns on (its normal is the ground up). Up=(0,1,0) works on XZ.")]
         public Vector3 Plane = Vector3.up;
 
-        [Header("Translate")]
-        [Tooltip("Offset the target along the axis (absolute offset from its rest pose). Recenters onto the rest " +
-                 "pose when released, unless Hold Last Position is enabled.")]
-        public bool Translate = true;
-
-        [Tooltip("Offset distance at full axis deflection.")]
+        [Header("Move")]
+        [Tooltip("Move only: lead distance at full stick deflection.")]
         public float Range = 5f;
 
-        [Tooltip("Translate only: max distance the target may travel from where the clip started. 0 = unlimited.")]
+        [Tooltip("Move only: max lead distance from the body. 0 = unlimited.")]
         public float LeashRadius;
 
-        [Tooltip("Translate only: when the axis is released, hold the target at its last position instead of " +
-                 "recentering onto its rest pose (no snap-back). Makes the leash a place-and-hold lead point.")]
-        public bool HoldLastPosition;
+        [Tooltip("Move only: when the stick is released, snap the lead back onto the body so it stops and can't " +
+                 "drift. Turn OFF to keep the lead where you left it (the body keeps travelling there, then stops).")]
+        public bool SnapBackOnRelease = true;
 
-        [Header("Face Direction")]
-        [Tooltip("Turn the target to face the axis direction. Pure aim = enable this and disable Translate.")]
-        public bool FaceDirection;
-
-        [Tooltip("Face turn speed. 0 = instant snap.")]
+        [Header("Aim")]
+        [Tooltip("Aim only: turn speed toward the stick direction. 0 = instant snap. On release the facing HOLDS " +
+                 "the last input direction.")]
         public float Smoothing;
 
-        [Header("Options")] [Tooltip("Interpret the axis relative to the Main Camera instead of world axes.")]
+        [Header("Options")]
+        [Tooltip("Interpret the stick relative to the Main Camera instead of world axes.")]
         public bool CameraRelative = true;
 
         public override double duration => 1;
@@ -83,15 +82,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             }
 
             var flags = AxisTransformFlags.None;
-            if (Translate) flags |= AxisTransformFlags.Translate;
-            if (FaceDirection) flags |= AxisTransformFlags.FaceDirection;
             if (CameraRelative) flags |= AxisTransformFlags.CameraRelative;
-            if (HoldLastPosition) flags |= AxisTransformFlags.HoldLastPosition;
-
-            if (!Translate && !FaceDirection)
-                Debug.LogWarning(
-                    $"AxisTransformClip '{name}' has neither Translate nor Face Direction enabled; it will do nothing.",
-                    this);
+            if (Mode == AxisTransformMode.Move && !SnapBackOnRelease) flags |= AxisTransformFlags.KeepLead;
 
             var commands = new BakerCommands(context.Baker, entity);
             commands.AddComponent(new AxisTransformConfig
@@ -104,6 +96,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Plane = Plane,
                 Smoothing = Smoothing,
                 LeashRadius = LeashRadius,
+                Mode = Mode,
                 Flags = flags
             });
 

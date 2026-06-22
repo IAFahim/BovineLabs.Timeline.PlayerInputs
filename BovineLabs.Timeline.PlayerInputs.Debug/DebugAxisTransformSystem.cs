@@ -64,14 +64,26 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 var isActive = Active.HasComponent(clip) && Active.IsComponentEnabled(clip);
                 var color = isActive ? new Color(1f, 0.55f, 0.05f) : new Color(0.45f, 0.45f, 0.45f, 0.6f);
 
-                var carrotPos = Ltws[carrot].Position;
+                var carrotLtw = Ltws[carrot];
+                var carrotPos = carrotLtw.Position;
 
                 var anchorPos = carrotPos;
                 if (Parents.HasComponent(carrot) && Ltws.HasComponent(Parents[carrot].Value))
                 {
-                    anchorPos = Ltws[Parents[carrot].Value].Position;
+                    var parentLtw = Ltws[Parents[carrot].Value];
+                    anchorPos = parentLtw.Position;
                     Renderer.Line(anchorPos, carrotPos, color);
+
+                    // Body's actual facing (red): the PID drives this toward the carrot's facing.
+                    Renderer.Line(parentLtw.Position, parentLtw.Position + math.normalize(parentLtw.Forward) * 1.5f,
+                        new Color(1f, 0.2f, 0.2f));
                 }
+
+                // The carrot's held-aim facing (cyan): for an Aim clip this should STAY put when input is released.
+                // If this ray snaps back to neutral on release, the hold is broken; if it holds but the body (red)
+                // swings away, the PID/body coupling is the culprit.
+                Renderer.Line(carrotPos, carrotPos + math.normalize(carrotLtw.Forward) * 1.5f,
+                    new Color(0.1f, 0.9f, 1f));
 
                 Renderer.Point(carrotPos, 0.35f, color);
 

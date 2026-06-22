@@ -12,22 +12,60 @@ using Object = UnityEngine.Object;
 
 namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
 {
+    [InitializeOnLoad]
     [UnityCliTool(
         Name = "player_input",
         Group = "vex",
         Description =
-            "Drive player input via the new Input System with full flexibility (provider/device, player id, button/axis/Vector2). ops: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap.")]
+            "Drive player input via the new Input System with full flexibility (provider/device, player id, button/axis/Vector2). ops: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap, reset.")]
     public static class PlayerInputTool
     {
+        private const string VirtualUsage = "VexCliVirtual";
+        private const string KeyCaptured = "vex.player_input.captured";
+        private const string KeyOrigBackground = "vex.player_input.origBackground";
+        private const string KeyOrigEditorBehavior = "vex.player_input.origEditorBehavior";
+        private const string KeyOrigRunInBackground = "vex.player_input.origRunInBackground";
+        private const string KeyHeld = "vex.player_input.held";
+        private const string KeyDevices = "vex.player_input.devices";
+
         private static readonly List<PendingRelease> Pending = new();
         private static bool _hooked;
+        private static bool _lifecycleArmed;
+
+        static PlayerInputTool()
+        {
+            Bootstrap();
+        }
+
+        [InitializeOnLoadMethod]
+        private static void Bootstrap()
+        {
+            ArmLifecycle();
+            // Sweep leftovers only in edit mode: a mid-play domain reload (recompile-and-continue) must NOT destroy
+            // the live player / yank devices / revert routing. Play-exit is handled by OnPlayModeStateChanged.
+            if (!Application.isPlaying)
+                Cleanup();
+        }
+
+        private static void ArmLifecycle()
+        {
+            if (_lifecycleArmed) return;
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            _lifecycleArmed = true;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange change)
+        {
+            if (change == PlayModeStateChange.ExitingPlayMode || change == PlayModeStateChange.EnteredEditMode)
+                Cleanup();
+        }
 
         public static object HandleCommand(JObject @params)
         {
+            ArmLifecycle();
             var p = new ToolParams(@params);
             var op = (p.Get("op", "list") ?? "list").Trim().ToLowerInvariant();
-
-            EnsureInputAwake();
 
             switch (op)
             {
@@ -35,16 +73,24 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 case "devices": return Devices();
                 case "add_device": return AddDeviceOp(p.Get("provider"));
                 case "remove_device": return RemoveDeviceOp(p.Get("provider"));
-                case "join": return Join(p.Get("provider"), p.Get("scheme"));
-                case "pair": return Pair(p.GetInt("player", 0) ?? 0, p.Get("provider"));
+                case "join":
+                    CaptureAndApplySettings();
+                    return Join(p.Get("provider"), p.Get("scheme"));
+                case "pair":
+                    CaptureAndApplySettings();
+                    return Pair(p.GetInt("player", 0) ?? 0, p.Get("provider"));
                 case "leave": return Leave(p.GetInt("player", 0) ?? 0);
                 case "leave_all": return LeaveAll();
+                case "reset":
+                case "cleanup": return ResetOp();
                 case "press":
                 case "release":
-                case "tap": return Drive(op, p);
+                case "tap":
+                    CaptureAndApplySettings();
+                    return Drive(op, p);
                 default:
                     return new ErrorResponse(
-                        $"Unknown op '{op}'. Use: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap.");
+                        $"Unknown op '{op}'. Use: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap, reset.");
             }
         }
 
@@ -74,7 +120,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                         : null,
                     playerCount = players.Length,
                     players,
-                    pendingReleases = Pending.Count
+                    pendingReleases = Pending.Count,
+                    heldControls = ReadList(KeyHeld).Count,
+                    virtualDevices = ReadList(KeyDevices).Count,
+                    settingsCaptured = SessionState.GetBool(KeyCaptured, false)
                 });
         }
 
@@ -87,7 +136,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 d.layout,
                 d.deviceId,
                 d.added,
-                kind = ProviderKind(d)
+                kind = ProviderKind(d),
+                isVirtual = d.usages.Any(u => u == VirtualUsage)
             }).ToArray();
             return new SuccessResponse($"{devices.Length} input device(s) present.", new { devices });
         }
@@ -109,16 +159,31 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             }
 
             if (device == null) return new ErrorResponse($"AddDevice('{layout}') returned null.");
+
+            try
+            {
+                InputSystem.AddDeviceUsage(device, VirtualUsage);
+            }
+            catch
+            {
+            }
+
+            var ids = ReadList(KeyDevices);
+            var idStr = device.deviceId.ToString();
+            if (!ids.Contains(idStr)) ids.Add(idStr);
+            WriteList(KeyDevices, ids);
+
             return new SuccessResponse(
-                $"Added virtual {device.displayName} (layout {device.layout}, id {device.deviceId}).",
+                $"Added virtual {device.displayName} (layout {device.layout}, id {device.deviceId}). Tracked for auto-cleanup.",
                 new { device.name, device.layout, device.deviceId });
         }
 
         private static object RemoveDeviceOp(string providerOrName)
         {
-            var device = ResolveDevice(providerOrName);
+            var device = ResolveDevice(providerOrName, true);
             if (device == null) return new ErrorResponse($"No device matching '{providerOrName}'. See `devices`.");
             var label = device.displayName;
+            UntrackDevice(device.deviceId);
             InputSystem.RemoveDevice(device);
             return new SuccessResponse($"Removed device {label}.");
         }
@@ -179,10 +244,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
 
         private static object LeaveAll()
         {
-            if (!Application.isPlaying) return new ErrorResponse("leave_all needs play mode.");
             var count = PlayerInput.all.Count;
-            foreach (var pi in PlayerInput.all.ToArray()) Object.Destroy(pi.gameObject);
-            return new SuccessResponse($"Removed {count} player(s).");
+            Cleanup();
+            return new SuccessResponse($"Removed {count} player(s) and cleaned up tool state.");
+        }
+
+        private static object ResetOp()
+        {
+            Cleanup();
+            return new SuccessResponse(
+                "Reset: released held controls, removed virtual devices, left players, restored input settings.");
         }
 
         private static object Drive(string op, ToolParams p)
@@ -226,8 +297,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             if (op == "release")
             {
                 CancelPending(control);
+                UntrackHeld(control);
                 return new SuccessResponse($"Released '{label}' on player {playerIndex} ({control.path}).");
             }
+
+            TrackHeld(control);
 
             var what = vec2Control != null ? $"({x},{y})" : value.ToString();
 
@@ -245,6 +319,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 {
                     if (releaseControl is InputControl<Vector2>) WriteVector(releaseControl, Vector2.zero);
                     else WriteFloat(releaseControl, 0f);
+                    UntrackHeld(releaseControl);
                 },
                 ReleaseAtFrame = Time.frameCount + holdFrames
             });
@@ -271,13 +346,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                     $"Could not resolve composite parts for '{actionName}' on the player's device(s).");
 
             CancelPending(act);
+            TrackHeldComposite(act, devs, released);
+
             if (op == "tap")
             {
                 var holdFrames = Math.Max(1, p.GetInt("hold_frames", 6) ?? 6);
                 Pending.Add(new PendingRelease
                 {
                     Key = act,
-                    Release = () => DriveComposite(act, devs, 0f, 0f, true),
+                    Release = () =>
+                    {
+                        DriveComposite(act, devs, 0f, 0f, true);
+                        TrackHeldComposite(act, devs, true);
+                    },
                     ReleaseAtFrame = Time.frameCount + holdFrames
                 });
                 EnsureHooked();
@@ -290,17 +371,210 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 $"{(released ? "Released" : "Set")} '{actionName}' = {vlabel} via {n} key(s) on player {playerIndex}.");
         }
 
-        private static void EnsureInputAwake()
+        private static void CaptureAndApplySettings()
         {
+            var s = InputSystem.settings;
+            if (!SessionState.GetBool(KeyCaptured, false))
+            {
+                SessionState.SetInt(KeyOrigBackground, (int)s.backgroundBehavior);
+                SessionState.SetInt(KeyOrigEditorBehavior, (int)s.editorInputBehaviorInPlayMode);
+                SessionState.SetBool(KeyOrigRunInBackground, Application.runInBackground);
+                SessionState.SetBool(KeyCaptured, true);
+            }
+
             if (Application.isPlaying)
                 Application.runInBackground = true;
-            var s = InputSystem.settings;
             if (s.backgroundBehavior != InputSettings.BackgroundBehavior.IgnoreFocus)
                 s.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
             if (s.editorInputBehaviorInPlayMode !=
                 InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView)
                 s.editorInputBehaviorInPlayMode =
                     InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+        }
+
+        private static void RestoreSettings()
+        {
+            if (!SessionState.GetBool(KeyCaptured, false)) return;
+            try
+            {
+                var s = InputSystem.settings;
+                s.backgroundBehavior =
+                    (InputSettings.BackgroundBehavior)SessionState.GetInt(KeyOrigBackground,
+                        (int)InputSettings.BackgroundBehavior.ResetAndDisableNonBackgroundDevices);
+                s.editorInputBehaviorInPlayMode =
+                    (InputSettings.EditorInputBehaviorInPlayMode)SessionState.GetInt(KeyOrigEditorBehavior, 0);
+                Application.runInBackground = SessionState.GetBool(KeyOrigRunInBackground, false);
+
+                // Erase only after a successful restore, so a thrown restore retries on the next op/reload.
+                SessionState.EraseBool(KeyCaptured);
+                SessionState.EraseInt(KeyOrigBackground);
+                SessionState.EraseInt(KeyOrigEditorBehavior);
+                SessionState.EraseBool(KeyOrigRunInBackground);
+            }
+            catch
+            {
+            }
+        }
+
+        private static void Cleanup()
+        {
+            try
+            {
+                foreach (var r in Pending.ToArray())
+                    try
+                    {
+                        r.Release();
+                    }
+                    catch
+                    {
+                    }
+
+                Pending.Clear();
+            }
+            catch
+            {
+            }
+
+            ZeroHeldFromLedger();
+            RemoveTrackedDevices();
+
+            if (Application.isPlaying)
+                try
+                {
+                    foreach (var pi in PlayerInput.all.ToArray()) Object.Destroy(pi.gameObject);
+                }
+                catch
+                {
+                }
+
+            RestoreSettings();
+        }
+
+        private static void ZeroHeldFromLedger()
+        {
+            var held = ReadList(KeyHeld);
+            if (held.Count == 0) return;
+            var touched = new HashSet<InputDevice>();
+            foreach (var entry in held)
+            {
+                var sep = entry.IndexOf('|');
+                if (sep <= 0) continue;
+                if (!int.TryParse(entry.Substring(0, sep), out var devId)) continue;
+                var path = entry.Substring(sep + 1);
+                var device = InputSystem.devices.FirstOrDefault(d => d.deviceId == devId);
+                if (device == null) continue;
+                var control = InputControlPath.TryFindControl(device, path);
+                if (control == null) continue;
+                try
+                {
+                    if (control is InputControl<Vector2>) WriteVector(control, Vector2.zero);
+                    else WriteFloat(control, 0f);
+                }
+                catch
+                {
+                }
+
+                touched.Add(device);
+            }
+
+            foreach (var d in touched)
+                try
+                {
+                    InputSystem.ResetDevice(d);
+                }
+                catch
+                {
+                }
+
+            try
+            {
+                InputSystem.Update();
+            }
+            catch
+            {
+            }
+
+            SessionState.EraseString(KeyHeld);
+        }
+
+        private static void RemoveTrackedDevices()
+        {
+            var ids = new HashSet<string>(ReadList(KeyDevices));
+            foreach (var d in InputSystem.devices.ToArray())
+            {
+                var match = ids.Contains(d.deviceId.ToString()) || d.usages.Any(u => u == VirtualUsage);
+                if (!match) continue;
+                try
+                {
+                    InputSystem.RemoveDevice(d);
+                }
+                catch
+                {
+                }
+            }
+
+            SessionState.EraseString(KeyDevices);
+        }
+
+        private static void TrackHeld(InputControl control)
+        {
+            var entry = $"{control.device.deviceId}|{control.path}";
+            var held = ReadList(KeyHeld);
+            if (!held.Contains(entry)) held.Add(entry);
+            WriteList(KeyHeld, held);
+        }
+
+        private static void UntrackHeld(InputControl control)
+        {
+            var entry = $"{control.device.deviceId}|{control.path}";
+            var held = ReadList(KeyHeld);
+            if (held.Remove(entry)) WriteList(KeyHeld, held);
+        }
+
+        private static void TrackHeldComposite(InputAction action, List<InputDevice> devices, bool released)
+        {
+            var held = ReadList(KeyHeld);
+            var changed = false;
+            foreach (var b in action.bindings)
+            {
+                if (!b.isPartOfComposite) continue;
+                foreach (var d in devices)
+                {
+                    if (!(InputControlPath.TryFindControl(d, b.effectivePath) is InputControl<float> fc)) continue;
+                    var entry = $"{fc.device.deviceId}|{fc.path}";
+                    if (released)
+                    {
+                        if (held.Remove(entry)) changed = true;
+                    }
+                    else if (!held.Contains(entry))
+                    {
+                        held.Add(entry);
+                        changed = true;
+                    }
+
+                    break;
+                }
+            }
+
+            if (changed) WriteList(KeyHeld, held);
+        }
+
+        private static List<string> ReadList(string key)
+        {
+            var raw = SessionState.GetString(key, "");
+            if (string.IsNullOrEmpty(raw)) return new List<string>();
+            return raw.Split('\n').Where(s => s.Length > 0).ToList();
+        }
+
+        private static void WriteList(string key, List<string> list)
+        {
+            SessionState.SetString(key, string.Join("\n", list));
+        }
+
+        private static void UntrackDevice(int deviceId)
+        {
+            var ids = ReadList(KeyDevices);
+            if (ids.Remove(deviceId.ToString())) WriteList(KeyDevices, ids);
         }
 
         private static bool IsButtonComposite(InputAction action, List<InputDevice> devices)
@@ -473,7 +747,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
 
             if (!Application.isPlaying)
             {
+                foreach (var r in Pending.ToArray())
+                    try
+                    {
+                        r.Release();
+                    }
+                    catch
+                    {
+                    }
+
                 Pending.Clear();
+                SessionState.EraseString(KeyHeld);
                 return;
             }
 
@@ -534,10 +818,18 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             }
         }
 
-        private static InputDevice ResolveDevice(string providerOrName)
+        private static InputDevice ResolveDevice(string providerOrName, bool preferVirtual = false)
         {
             if (string.IsNullOrEmpty(providerOrName)) return null;
             var pr = providerOrName.Trim().ToLowerInvariant();
+
+            if (preferVirtual)
+            {
+                var virt = InputSystem.devices.FirstOrDefault(d =>
+                    d.usages.Any(u => u == VirtualUsage) && MatchesProvider(d, providerOrName));
+                if (virt != null) return virt;
+            }
+
             switch (pr)
             {
                 case "keyboard": return Keyboard.current ?? InputSystem.devices.FirstOrDefault(d => d is Keyboard);
@@ -569,7 +861,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
         public class Parameters
         {
             [ToolParameter(
-                "Operation: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap (default list).")]
+                "Operation: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap, reset (default list).")]
             public string Op { get; set; }
 
             [ToolParameter(

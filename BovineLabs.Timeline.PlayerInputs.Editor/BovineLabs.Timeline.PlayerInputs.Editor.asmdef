@@ -13,6 +13,7 @@
     "Unity.Transforms",
     "BovineLabs.Timeline.PlayerInputs",
     "BovineLabs.Timeline.PlayerInputs.Data",
+    "BovineLabs.Timeline.PlayerInputs.Authoring",
     "BovineLabs.Essence",
     "BovineLabs.Essence.Data",
     "BovineLabs.Reaction.Data",
