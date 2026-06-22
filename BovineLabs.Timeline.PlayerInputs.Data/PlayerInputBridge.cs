@@ -46,7 +46,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         private void Update()
         {
-            if (provider == Entity.Null && initialized) TryCreateProvider(out provider);
+            // Recreate when the handle is null OR points at an entity that no longer exists (e.g. a SubScene/world
+            // reload wiped it, or a retired provider was destroyed without clearing this field). Otherwise a dead
+            // handle reads non-null forever and ProviderSyncSystem never finds a live provider - input goes silent.
+            if (initialized &&
+                (provider == Entity.Null || world == null || !world.IsCreated || !manager.Exists(provider)))
+                TryCreateProvider(out provider);
 
             // Axis actions derive their Down/Held/Up from the MAGNITUDE crossing (reconciled against the latched
             // pressed state), not from started/canceled - reliable for Value and PassThrough-2D alike, where the
@@ -94,7 +99,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
             ClearState();
 
-            for (byte i = 0; i < MultiInputSettings.I.InputActions.Count; i++)
+            // Ids are bytes (BitArray256 has 256 slots). Count is an int; cap at 256 and iterate with an int so a
+            // 256+ action list can't wrap a byte counter into an infinite re-subscribe loop (editor freeze on join).
+            var count = Math.Min(MultiInputSettings.I.InputActions.Count, 256);
+            for (var i = 0; i < count; i++)
             {
                 var binding = MultiInputSettings.I.InputActions[i];
                 if (!TryFindAction(playerInput, binding, out var action))
@@ -105,7 +113,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                     continue;
                 }
 
-                var id = i;
+                var id = (byte)i;
                 var isAxis = action.type == InputActionType.Value ||
                              (action.type == InputActionType.PassThrough && IsTwoDimensional(action));
 

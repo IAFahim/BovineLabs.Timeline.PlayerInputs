@@ -18,11 +18,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             get
             {
-                for (byte i = 0; i < inputActions.Length; i++)
+                var count = Math.Min(inputActions.Length, 256);
+                for (var i = 0; i < count; i++)
                 {
+                    var id = (byte)i;
                     var binding = inputActions[i];
-                    var actionName = binding?.action != null ? binding.action.name : $"[Unassigned: {i}]";
-                    yield return new NameValue<byte>(actionName, i);
+                    var actionName = binding?.action != null ? binding.action.name : $"[Unassigned: {id}]";
+                    yield return new NameValue<byte>(actionName, id);
                 }
             }
         }
@@ -32,22 +34,24 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             index = 0;
             if (reference?.action == null) return false;
 
-            for (byte i = 0; i < inputActions.Length; i++)
+            var count = Math.Min(inputActions.Length, 256);
+
+            for (var i = 0; i < count; i++)
             {
                 var input = inputActions[i];
                 if (input?.action != null && input.action.id == reference.action.id)
                 {
-                    index = i;
+                    index = (byte)i;
                     return true;
                 }
             }
 
-            for (byte i = 0; i < inputActions.Length; i++)
+            for (var i = 0; i < count; i++)
             {
                 var input = inputActions[i];
                 if (input?.action != null && input.action.name == reference.action.name)
                 {
-                    index = i;
+                    index = (byte)i;
                     return true;
                 }
             }

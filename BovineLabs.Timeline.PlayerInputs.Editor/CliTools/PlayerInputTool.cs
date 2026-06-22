@@ -67,7 +67,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
 
         private class PendingRelease
         {
-            public InputControl Control;
+            // Key identifies the pending release for CancelPending (an InputControl for single controls, or the
+            // InputAction for a button composite). Release performs the actual zeroing - for a composite that means
+            // one device-grouped state event, not N per-key events (those clobber siblings; see DriveComposite).
+            public object Key;
+            public System.Action Release;
             public int ReleaseAtFrame;
         }
 
@@ -256,7 +260,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 return new ErrorResponse("Player has no paired device" +
                     (string.IsNullOrEmpty(provider) ? "." : $" matching provider '{provider}'. See `list`."));
 
-            var compositeResult = TryDriveButtonComposite(pi, devices, controlPath, actionName, playerIndex, x, y, released);
+            var compositeResult = TryDriveButtonComposite(pi, devices, controlPath, actionName, playerIndex, x, y, released, op, p);
             if (compositeResult != null) return compositeResult;
 
             var control = ResolveControl(pi, controlPath, actionName, provider, out var why);
@@ -282,7 +286,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
 
             int holdFrames = System.Math.Max(1, p.GetInt("hold_frames", 6) ?? 6);
             CancelPending(control);
-            Pending.Add(new PendingRelease { Control = control, ReleaseAtFrame = Time.frameCount + holdFrames });
+            var releaseControl = control;
+            Pending.Add(new PendingRelease
+            {
+                Key = releaseControl,
+                Release = () =>
+                {
+                    if (releaseControl is InputControl<Vector2>) WriteVector(releaseControl, Vector2.zero);
+                    else WriteFloat(releaseControl, 0f);
+                },
+                ReleaseAtFrame = Time.frameCount + holdFrames,
+            });
             EnsureHooked();
             return new SuccessResponse($"Tapped '{label}'={what} on player {playerIndex} ({control.path}); auto-release in {holdFrames} frames.");
         }
@@ -294,7 +308,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
         // Returns a response when the action is a button composite (handled here), or null
         // when the caller should fall through to the normal single-control path.
         private static object TryDriveButtonComposite(PlayerInput pi, List<InputDevice> devices,
-            string controlPath, string actionName, int playerIndex, float x, float y, bool released)
+            string controlPath, string actionName, int playerIndex, float x, float y, bool released, string op, ToolParams p)
         {
             if (!string.IsNullOrEmpty(controlPath)) return null;
 
@@ -303,8 +317,28 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             if (!act.enabled) act.Enable();
             if (!IsButtonComposite(act, devices)) return null;
 
-            int n = DriveComposite(act, devices, x, y, released);
+            // Snapshot the device list - the auto-release closure below outlives this call.
+            var devs = devices.ToList();
+            int n = DriveComposite(act, devs, x, y, released);
             if (n == 0) return new ErrorResponse($"Could not resolve composite parts for '{actionName}' on the player's device(s).");
+
+            CancelPending(act);
+            if (op == "tap")
+            {
+                // Single device-grouped zeroing event per part-device (re-runs DriveComposite released) - NOT one
+                // PendingRelease per key, which would clobber siblings. Without this, a composite tap is held forever
+                // (the single-control tap auto-releases, but this path used to return before that logic ran).
+                int holdFrames = System.Math.Max(1, p.GetInt("hold_frames", 6) ?? 6);
+                Pending.Add(new PendingRelease
+                {
+                    Key = act,
+                    Release = () => DriveComposite(act, devs, 0f, 0f, true),
+                    ReleaseAtFrame = Time.frameCount + holdFrames,
+                });
+                EnsureHooked();
+                return new SuccessResponse($"Tapped '{actionName}' = ({x},{y}) via {n} key(s) on player {playerIndex}; auto-release in {holdFrames} frames.");
+            }
+
             string vlabel = released ? "(0,0)" : $"({x},{y})";
             return new SuccessResponse($"{(released ? "Released" : "Set")} '{actionName}' = {vlabel} via {n} key(s) on player {playerIndex}.");
         }
@@ -458,7 +492,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
         // ---- auto-release pump --------------------------------------------
 
         private static void EnsureHooked() { if (_hooked) return; EditorApplication.update += Pump; _hooked = true; }
-        private static void CancelPending(InputControl control) => Pending.RemoveAll(r => r.Control == control);
+
+        // Match by Key: an InputControl for single controls, an InputAction for a composite. Re-tapping the same
+        // control/action cancels its in-flight auto-release so two timers can't stack and double-zero.
+        private static void CancelPending(object key) => Pending.RemoveAll(r => Equals(r.Key, key));
 
         private static void Pump()
         {
@@ -468,13 +505,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             for (int i = Pending.Count - 1; i >= 0; i--)
             {
                 if (now < Pending[i].ReleaseAtFrame) continue;
-                try
-                {
-                    var c = Pending[i].Control;
-                    if (c is InputControl<Vector2>) WriteVector(c, Vector2.zero);
-                    else WriteFloat(c, 0f);
-                }
-                catch { /* control may have gone with a destroyed player/device */ }
+                try { Pending[i].Release(); }
+                catch { /* control/action may have gone with a destroyed player/device */ }
                 Pending.RemoveAt(i);
             }
         }

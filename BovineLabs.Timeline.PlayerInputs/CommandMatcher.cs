@@ -207,6 +207,13 @@ namespace BovineLabs.Timeline.PlayerInputs
         // share a Tick, so MaxGapTicks counts frames. Intra-frame ordering is the
         // job of the Ordered* modes via searchIndex, not of this window.
         // On success, advances lastMatchTick to the matched entry.
+        //
+        // lastMatchTick == uint.MaxValue is the caller's 'no prior matched step'
+        // sentinel. SimulationTick.Value is a real uint that can reach uint.MaxValue,
+        // so a genuine match at that tick is clamped down by one frame when STORED
+        // (never compared) - that keeps the sentinel unproducible by a real match, so
+        // the next step's gap check cannot be silently skipped. The 1-frame clamp at
+        // that single ~4.29-billion boundary tick is harmless to the window math.
         public static bool WithinWindow(uint matchTick, ushort maxGapTicks, ref uint lastMatchTick)
         {
             if (lastMatchTick != uint.MaxValue)
@@ -215,7 +222,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (maxGapTicks != 0 && matchTick - lastMatchTick > maxGapTicks) return false;
             }
 
-            lastMatchTick = matchTick;
+            lastMatchTick = matchTick == uint.MaxValue ? uint.MaxValue - 1 : matchTick;
             return true;
         }
     }

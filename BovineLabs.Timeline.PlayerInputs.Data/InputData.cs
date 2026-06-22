@@ -33,27 +33,28 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         NotLast = 34
     }
 
-    public enum AxisTransformMode : byte
-    {
-        Position = 0,
-        Velocity = 1,
-        RigidbodyVelocity = 2,
-        RigidbodyForce = 3,
-        RigidbodyImpulse = 4,
-
-        // Rotate the target instead of moving it: the X axis yaws around the Plane normal. Range = degrees
-        // per second at full deflection. Lets a Vector2 axis (e.g. mouse Look) drive rotation.
-        Rotation = 5,
-    }
-
+    // AxisTransform is a KINEMATIC input->transform driver: it reads a player axis and writes the target's
+    // LocalTransform. Translate and FaceDirection are independent and composable (do either, both, or neither).
+    // Physics-driven movement deliberately lives in BovineLabs.Timeline.Physics (Force / LinearPID / ...), not here.
     [Flags]
     public enum AxisTransformFlags : byte
     {
         None = 0,
-        IgnoreParentRotation = 1 << 0,
-        KeepLastPosition = 1 << 1,
-        LocalSpace = 1 << 2,
-        CameraRelative = 1 << 3
+
+        // Offset the target's POSITION along the axis: an ABSOLUTE offset from its rest pose (parent origin),
+        // magnitude Range at full deflection, clamped by LeashRadius. Zero input recenters onto the rest pose
+        // (snap-back) UNLESS HoldLastPosition is set.
+        Translate = 1 << 0,
+
+        // Turn the target to FACE the axis direction (slerp at Smoothing, 0 = snap). Pure aim = Translate off.
+        FaceDirection = 1 << 1,
+
+        // Interpret the axis relative to the main camera's ground projection instead of world axes.
+        CameraRelative = 1 << 2,
+
+        // Translate only: when the axis is released (zero input), FREEZE the target at its last offset instead of
+        // recentering onto the rest pose. Turns the leash into a place-and-hold lead point.
+        HoldLastPosition = 1 << 3,
     }
 
     public struct InputState : IComponentData
@@ -192,33 +193,27 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         public Target ReadRootFrom;
         public ushort ConsumerLinkKey;
+
+        // Optional: the body actually driven. Unset (0) drives the bound entity itself; set, drives the linked
+        // entity (the bound marker then just carries the player/consumer link).
         public ushort AnchorLinkKey;
+
         public byte ActionId;
+
+        // Translate: movement speed in units/sec. FaceDirection ignores it (only the axis DIRECTION is used).
         public float Range;
+
+        // Plane the axis moves/turns on; its normal is the ground up. Up=(0,1,0) => XZ plane.
         public float3 Plane;
+
+        // FaceDirection turn speed (0 = instant snap). Unused by Translate.
         public float Smoothing;
+
+        // Translate only: max distance the target may travel from where the clip started. 0 = unlimited. Clamps,
+        // never springs back.
         public float LeashRadius;
-        public float Drag;
-        public float DecayRate;
-        public AxisTransformMode Mode;
+
         public AxisTransformFlags Flags;
-
-        // "Route to": where the axis edge events are fired (Self = the bound entity).
-        public Target EventRouteTo;
-        public ushort EventRouteLinkKey;
-
-        // Fired when the axis leaves neutral (rising edge) / returns to neutral (falling edge).
-        // OnAxisStop is the "axis input is off" event. ConditionKey.Null = no event.
-        public ConditionKey OnAxisStart;
-        public ConditionKey OnAxisStop;
-    }
-
-    public static class AxisTransformModeExtensions
-    {
-        public static bool IsRigidbody(this AxisTransformMode m)
-        {
-            return m >= AxisTransformMode.RigidbodyVelocity;
-        }
     }
 
     public static class AxisTransformFlagsExtensions
@@ -231,12 +226,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
     public struct AxisTransformState : IComponentData
     {
-        public float3 AnchorOrigin;
-        public float3 DesiredOffset;
-        public float3 SmoothedOffset;
-        public float2 LastInput;
-        public bool HasInput;
-        public bool WasInputActive;
+        // World/local start position captured on activation, for the Translate LeashRadius clamp.
+        public float3 StartPosition;
         public bool Initialized;
     }
 

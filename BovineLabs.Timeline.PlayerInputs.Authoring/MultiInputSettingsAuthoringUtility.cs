@@ -11,13 +11,19 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         // actions (which shifts the baked ActionId indices) re-triggers baking of the consuming clips.
         public static void DependsOnSettings(IBaker baker)
         {
-            baker.DependsOn(AuthoringSettingsUtility.GetSettings<MultiInputSettings>());
+            // GetSettings throws when no MultiInputSettings asset exists; TryGetSettings fails soft so a
+            // missing asset registers no dependency rather than aborting the bake with an exception.
+            if (AuthoringSettingsUtility.TryGetSettings<MultiInputSettings>(out var settings) && settings != null)
+            {
+                baker.DependsOn(settings);
+            }
         }
 
         public static bool TryGetIndex(InputActionReference reference, out byte index)
         {
-            var settings = AuthoringSettingsUtility.GetSettings<MultiInputSettings>();
-            if (settings != null && settings.TryGet(reference, out index))
+            // GetSettings throws when no MultiInputSettings asset exists; TryGetSettings fails soft so a
+            // missing asset returns false (the 255 sentinel path) rather than throwing during bake.
+            if (AuthoringSettingsUtility.TryGetSettings<MultiInputSettings>(out var settings) && settings != null && settings.TryGet(reference, out index))
             {
                 // index 255 (byte.MaxValue) is reserved as the unresolved-action sentinel; an action
                 // landing there (only possible at exactly 256 actions) would collide with it, so fail

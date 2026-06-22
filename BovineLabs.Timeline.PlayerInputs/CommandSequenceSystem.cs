@@ -33,6 +33,18 @@ namespace BovineLabs.Timeline.PlayerInputs
         private ComponentLookup<PlayerId> _playerIds;
         private BufferLookup<InputHistory> _histories;
 
+        // Per-clip lookups read inside GatherJob. The job iterates a deterministically sorted entity
+        // array (not chunk order) so shared-history consume arbitration is reproducible, so it reads the
+        // clip components through these lookups instead of via IJobEntity chunk traversal.
+        private ComponentLookup<CommandSequenceConfig> _configs;
+        private ComponentLookup<TrackBinding> _bindings;
+        private ComponentLookup<CommandSequenceState> _commandStates;
+
+        // Query for active CommandSequence clips. Each frame its entities are materialized into a
+        // TempJob list and sorted by Entity to give a stable arbitration order independent of chunk
+        // packing / archetype / creation order.
+        private EntityQuery _clipQuery;
+
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
@@ -61,6 +73,15 @@ namespace BovineLabs.Timeline.PlayerInputs
             _states = state.GetComponentLookup<InputState>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
             _histories = state.GetBufferLookup<InputHistory>();
+
+            _configs = state.GetComponentLookup<CommandSequenceConfig>(true);
+            _bindings = state.GetComponentLookup<TrackBinding>(true);
+            _commandStates = state.GetComponentLookup<CommandSequenceState>();
+
+            _clipQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAllRW<CommandSequenceState>()
+                .WithAll<CommandSequenceConfig, TrackBinding, ClipActive>()
+                .Build(ref state);
         }
 
         [BurstCompile]
@@ -73,10 +94,21 @@ namespace BovineLabs.Timeline.PlayerInputs
             _states.Update(ref state);
             _playerIds.Update(ref state);
             _histories.Update(ref state);
+            _configs.Update(ref state);
+            _bindings.Update(ref state);
+            _commandStates.Update(ref state);
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
             _uniqueKeySet.Clear();
+
+            // Materialize the active clips (ClipActive enabled-state respected) into a list, then sort it
+            // by Entity inside GatherJob. Iterating that sorted order - rather than ECS chunk order - is
+            // what makes shared-history consume arbitration deterministic: when two clips bound to the same
+            // consumer both match a Consume step on the same history entry, the lower-Entity clip always
+            // wins, independent of chunk packing, archetype, or entity creation order.
+            var activeClips = _clipQuery.ToEntityListAsync(Allocator.TempJob, state.Dependency, out var gatherInput);
+            state.Dependency = gatherInput;
 
             // Gather runs single-threaded (Schedule, not Run): the previous Run()
             // forced a blocking main-thread sync, defeating the job pipeline. Parallel
@@ -84,8 +116,12 @@ namespace BovineLabs.Timeline.PlayerInputs
             // buffers that multiple clips may share when bound to the same consumer.
             state.Dependency = new GatherJob
             {
+                Clips = activeClips,
                 EventChanges = _eventChanges.AsWriter(),
                 UniqueKeys = _uniqueKeySet.AsParallelWriter(),
+                Configs = _configs,
+                Bindings = _bindings,
+                CommandStates = _commandStates,
                 TargetsLookup = _targetsLookup,
                 Sources = _sources,
                 Entries = _entries,
@@ -94,6 +130,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                 PlayerIds = _playerIds,
                 Histories = _histories
             }.Schedule(state.Dependency);
+
+            state.Dependency = activeClips.Dispose(state.Dependency);
 
             state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
 
@@ -113,12 +151,21 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.Dependency = _eventChanges.Clear(state.Dependency);
         }
 
+        // Single-threaded (IJob, not IJobEntity): iterates the active-clip entities in a deterministic
+        // order rather than ECS chunk order. CommitConsumes mutates the shared per-consumer InputHistory
+        // that sibling clips read, so the order in which clips consume must be defined and stable across
+        // runs/sessions and unrelated structural changes for input arbitration / replay reproducibility.
         [BurstCompile]
-        [WithAll(typeof(ClipActive))]
-        private partial struct GatherJob : IJobEntity
+        private struct GatherJob : IJob
         {
+            public NativeList<Entity> Clips;
+
             public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
             public NativeParallelHashSet<Entity>.ParallelWriter UniqueKeys;
+
+            [ReadOnly] public ComponentLookup<CommandSequenceConfig> Configs;
+            [ReadOnly] public ComponentLookup<TrackBinding> Bindings;
+            public ComponentLookup<CommandSequenceState> CommandStates;
 
             [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
@@ -135,8 +182,23 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             public BufferLookup<InputHistory> Histories;
 
-            private void Execute(ref CommandSequenceState commandState, in CommandSequenceConfig config,
-                in TrackBinding binding)
+            public void Execute()
+            {
+                // Stable arbitration order: sort active clips by Entity so a shared-history consume is
+                // resolved by a fixed, reproducible key instead of chunk iteration order.
+                Clips.Sort();
+
+                for (var c = 0; c < Clips.Length; c++)
+                {
+                    var clip = Clips[c];
+                    var commandState = CommandStates[clip];
+                    Evaluate(clip, ref commandState, Configs[clip], Bindings[clip]);
+                    CommandStates[clip] = commandState;
+                }
+            }
+
+            private void Evaluate(Entity clip, ref CommandSequenceState commandState,
+                in CommandSequenceConfig config, in TrackBinding binding)
             {
                 if (commandState.IsCompleted || binding.Value == Entity.Null) return;
                 if (!TargetsLookup.TryGetComponent(binding.Value, out var targets)) return;

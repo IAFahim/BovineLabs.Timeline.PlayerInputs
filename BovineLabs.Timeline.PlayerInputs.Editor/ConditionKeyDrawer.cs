@@ -17,6 +17,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
         // key (ushort/int) → asset — rebuilt lazily, cleared on any change
         private static Dictionary<int, ConditionEventObject> s_Cache;
 
+        // keys that resolved to no asset even after a rebuild — short-circuits
+        // per-repaint full-project rescans for stale/deleted keys; cleared with s_Cache
+        private static HashSet<int> s_Missing;
+
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             // ConditionKey's first serialised child holds the raw integer value
@@ -47,14 +51,22 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             if (s_Cache == null) BuildCache();
             if (s_Cache.TryGetValue(key, out var obj)) return obj;
 
+            // Already known to resolve to nothing — skip the rescan
+            if (s_Missing.Contains(key)) return null;
+
             // Rebuild if not found in case of new assets
             BuildCache();
-            return s_Cache.TryGetValue(key, out var obj2) ? obj2 : null;
+            if (s_Cache.TryGetValue(key, out var obj2)) return obj2;
+
+            // Still missing after a fresh scan; remember so future repaints short-circuit
+            s_Missing.Add(key);
+            return null;
         }
 
         private static void BuildCache()
         {
             s_Cache = new Dictionary<int, ConditionEventObject>();
+            s_Missing = new HashSet<int>();
             foreach (var guid in AssetDatabase.FindAssets("t:ConditionEventObject"))
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);

@@ -30,9 +30,15 @@ namespace BovineLabs.Timeline.PlayerInputs
         private ComponentLookup<PlayerId> _playerIds;
 
         private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
-        private NativeParallelHashSet<Entity> _uniqueKeySet;
         private NativeList<Entity> _uniqueKeys;
         private ConditionEventWriter.Lookup _writers;
+
+        // Upper bounds on the distinct route-target keys produced this frame: GatherJob writes one per
+        // active clip (rising/falling edge) and DeactivateJob one per clip that deactivated while held.
+        // Sizing the per-frame ParallelWriter set from these counts removes the fixed 64-entity ceiling
+        // that ThrowFull()'d the parallel set at scale (F5).
+        private EntityQuery _activeClipQuery;
+        private EntityQuery _deactivatedClipQuery;
 
 
         [BurstCompile]
@@ -41,7 +47,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             if (_uniqueKeys.IsCreated)
             {
                 _eventChanges.Dispose();
-                _uniqueKeySet.Dispose();
                 _uniqueKeys.Dispose();
             }
         }
@@ -58,9 +63,18 @@ namespace BovineLabs.Timeline.PlayerInputs
             _playerIds = state.GetComponentLookup<PlayerId>(true);
 
             _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
-            _uniqueKeySet = new NativeParallelHashSet<Entity>(64, Allocator.Persistent);
             _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
             _writers.Create(ref state);
+
+            // The entity sets GatherJob and DeactivateJob iterate; their counts bound the distinct keys
+            // each can add, so they size the per-frame ParallelWriter set's fixed capacity (F5).
+            _activeClipQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<ClipActive, InputEventsConfig, InputEventsState>()
+                .Build(ref state);
+            _deactivatedClipQuery = new EntityQueryBuilder(Allocator.Temp)
+                .WithAll<ClipActivePrevious, InputEventsConfig, InputEventsState>()
+                .WithNone<ClipActive>()
+                .Build(ref state);
         }
 
         [BurstCompile]
@@ -75,7 +89,12 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
-            _uniqueKeySet.Clear();
+            // A NativeParallelHashSet written through a ParallelWriter does NOT grow, so size it to this
+            // frame's actual upper bound: one key per active clip (GatherJob) plus one per clip that
+            // deactivated while held (DeactivateJob). A fixed cap would ThrowFull at scale (F5).
+            var capacity = math.max(1, _activeClipQuery.CalculateEntityCount() +
+                _deactivatedClipQuery.CalculateEntityCount());
+            var uniqueKeySet = new NativeParallelHashSet<Entity>(capacity, state.WorldUpdateAllocator);
 
             // Edge detection is stateful (WasInputActive). Reset it on the first active frame so a
             // clip re-activated while the input is still held emits a fresh start edge instead of
@@ -85,7 +104,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.Dependency = new GatherJob
             {
                 EventChanges = _eventChanges.AsWriter(),
-                UniqueKeys = _uniqueKeySet.AsParallelWriter(),
+                UniqueKeys = uniqueKeySet.AsParallelWriter(),
                 TargetsLookup = _targetsLookup,
                 Sources = _sources,
                 Entries = _entries,
@@ -94,12 +113,25 @@ namespace BovineLabs.Timeline.PlayerInputs
                 PlayerIds = _playerIds
             }.ScheduleParallel(state.Dependency);
 
+            // The falling edge that fires OnInputEnd is only observable while ClipActive (GatherJob is gated
+            // on it). When a clip deactivates with the input still held, that edge is never seen and the end
+            // event is lost; a later re-activation then emits a second unbalanced OnInputStart. Flush the
+            // pending end here on the clip's exit frame so start/end stays balanced (F6).
+            state.Dependency = new DeactivateJob
+            {
+                EventChanges = _eventChanges.AsWriter(),
+                UniqueKeys = uniqueKeySet.AsParallelWriter(),
+                TargetsLookup = _targetsLookup,
+                Sources = _sources,
+                Entries = _entries
+            }.ScheduleParallel(state.Dependency);
+
             state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
 
             state.Dependency = new CollectEventKeysJob
             {
                 UniqueKeys = _uniqueKeys,
-                UniqueKeySet = _uniqueKeySet
+                UniqueKeySet = uniqueKeySet
             }.Schedule(state.Dependency);
 
             state.Dependency = new TriggerEventsJob
@@ -185,6 +217,41 @@ namespace BovineLabs.Timeline.PlayerInputs
                 }
 
                 state.WasInputActive = hasInput;
+            }
+        }
+
+        // Falling clip edge: ClipActivePrevious set, ClipActive cleared. A clip that deactivated this frame
+        // while its input was still held never had its falling input edge observed by GatherJob (which is
+        // gated on ClipActive), so flush the pending OnInputEnd here and clear the latch so a later
+        // re-activation starts balanced (F6). Mirrors GatherJob's end-edge resolution exactly.
+        [BurstCompile]
+        [WithAll(typeof(ClipActivePrevious))]
+        [WithNone(typeof(ClipActive))]
+        private partial struct DeactivateJob : IJobEntity
+        {
+            [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
+            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
+            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+
+            public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
+            public NativeParallelHashSet<Entity>.ParallelWriter UniqueKeys;
+
+            private void Execute(in TrackBinding binding, in InputEventsConfig config, ref InputEventsState state)
+            {
+                if (!state.WasInputActive) return;
+                state.WasInputActive = false;
+
+                if (config.OnInputEnd == ConditionKey.Null) return;
+
+                var targetEntity = binding.Value;
+                if (targetEntity == Entity.Null) return;
+                if (!TargetsLookup.TryGetComponent(targetEntity, out var targets)) return;
+
+                if (!InputRouting.TryResolveRoute(targetEntity, targets, config.EventRouteTo, config.EventRouteLinkKey,
+                        Sources, Entries, out var endTarget)) return;
+
+                EventChanges.Add(endTarget, new EventAmount(config.OnInputEnd, 1));
+                UniqueKeys.Add(endTarget);
             }
         }
     }
