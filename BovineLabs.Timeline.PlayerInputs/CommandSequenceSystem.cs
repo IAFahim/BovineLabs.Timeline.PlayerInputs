@@ -230,16 +230,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             private static void CommitConsumes(DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask)
             {
                 if (consumeMask.AllFalse) return;
-
-                var write = 0;
-                for (var read = 0; read < history.Length; read++)
-                {
-                    if (consumeMask[read]) continue;
-                    if (write != read) history[write] = history[read];
-                    write++;
-                }
-
-                history.Length = write;
+                HistoryCompaction.Compact(history, ref consumeMask, CompactMode.ByPosition);
             }
         }
     }

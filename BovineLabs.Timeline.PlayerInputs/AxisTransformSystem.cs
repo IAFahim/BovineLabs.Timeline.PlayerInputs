@@ -147,13 +147,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 if (!Transforms.HasComponent(carrot)) return;
 
-                var axisValue = float2.zero;
-                for (var i = 0; i < axesBuf.Length; i++)
-                {
-                    if (axesBuf[i].ActionId != config.ActionId) continue;
-                    axisValue = axesBuf[i].Value;
-                    break;
-                }
+                var axisValue = InputAccess.ReadAxis(axesBuf, config.ActionId);
 
                 var planeNormal = math.lengthsq(config.Plane) > 1e-8f ? math.normalize(config.Plane) : math.up();
                 AxisBasis.ComputePlaneBasis(planeNormal, config.Flags.Has(AxisTransformFlags.CameraRelative),
@@ -169,9 +163,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (!state.Initialized)
                 {
                     state.HeldWorldRotation = parented ? math.mul(parentRot, t.Rotation) : t.Rotation;
-
-                    // Seed the held world position from the carrot's current world pose so a Move clip that
-                    // starts already-released holds where it is rather than snapping to a stale/zero point.
                     state.HeldWorldPosition = parented
                         ? parentPos + math.rotate(parentRot, t.Position * parentScale)
                         : t.Position;
@@ -181,65 +172,29 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 if (config.Mode == AxisTransformMode.Move)
                 {
-                    // MOVE: the stick offsets the carrot ahead of the body (the Pos carrot the body chases).
-                    var keepLead = config.Flags.Has(AxisTransformFlags.KeepLead);
+                    AxisLead.ComputeMove(inputVec, config.Range, config.LeashRadius,
+                        config.Flags.Has(AxisTransformFlags.KeepLead), parented, parentPos, parentRot, parentScale,
+                        state.HeldWorldPosition, out var localPos, out var newHeldWorldPos);
 
-                    if (hasInput)
-                    {
-                        var worldOffset = inputVec * config.Range;
-                        if (config.LeashRadius > 0f)
-                        {
-                            var len = math.length(worldOffset);
-                            if (len > config.LeashRadius)
-                                worldOffset *= config.LeashRadius / len;
-                        }
-
-                        // Offset-relative parent-local (parent origin cancels analytically; exact 0 at zero input).
-                        t.Position = parented ? math.rotate(math.inverse(parentRot), worldOffset) / parentScale : worldOffset;
-                        // Track the live world lead point so a release captures exactly where the carrot was.
-                        state.HeldWorldPosition = parented ? parentPos + math.rotate(parentRot, worldOffset) : worldOffset;
-                    }
-                    else if (keepLead)
-                    {
-                        // Released, KeepLead: pin to the captured WORLD point, re-derived to parent-local each
-                        // frame. As the body travels to it the offset shrinks and the body STOPS - no runaway.
-                        t.Position = parented
-                            ? math.rotate(math.inverse(parentRot), state.HeldWorldPosition - parentPos) / parentScale
-                            : state.HeldWorldPosition;
-                    }
-                    else
-                    {
-                        // Released, default: snap the lead back onto the body (local zero) so the body stops.
-                        t.Position = float3.zero;
-                    }
-
+                    t.Position = localPos;
+                    state.HeldWorldPosition = newHeldWorldPos;
                     writeTransform = true;
                 }
                 else
                 {
-                    // AIM: the stick points the carrot's facing (the Rot carrot the body turns to). The indicator
-                    // accumulates in WORLD space and is HELD on release - you keep facing where you last aimed.
-                    if (hasInput)
-                    {
-                        var worldDesired = quaternion.LookRotationSafe(math.normalize(inputVec), planeNormal);
-                        var lerpT = config.Smoothing <= 0.0001f ? 1f : 1f - math.exp(-config.Smoothing * DeltaTime);
-                        state.HeldWorldRotation = math.slerp(state.HeldWorldRotation, worldDesired, lerpT);
-                        state.HasAimed = true;
-                    }
+                    AxisAim.ComputeAim(inputVec, hasInput, planeNormal, config.Smoothing, DeltaTime, config.AimRadius,
+                        state.HasAimed, parented, parentRot, parentScale, state.HeldWorldRotation,
+                        out var newHeldWorldRot, out var newHasAimed, out var wroteLocalPos, out var localPos);
+
+                    state.HeldWorldRotation = newHeldWorldRot;
+                    state.HasAimed = newHasAimed;
 
                     t.Rotation = parented
                         ? math.mul(math.inverse(parentRot), state.HeldWorldRotation)
                         : state.HeldWorldRotation;
 
-                    // AimRadius: also slide the sphere out to the arrow's tip (held aim dir x radius) around the body
-                    // and HOLD there - the held rotation already holds, so the position holds with it.
-                    if (config.AimRadius > 0.0001f && state.HasAimed)
-                    {
-                        var worldOffset = math.mul(state.HeldWorldRotation, math.forward()) * config.AimRadius;
-                        t.Position = parented
-                            ? math.rotate(math.inverse(parentRot), worldOffset) / parentScale
-                            : worldOffset;
-                    }
+                    if (wroteLocalPos)
+                        t.Position = localPos;
 
                     writeTransform = true;
                 }
@@ -258,26 +213,12 @@ namespace BovineLabs.Timeline.PlayerInputs
                     return false;
 
                 var p = parent.Value;
-                if (Transforms.HasComponent(p) && !Parents.HasComponent(p))
-                {
-                    var lt = Transforms[p];
-                    position = lt.Position;
-                    rotation = lt.Rotation;
+                var hasLocalTransform = Transforms.HasComponent(p);
+                var localTransform = hasLocalTransform ? Transforms[p] : default;
+                var hasLtw = Ltws.TryGetComponent(p, out var ltw);
 
-                    scale = math.abs(lt.Scale) > 1e-6f ? lt.Scale : 1f;
-                    return true;
-                }
-
-                if (Ltws.TryGetComponent(p, out var ltw))
-                {
-                    position = ltw.Position;
-                    rotation = ltw.Rotation;
-                    var s = math.length(ltw.Value.c0.xyz);
-                    scale = s > 1e-6f ? s : 1f;
-                    return true;
-                }
-
-                return false;
+                return AxisParentWorld.TryDecompose(hasLocalTransform, localTransform, Parents.HasComponent(p), hasLtw,
+                    ltw, out position, out rotation, out scale);
             }
         }
     }

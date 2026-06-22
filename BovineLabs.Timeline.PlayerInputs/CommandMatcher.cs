@@ -6,6 +6,8 @@ namespace BovineLabs.Timeline.PlayerInputs
 {
     internal static class CommandMatcher
     {
+        private const uint NoPriorMatch = uint.MaxValue;
+
         public static bool Evaluate(ref CommandStep step, in InputState state,
             in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask, ref int searchIndex,
             ref uint lastMatchTick)
@@ -190,13 +192,13 @@ namespace BovineLabs.Timeline.PlayerInputs
 
         public static bool WithinWindow(uint matchTick, ushort maxGapTicks, ref uint lastMatchTick)
         {
-            if (lastMatchTick != uint.MaxValue)
+            if (lastMatchTick != NoPriorMatch)
             {
                 if (matchTick < lastMatchTick) return false;
                 if (maxGapTicks != 0 && matchTick - lastMatchTick > maxGapTicks) return false;
             }
 
-            lastMatchTick = matchTick == uint.MaxValue ? uint.MaxValue - 1 : matchTick;
+            lastMatchTick = matchTick == NoPriorMatch ? NoPriorMatch - 1 : matchTick;
             return true;
         }
     }

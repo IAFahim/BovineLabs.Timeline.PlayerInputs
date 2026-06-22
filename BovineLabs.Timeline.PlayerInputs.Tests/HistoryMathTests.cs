@@ -45,6 +45,57 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         }
 
         [Test]
+        public void Plan_NoConfiguredLimit_UsesDefaultLimit()
+        {
+            HistoryMath.Plan(10, 2, 1, false, 999, out var totalToAdd, out var limit, out var evictBefore);
+            Assert.AreEqual(3, totalToAdd);
+            Assert.AreEqual(HistoryMath.DefaultLimit, limit);
+            Assert.AreEqual(HistoryMath.EvictCount(10, 3, HistoryMath.DefaultLimit), evictBefore);
+        }
+
+        [Test]
+        public void Plan_ConfiguredLimit_ClampsViaClampLimit()
+        {
+            HistoryMath.Plan(10, 1, 0, true, 9999, out _, out var clampedHigh, out _);
+            Assert.AreEqual(HistoryMath.MaxLimit, clampedHigh);
+
+            HistoryMath.Plan(10, 1, 0, true, 0, out _, out var clampedLow, out _);
+            Assert.AreEqual(1, clampedLow);
+
+            HistoryMath.Plan(10, 1, 0, true, 32, out _, out var clampedMid, out _);
+            Assert.AreEqual(32, clampedMid);
+        }
+
+        [Test]
+        public void Plan_TotalToAdd_IsDownPlusUp()
+        {
+            HistoryMath.Plan(0, 4, 7, false, 0, out var totalToAdd, out _, out _);
+            Assert.AreEqual(11, totalToAdd);
+        }
+
+        [Test]
+        public void Plan_EvictBefore_MatchesEvictCount()
+        {
+            HistoryMath.Plan(64, 1, 1, true, 64, out var totalToAdd, out var limit, out var evictBefore);
+            Assert.AreEqual(2, totalToAdd);
+            Assert.AreEqual(64, limit);
+            Assert.AreEqual(HistoryMath.EvictCount(64, 2, 64), evictBefore);
+        }
+
+        [Test]
+        public void Plan_TotalToAddExceedsLimit_PostAppendOverflowClampsToLimit()
+        {
+            HistoryMath.Plan(0, 3, 0, true, 1, out var totalToAdd, out var limit, out var evictBefore);
+            Assert.AreEqual(3, totalToAdd);
+            Assert.AreEqual(1, limit);
+            Assert.AreEqual(0, evictBefore);
+
+            var afterAppend = (0 - evictBefore) + totalToAdd;
+            var final = afterAppend - HistoryMath.OverflowCount(afterAppend, limit);
+            Assert.AreEqual(limit, final);
+        }
+
+        [Test]
         public void Invariant_LengthAfterFrameNeverExceedsLimit()
         {
             for (var length = 0; length <= 300; length += 7)

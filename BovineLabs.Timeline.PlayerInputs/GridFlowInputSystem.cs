@@ -23,6 +23,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
         private UnsafeComponentLookup<Targets> _targets;
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<PlayerId> _playerIds;
+        private ComponentLookup<LocalTransform> _transforms;
+        private BufferLookup<InputAxis> _axisBuffers;
+        private ComponentLookup<SyntheticProviderTag> _synthetic;
 
         public void OnCreate(ref SystemState state)
         {
@@ -34,6 +38,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             _targets = state.GetUnsafeComponentLookup<Targets>(true);
             _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _playerIds = state.GetComponentLookup<PlayerId>(true);
+            _transforms = state.GetComponentLookup<LocalTransform>(true);
+            _axisBuffers = state.GetBufferLookup<InputAxis>(false);
+            _synthetic = state.GetComponentLookup<SyntheticProviderTag>(true);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -43,6 +51,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             _targets.Update(ref state);
             _sources.Update(ref state);
             _entries.Update(ref state);
+            _playerIds.Update(ref state);
+            _transforms.Update(ref state);
+            _axisBuffers.Update(ref state);
+            _synthetic.Update(ref state);
 
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
             ref var reg = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW.Registry;
@@ -61,11 +73,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             var cellSize = math.max(0.0001f, settings.CellSize);
             var basis = new GridBasis(settings.PlaneNormal);
 
-            var playerIds = SystemAPI.GetComponentLookup<PlayerId>(true);
-            var transforms = SystemAPI.GetComponentLookup<LocalTransform>(true);
-            var axisBuffers = SystemAPI.GetBufferLookup<InputAxis>();
-            var synthetic = SystemAPI.GetComponentLookup<SyntheticProviderTag>(true);
-
             foreach (var axes in SystemAPI.Query<DynamicBuffer<InputAxis>>()
                          .WithAll<ProviderTag, SyntheticProviderTag>())
                 axes.Clear();
@@ -77,7 +84,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 var cfg = config.ValueRO;
 
                 var target = binding.ValueRO.Value;
-                if (target == Entity.Null || !transforms.HasComponent(target))
+                if (target == Entity.Null || !_transforms.HasComponent(target))
                     continue;
 
                 if (!_targets.TryGetComponent(target, out var targets))
@@ -87,14 +94,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                         target, targets, cfg.ReadRootFrom, cfg.ConsumerLinkKey, _sources, _entries, out var consumer))
                     continue;
 
-                if (!playerIds.TryGetComponent(consumer, out var playerId))
+                if (!_playerIds.TryGetComponent(consumer, out var playerId))
                     continue;
 
                 var provider = registry[playerId.Value];
-                if (provider == Entity.Null || !axisBuffers.HasBuffer(provider))
+                if (provider == Entity.Null || !_axisBuffers.HasBuffer(provider))
                     continue;
 
-                if (!synthetic.HasComponent(provider))
+                if (!_synthetic.HasComponent(provider))
                     continue;
 
                 if (!reg.KeyToSlot.TryGetValue(cfg.FieldKey, out var slotIndex))
@@ -104,21 +111,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (!field.IsCreated)
                     continue;
 
-                var transform = transforms[target];
-                var world = transform.Position + math.rotate(transform.Rotation, cfg.LocalOffset);
-                var projected = basis.ToGridSpace(world);
-                var cell = new int2(
-                    (int)math.floor(projected.x / cellSize),
-                    (int)math.floor(projected.y / cellSize));
+                if (cfg.ActionId == byte.MaxValue)
+                    continue;
+
+                var cell = GridProjection.ToCell(_transforms[target], cfg.LocalOffset, basis, cellSize);
 
                 var gradient = FieldGradient.Normalized(cfg.Bias.Sign() * FieldGradient.Ascent(field.AsReader(), cell));
                 if (math.all(gradient == float2.zero))
                     continue;
 
-                if (cfg.ActionId == byte.MaxValue)
-                    continue;
-
-                Accumulate(axisBuffers[provider], cfg.ActionId, gradient * (cfg.Gain * weight.ValueRO.Value));
+                Accumulate(_axisBuffers[provider], cfg.ActionId, gradient * (cfg.Gain * weight.ValueRO.Value));
             }
         }
 

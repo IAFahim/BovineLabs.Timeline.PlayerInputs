@@ -288,6 +288,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             return math.max(0, length - limit);
         }
+
+        public static void Plan(int historyLength, int downCount, int upCount, bool hasConfiguredLimit,
+            int configuredLimit, out int totalToAdd, out int limit, out int evictBefore)
+        {
+            totalToAdd = downCount + upCount;
+            limit = hasConfiguredLimit ? ClampLimit(configuredLimit) : DefaultLimit;
+            evictBefore = EvictCount(historyLength, totalToAdd, limit);
+        }
     }
 
     public static class DirectionMath

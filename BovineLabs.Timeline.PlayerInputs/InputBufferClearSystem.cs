@@ -74,15 +74,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                     return;
                 }
 
-                var write = 0;
-                for (var read = 0; read < history.Length; read++)
-                {
-                    if (config.ActionMask[history[read].ActionId]) continue;
-                    if (write != read) history[write] = history[read];
-                    write++;
-                }
-
-                history.Length = write;
+                var mask = config.ActionMask;
+                HistoryCompaction.Compact(history, ref mask, CompactMode.ByActionId);
             }
         }
     }

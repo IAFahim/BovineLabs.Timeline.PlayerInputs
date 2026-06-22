@@ -77,22 +77,38 @@ namespace BovineLabs.Timeline.PlayerInputs
         private static void AddOrAccumulate(ref FixedList4096Bytes<EventAmount> values, EventAmount value,
             ref ConditionEventWriter writer)
         {
+            if (EventAccumulation.TryMerge(ref values, value) == MergeResult.Overflow)
+                writer.Trigger(value.Event, value.Amount);
+        }
+    }
+
+    internal enum MergeResult
+    {
+        Merged,
+        Appended,
+        Overflow,
+    }
+
+    internal static class EventAccumulation
+    {
+        public static MergeResult TryMerge(ref FixedList4096Bytes<EventAmount> values, in EventAmount value)
+        {
             for (var i = 0; i < values.Length; i++)
                 if (values[i].Event.Equals(value.Event))
                 {
                     var existing = values[i];
                     existing.Amount += value.Amount;
                     values[i] = existing;
-                    return;
+                    return MergeResult.Merged;
                 }
 
             if (values.Length < values.Capacity)
             {
                 values.Add(value);
-                return;
+                return MergeResult.Appended;
             }
 
-            writer.Trigger(value.Event, value.Amount);
+            return MergeResult.Overflow;
         }
     }
 

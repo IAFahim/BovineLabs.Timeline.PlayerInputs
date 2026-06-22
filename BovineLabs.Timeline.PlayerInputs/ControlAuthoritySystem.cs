@@ -55,34 +55,19 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (policy.Trigger == OverrideTrigger.Manual) return;
 
-                if (IsActive(id.Value, policy))
+                var active = false;
+                if (InputAccess.TryGetState(Registry, States, id.Value, out var state))
                 {
-                    authority.IdleSeconds = 0f;
-                    driving.ValueRW = true;
-                    return;
+                    active = OverrideDecision.IsActive(policy.Trigger,
+                        !state.Down.AllFalse, !state.Held.AllFalse,
+                        state.Down[policy.TriggerActionId], state.Held[policy.TriggerActionId]);
                 }
 
-                if (!driving.ValueRO || policy.ReleaseIdleSeconds <= 0f) return;
+                OverrideDecision.Step(active, driving.ValueRO, authority.IdleSeconds, policy.ReleaseIdleSeconds,
+                    DeltaTime, out var nextDriving, out var nextIdle);
 
-                authority.IdleSeconds += DeltaTime;
-                if (authority.IdleSeconds >= policy.ReleaseIdleSeconds)
-                {
-                    driving.ValueRW = false;
-                    authority.IdleSeconds = 0f;
-                }
-            }
-
-            private bool IsActive(byte playerId, in OverridePolicy policy)
-            {
-                if (!InputAccess.TryGetState(Registry, States, playerId, out var state))
-                    return false;
-
-                return policy.Trigger switch
-                {
-                    OverrideTrigger.AnyInput => !state.Down.AllFalse || !state.Held.AllFalse,
-                    OverrideTrigger.Action => state.Down[policy.TriggerActionId] || state.Held[policy.TriggerActionId],
-                    _ => false
-                };
+                driving.ValueRW = nextDriving;
+                authority.IdleSeconds = nextIdle;
             }
         }
     }
