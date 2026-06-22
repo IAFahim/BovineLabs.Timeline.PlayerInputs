@@ -33,16 +33,10 @@ namespace BovineLabs.Timeline.PlayerInputs
         private ComponentLookup<PlayerId> _playerIds;
         private BufferLookup<InputHistory> _histories;
 
-        // Per-clip lookups read inside GatherJob. The job iterates a deterministically sorted entity
-        // array (not chunk order) so shared-history consume arbitration is reproducible, so it reads the
-        // clip components through these lookups instead of via IJobEntity chunk traversal.
         private ComponentLookup<CommandSequenceConfig> _configs;
         private ComponentLookup<TrackBinding> _bindings;
         private ComponentLookup<CommandSequenceState> _commandStates;
 
-        // Query for active CommandSequence clips. Each frame its entities are materialized into a
-        // TempJob list and sorted by Entity to give a stable arbitration order independent of chunk
-        // packing / archetype / creation order.
         private EntityQuery _clipQuery;
 
         [BurstCompile]
@@ -102,18 +96,9 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             _uniqueKeySet.Clear();
 
-            // Materialize the active clips (ClipActive enabled-state respected) into a list, then sort it
-            // by Entity inside GatherJob. Iterating that sorted order - rather than ECS chunk order - is
-            // what makes shared-history consume arbitration deterministic: when two clips bound to the same
-            // consumer both match a Consume step on the same history entry, the lower-Entity clip always
-            // wins, independent of chunk packing, archetype, or entity creation order.
             var activeClips = _clipQuery.ToEntityListAsync(Allocator.TempJob, state.Dependency, out var gatherInput);
             state.Dependency = gatherInput;
 
-            // Gather runs single-threaded (Schedule, not Run): the previous Run()
-            // forced a blocking main-thread sync, defeating the job pipeline. Parallel
-            // scheduling is unsafe here because CommitConsumes writes InputHistory
-            // buffers that multiple clips may share when bound to the same consumer.
             state.Dependency = new GatherJob
             {
                 Clips = activeClips,
@@ -151,10 +136,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.Dependency = _eventChanges.Clear(state.Dependency);
         }
 
-        // Single-threaded (IJob, not IJobEntity): iterates the active-clip entities in a deterministic
-        // order rather than ECS chunk order. CommitConsumes mutates the shared per-consumer InputHistory
-        // that sibling clips read, so the order in which clips consume must be defined and stable across
-        // runs/sessions and unrelated structural changes for input arbitration / replay reproducibility.
         [BurstCompile]
         private struct GatherJob : IJob
         {
@@ -184,8 +165,6 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             public void Execute()
             {
-                // Stable arbitration order: sort active clips by Entity so a shared-history consume is
-                // resolved by a fixed, reproducible key instead of chunk iteration order.
                 Clips.Sort();
 
                 for (var c = 0; c < Clips.Length; c++)
@@ -221,8 +200,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     var consumeMask = default(BitArray256);
                     var searchIndex = 0;
                     var matched = true;
-                    // Tick of the most recently matched step; uint.MaxValue means
-                    // "no prior step yet" so the first step has no gap constraint.
+
                     var lastMatchTick = uint.MaxValue;
 
                     for (var i = 0; i < seq.Steps.Length; i++)

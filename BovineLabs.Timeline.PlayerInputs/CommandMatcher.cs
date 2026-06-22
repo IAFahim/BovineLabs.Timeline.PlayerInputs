@@ -1,7 +1,6 @@
 using BovineLabs.Core.Collections;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
-using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
@@ -14,13 +13,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             switch (step.Mode)
             {
                 case CommandMode.None:
-                    // None is the designer-friendly default: a live-state probe of the consumer's
-                    // current frame. Down fires on the press frame, Up on the release frame, Held while
-                    // the action is sustained. It reads ONLY this clip's own live view - it never touches
-                    // the shared per-consumer history - so it cannot steal, consume or contaminate edges
-                    // another clip is reading. It matches whenever the clip is ACTIVE on the edge frame;
-                    // size the clip to span the input, or loop it (ClipCaps.Looping) to listen every
-                    // frame. History-backed matching is for the explicit combo modes below.
+
                     return EvaluateLiveState(in step, in state);
                 case CommandMode.Contains:
                 case CommandMode.Consume:
@@ -69,9 +62,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                     history[i].Phase != step.Phase) continue;
-                // Skip an out-of-window match and keep scanning; a later entry of the same action may fall
-                // inside the window. History ticks are non-decreasing, so this never accepts an entry the old
-                // early-return would have rejected - it only recovers valid matches that were previously dropped.
+
                 if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) continue;
                 if (consume) consumeMask[i] = true;
                 return true;
@@ -117,9 +108,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                     history[i].Phase != step.Phase) continue;
-                // See EvaluateContains: skip an out-of-window match and keep scanning forward (searchIndex still
-                // only advances on a real match, so ordering is preserved). Recovers valid matches, accepts none
-                // the early-return wouldn't have.
+
                 if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) continue;
                 if (consume) consumeMask[i] = true;
                 searchIndex = i + 1;
@@ -199,21 +188,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             return true;
         }
 
-        // Enforces the per-step timing window: a matched entry at matchTick must
-        // arrive no later than maxGapTicks after the previously matched step.
-        // History ticks are monotonically non-decreasing, so a forward step that
-        // is older than the previous match (matchTick < lastMatchTick) also fails.
-        // Granularity is one simulation frame: entries recorded in the same frame
-        // share a Tick, so MaxGapTicks counts frames. Intra-frame ordering is the
-        // job of the Ordered* modes via searchIndex, not of this window.
-        // On success, advances lastMatchTick to the matched entry.
-        //
-        // lastMatchTick == uint.MaxValue is the caller's 'no prior matched step'
-        // sentinel. SimulationTick.Value is a real uint that can reach uint.MaxValue,
-        // so a genuine match at that tick is clamped down by one frame when STORED
-        // (never compared) - that keeps the sentinel unproducible by a real match, so
-        // the next step's gap check cannot be silently skipped. The 1-frame clamp at
-        // that single ~4.29-billion boundary tick is harmless to the window math.
         public static bool WithinWindow(uint matchTick, ushort maxGapTicks, ref uint lastMatchTick)
         {
             if (lastMatchTick != uint.MaxValue)

@@ -38,8 +38,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             }
         }
 
-        // Adds eight-way direction tracking for one axis action on top of a consumer
-        // built by Build. DirectionInputSystem populates DirectionState each tick.
         public static void AddDirection<T>(
             ref T commands,
             byte actionId,

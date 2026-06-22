@@ -1,7 +1,3 @@
-// <copyright file="ConditionKeyDrawer.cs" company="BovineLabs">
-//     Copyright (c) BovineLabs. All rights reserved.
-// </copyright>
-
 using System.Collections.Generic;
 using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
@@ -14,16 +10,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
     [CustomPropertyDrawer(typeof(ConditionKey))]
     public class ConditionKeyDrawer : PropertyDrawer
     {
-        // key (ushort/int) → asset — rebuilt lazily, cleared on any change
         private static Dictionary<int, ConditionEventObject> s_Cache;
 
-        // keys that resolved to no asset even after a rebuild — short-circuits
-        // per-repaint full-project rescans for stale/deleted keys; cleared with s_Cache
         private static HashSet<int> s_Missing;
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            // ConditionKey's first serialised child holds the raw integer value
             var valueProp = FirstChild(property);
 
             EditorGUI.BeginProperty(position, label, property);
@@ -37,8 +29,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             EditorGUI.EndProperty();
         }
 
-        // ── helpers ──────────────────────────────────────────────────────────
-
         private static SerializedProperty FirstChild(SerializedProperty prop)
         {
             var copy = prop.Copy();
@@ -51,14 +41,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             if (s_Cache == null) BuildCache();
             if (s_Cache.TryGetValue(key, out var obj)) return obj;
 
-            // Already known to resolve to nothing — skip the rescan
             if (s_Missing.Contains(key)) return null;
 
-            // Rebuild if not found in case of new assets
             BuildCache();
             if (s_Cache.TryGetValue(key, out var obj2)) return obj2;
 
-            // Still missing after a fresh scan; remember so future repaints short-circuit
             s_Missing.Add(key);
             return null;
         }

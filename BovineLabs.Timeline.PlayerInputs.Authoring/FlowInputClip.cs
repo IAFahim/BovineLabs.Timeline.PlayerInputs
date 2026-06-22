@@ -15,15 +15,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
 {
     public sealed class FlowInputClip : DOTSClip, ITimelineClipAsset
     {
-        [Header("Field")]
-        [Tooltip("Grid field schema sampled to synthesise the fake axis.")]
+        [Header("Field")] [Tooltip("Grid field schema sampled to synthesise the fake axis.")]
         public GridFieldSchemaObject Field;
 
         [Tooltip("Direction the flow follows the field gradient: Descend goes downhill, Ascend uphill.")]
         public FlowBias Bias = FlowBias.Descend;
 
-        [Header("Routing")]
-        [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
+        [Header("Routing")] [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
 
         [Tooltip("Link to the input consumer whose action axis this fake input replaces.")]
@@ -60,9 +58,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
                 return;
             }
 
-            byte actionId = byte.MaxValue;
+            var actionId = byte.MaxValue;
             if (Action == null)
-                Debug.LogError($"FlowInputClip '{name}' has no Action assigned; the fake axis will drive no action.", this);
+            {
+                Debug.LogError($"FlowInputClip '{name}' has no Action assigned; the fake axis will drive no action.",
+                    this);
+            }
             else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
             {
                 actionId = byte.MaxValue;

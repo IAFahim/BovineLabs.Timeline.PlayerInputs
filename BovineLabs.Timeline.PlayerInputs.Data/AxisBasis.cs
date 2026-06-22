@@ -2,9 +2,6 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.PlayerInputs.Data
 {
-    // Ground-plane basis (forward/right) an axis input is projected onto. Pure math, no ECS, so it is unit
-    // testable (see AxisBasisTests) and Burst-callable from AxisTransformSystem. CameraRelative derives the
-    // basis from the camera's world rotation projected onto the plane; otherwise a fixed world basis is used.
     public static class AxisBasis
     {
         public static void ComputePlaneBasis(float3 planeNormal, bool cameraRelative, quaternion cameraRotation,
@@ -18,9 +15,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 var projForward = camForward - math.dot(camForward, planeNormal) * planeNormal;
                 var projRight = camRight - math.dot(camRight, planeNormal) * planeNormal;
 
-                // A camera looking along the plane normal (e.g. top-down with an up-plane) collapses the projected
-                // forward to zero; derive the missing axis from the surviving one, falling back to a world basis
-                // only when both degenerate.
                 if (math.lengthsq(projForward) > 1e-6f)
                 {
                     forward = math.normalize(projForward);

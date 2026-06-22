@@ -50,8 +50,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Face turn speed. 0 = instant snap.")]
         public float Smoothing;
 
-        [Header("Options")]
-        [Tooltip("Interpret the axis relative to the Main Camera instead of world axes.")]
+        [Header("Options")] [Tooltip("Interpret the axis relative to the Main Camera instead of world axes.")]
         public bool CameraRelative = true;
 
         public override double duration => 1;
@@ -69,13 +68,18 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             EntityLinkAuthoringUtility.TryGetKey(AnchorLink, out var anchorLinkKey);
 
-            byte actionId = byte.MaxValue;
+            var actionId = byte.MaxValue;
             if (Action == null)
-                Debug.LogError($"AxisTransformClip '{name}' has no Action assigned; it will read no axis (the clip does nothing).", this);
+            {
+                Debug.LogError(
+                    $"AxisTransformClip '{name}' has no Action assigned; it will read no axis (the clip does nothing).",
+                    this);
+            }
             else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
             {
                 actionId = byte.MaxValue;
-                Debug.LogError($"AxisTransformClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
+                Debug.LogError($"AxisTransformClip '{name}' action '{Action.name}' not found in MultiInputSettings.",
+                    this);
             }
 
             var flags = AxisTransformFlags.None;
@@ -85,7 +89,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             if (HoldLastPosition) flags |= AxisTransformFlags.HoldLastPosition;
 
             if (!Translate && !FaceDirection)
-                Debug.LogWarning($"AxisTransformClip '{name}' has neither Translate nor Face Direction enabled; it will do nothing.", this);
+                Debug.LogWarning(
+                    $"AxisTransformClip '{name}' has neither Translate nor Face Direction enabled; it will do nothing.",
+                    this);
 
             var commands = new BakerCommands(context.Baker, entity);
             commands.AddComponent(new AxisTransformConfig
@@ -98,7 +104,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Plane = Plane,
                 Smoothing = Smoothing,
                 LeashRadius = LeashRadius,
-                Flags = flags,
+                Flags = flags
             });
 
             commands.AddComponent<AxisTransformState>();

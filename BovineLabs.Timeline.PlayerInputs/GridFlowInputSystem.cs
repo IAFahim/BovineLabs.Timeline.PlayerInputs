@@ -115,8 +115,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (math.all(gradient == float2.zero))
                     continue;
 
-                // An unresolved-action flow clip bakes ActionId 255 (the reserved sentinel). Writing it
-                // would alias any other misconfigured 255 feature sharing this synthetic provider, so skip.
                 if (cfg.ActionId == byte.MaxValue)
                     continue;
 
@@ -124,10 +122,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             }
         }
 
-        // Accumulate, don't overwrite: multiple FlowInput clips (e.g. a crossfade) can drive the
-        // same provider action in one frame. Summing the weighted contributions blends them and is
-        // order-independent, where last-writer-wins would collapse to one clip and depend on the
-        // non-deterministic query iteration order. The buffer is cleared once per frame above.
         private static void Accumulate(DynamicBuffer<InputAxis> axes, byte actionId, float2 value)
         {
             for (var i = 0; i < axes.Length; i++)

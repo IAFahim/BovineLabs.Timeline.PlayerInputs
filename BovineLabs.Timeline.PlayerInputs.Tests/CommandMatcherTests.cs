@@ -39,7 +39,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
             var searchIndex = 0;
             var lastTick = uint.MaxValue;
             var first = step;
-            Assert.IsTrue(CommandMatcher.Evaluate(ref first, default, history, ref mask, ref searchIndex, ref lastTick));
+            Assert.IsTrue(CommandMatcher.Evaluate(ref first, default, history, ref mask, ref searchIndex,
+                ref lastTick));
 
             searchIndex = 0;
             lastTick = uint.MaxValue;
@@ -57,7 +58,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
             var lastTick = uint.MaxValue;
 
             var first = Step(CommandMode.Contains, 1);
-            Assert.IsTrue(CommandMatcher.Evaluate(ref first, default, history, ref mask, ref searchIndex, ref lastTick));
+            Assert.IsTrue(CommandMatcher.Evaluate(ref first, default, history, ref mask, ref searchIndex,
+                ref lastTick));
 
             var second = Step(CommandMode.Contains, 2, InputPhase.Down, 5);
             Assert.IsFalse(CommandMatcher.Evaluate(ref second, default, history, ref mask, ref searchIndex,
@@ -119,30 +121,24 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         [Test]
         public void None_ProbesLiveInputState_AllPhases_IgnoresHistory()
         {
-            // None is a pure live-state probe of the current frame for every phase, and never consults the
-            // shared history (so it can never steal or contaminate a sibling clip's recorded edges).
             var state = default(InputState);
             state.Down[5] = true;
             state.Held[6] = true;
             state.Up[7] = true;
 
-            // A populated history of the SAME actions/phases must not change a live probe's answer.
             var history = History((5, InputPhase.Down, 0), (6, InputPhase.Down, 0), (7, InputPhase.Up, 0));
 
-            Assert.IsTrue(EvalOnce(Step(CommandMode.None, 5, InputPhase.Down), history, state));
+            Assert.IsTrue(EvalOnce(Step(CommandMode.None, 5), history, state));
             Assert.IsTrue(EvalOnce(Step(CommandMode.None, 6, InputPhase.Held), history, state));
             Assert.IsTrue(EvalOnce(Step(CommandMode.None, 7, InputPhase.Up), history, state));
 
-            // Live bit not set -> no match, regardless of what history holds.
-            Assert.IsFalse(EvalOnce(Step(CommandMode.None, 8, InputPhase.Down), history, state));
+            Assert.IsFalse(EvalOnce(Step(CommandMode.None, 8), history, state));
             Assert.IsFalse(EvalOnce(Step(CommandMode.None, 5, InputPhase.Up), history, state));
         }
 
         [Test]
         public void None_DoesNotConsumeHistory()
         {
-            // A None probe leaves the shared history untouched: a buffered Consume step on the same entry
-            // still finds it afterward (proves None never claims a recorded edge).
             var history = History((5, InputPhase.Down, 0));
             var state = default(InputState);
             state.Down[5] = true;
@@ -150,10 +146,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
             var mask = default(BitArray256);
             var searchIndex = 0;
             var lastTick = uint.MaxValue;
-            var none = Step(CommandMode.None, 5, InputPhase.Down);
+            var none = Step(CommandMode.None, 5);
             Assert.IsTrue(CommandMatcher.Evaluate(ref none, state, history, ref mask, ref searchIndex, ref lastTick));
 
-            // History entry survived -> a Consume still matches it.
             var consume = Step(CommandMode.Consume, 5);
             Assert.IsTrue(CommandMatcher.Evaluate(ref consume, state, history, ref mask, ref searchIndex,
                 ref lastTick));
@@ -162,15 +157,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         [Test]
         public void Contains_SkipsOutOfWindowEntry_AndMatchesLaterInWindowEntry()
         {
-            // A@0, B@3, A@5. First step matches B@3 (lastTick=3). The second step (Contains A, gap 10) must NOT
-            // give up on the older A@0 (which is before lastTick) but keep scanning and find the valid A@5.
             var history = History((1, InputPhase.Down, 0), (2, InputPhase.Down, 3), (1, InputPhase.Down, 5));
             var mask = default(BitArray256);
             var searchIndex = 0;
             var lastTick = uint.MaxValue;
 
             var first = Step(CommandMode.Contains, 2);
-            Assert.IsTrue(CommandMatcher.Evaluate(ref first, default, history, ref mask, ref searchIndex, ref lastTick));
+            Assert.IsTrue(CommandMatcher.Evaluate(ref first, default, history, ref mask, ref searchIndex,
+                ref lastTick));
 
             var second = Step(CommandMode.Contains, 1, InputPhase.Down, 10);
             Assert.IsTrue(CommandMatcher.Evaluate(ref second, default, history, ref mask, ref searchIndex,
@@ -182,9 +176,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
             var entity = Manager.CreateEntity(typeof(InputHistory));
             var buffer = Manager.GetBuffer<InputHistory>(entity);
             foreach (var (action, phase, tick) in entries)
-            {
                 buffer.Add(new InputHistory { ActionId = action, Phase = phase, Tick = tick });
-            }
 
             return buffer;
         }

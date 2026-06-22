@@ -8,9 +8,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         [Test]
         public void EvictCount_EmptyBufferWithIncomingEntries_RemovesNothing()
         {
-            // Regression: the capacity-based predecessor computed removeCount = 1
-            // for (length 0, toAdd 1, heap Capacity 0) and crashed RemoveRange on
-            // an empty DynamicBuffer.
             Assert.AreEqual(0, HistoryMath.EvictCount(0, 1, HistoryMath.DefaultLimit));
             Assert.AreEqual(0, HistoryMath.EvictCount(0, 512, 1));
         }

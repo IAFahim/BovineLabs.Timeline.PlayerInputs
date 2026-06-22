@@ -2,6 +2,7 @@ using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Entities;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
@@ -10,16 +11,20 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Which joined player this consumer reads input from.")]
         public byte PlayerId;
 
-        [Tooltip("When enabled, this consumer can be taken over by a timeline so authored input overrides the live player.")]
+        [Tooltip(
+            "When enabled, this consumer can be taken over by a timeline so authored input overrides the live player.")]
         public bool Controllable;
 
-        [Tooltip("Only takes effect when Controllable is enabled. Selects which input edge hands control to the override.")]
+        [Tooltip(
+            "Only takes effect when Controllable is enabled. Selects which input edge hands control to the override.")]
         public OverrideTrigger OverrideTrigger = OverrideTrigger.AnyInput;
 
-        [Tooltip("Only used when Controllable and OverrideTrigger=Action: the action whose press/hold hands control to the override.")]
-        public UnityEngine.InputSystem.InputActionReference OverrideAction;
+        [Tooltip(
+            "Only used when Controllable and OverrideTrigger=Action: the action whose press/hold hands control to the override.")]
+        public InputActionReference OverrideAction;
 
-        [Tooltip("Only takes effect when Controllable is enabled. Seconds of input idle before control is released back.")]
+        [Tooltip(
+            "Only takes effect when Controllable is enabled. Seconds of input idle before control is released back.")]
         public float ReleaseIdleSeconds = 0.25f;
 
         [Range(1, 256)]
@@ -31,10 +36,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public bool TrackDirection;
 
         [Tooltip("Axis action quantised into an eight-way Direction each tick.")]
-        public UnityEngine.InputSystem.InputActionReference DirectionAction;
+        public InputActionReference DirectionAction;
 
-        [Range(0f, 1f)]
-        [Tooltip("Axis magnitude below this is treated as no direction.")]
+        [Range(0f, 1f)] [Tooltip("Axis magnitude below this is treated as no direction.")]
         public float DirectionDeadZone = 0.3f;
 
         [Tooltip("Only the sign matters: >=0 faces +X (+1 forward), <0 faces -X (-1 back). " +
@@ -56,14 +60,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     if (authoring.OverrideAction == null)
                     {
                         overrideActionId = byte.MaxValue;
-                        UnityEngine.Debug.LogError(
+                        Debug.LogError(
                             $"InputConsumerAuthoring '{authoring.name}' uses OverrideTrigger=Action but no OverrideAction is " +
                             "assigned; override will never engage.", authoring);
                     }
-                    else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(authoring.OverrideAction, out overrideActionId))
+                    else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(authoring.OverrideAction,
+                                 out overrideActionId))
                     {
                         overrideActionId = byte.MaxValue;
-                        UnityEngine.Debug.LogError(
+                        Debug.LogError(
                             $"InputConsumerAuthoring override action '{authoring.OverrideAction.name}' " +
                             "not found in MultiInputSettings.", authoring);
                     }
@@ -80,15 +85,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
                 if (authoring.TrackDirection)
                 {
-                    byte actionId = byte.MaxValue;
+                    var actionId = byte.MaxValue;
                     if (authoring.DirectionAction == null)
-                        UnityEngine.Debug.LogError(
+                    {
+                        Debug.LogError(
                             $"InputConsumerAuthoring '{authoring.name}' has TrackDirection enabled but no DirectionAction " +
                             "assigned; no direction will be produced.", authoring);
+                    }
                     else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(authoring.DirectionAction, out actionId))
                     {
                         actionId = byte.MaxValue;
-                        UnityEngine.Debug.LogError(
+                        Debug.LogError(
                             $"InputConsumerAuthoring direction action '{authoring.DirectionAction.name}' " +
                             "not found in MultiInputSettings.", authoring);
                     }

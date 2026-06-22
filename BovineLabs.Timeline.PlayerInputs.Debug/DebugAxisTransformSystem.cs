@@ -12,10 +12,6 @@ using UnityEngine;
 
 namespace BovineLabs.Timeline.PlayerInputs.Debug
 {
-    // Quill overlay for AxisTransform "carrots": draws a marker at each clip-bound carrier and a line from its parent
-    // (the body it offsets from) to it, so you can SEE which carrot a clip actually drives. A clip-bound carrot's
-    // marker moves with input; a DUPLICATE rig's carriers (no clip bound) draw nothing and stay frozen - which is how
-    // you spot that you're watching an un-driven copy. ACTIVE clips draw bright orange, inactive dim.
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
                        WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(DebugSystemGroup))]
@@ -29,25 +25,25 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
         {
             state.RequireForUpdate<DrawSystem.Singleton>();
             state.RequireForUpdate<AxisTransformConfig>();
-            this.ltws = state.GetComponentLookup<LocalToWorld>(true);
-            this.parents = state.GetComponentLookup<Parent>(true);
-            this.active = state.GetComponentLookup<ClipActive>(true);
+            ltws = state.GetComponentLookup<LocalToWorld>(true);
+            parents = state.GetComponentLookup<Parent>(true);
+            active = state.GetComponentLookup<ClipActive>(true);
         }
 
         public void OnUpdate(ref SystemState state)
         {
-            this.ltws.Update(ref state);
-            this.parents.Update(ref state);
-            this.active.Update(ref state);
+            ltws.Update(ref state);
+            parents.Update(ref state);
+            active.Update(ref state);
 
             var renderer = SystemAPI.GetSingleton<DrawSystem.Singleton>().CreateDrawer();
 
             state.Dependency = new DrawJob
             {
                 Renderer = renderer,
-                Ltws = this.ltws,
-                Parents = this.parents,
-                Active = this.active,
+                Ltws = ltws,
+                Parents = parents,
+                Active = active
             }.Schedule(state.Dependency);
         }
 
@@ -63,25 +59,21 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             private void Execute(Entity clip, in TrackBinding binding)
             {
                 var carrot = binding.Value;
-                if (carrot == Entity.Null || !this.Ltws.HasComponent(carrot))
-                {
-                    return;
-                }
+                if (carrot == Entity.Null || !Ltws.HasComponent(carrot)) return;
 
-                var isActive = this.Active.HasComponent(clip) && this.Active.IsComponentEnabled(clip);
+                var isActive = Active.HasComponent(clip) && Active.IsComponentEnabled(clip);
                 var color = isActive ? new Color(1f, 0.55f, 0.05f) : new Color(0.45f, 0.45f, 0.45f, 0.6f);
 
-                var carrotPos = this.Ltws[carrot].Position;
+                var carrotPos = Ltws[carrot].Position;
 
-                // Line from the anchor (parent body) to the carrot, so the offset is unmistakable.
                 var anchorPos = carrotPos;
-                if (this.Parents.HasComponent(carrot) && this.Ltws.HasComponent(this.Parents[carrot].Value))
+                if (Parents.HasComponent(carrot) && Ltws.HasComponent(Parents[carrot].Value))
                 {
-                    anchorPos = this.Ltws[this.Parents[carrot].Value].Position;
-                    this.Renderer.Line(anchorPos, carrotPos, color);
+                    anchorPos = Ltws[Parents[carrot].Value].Position;
+                    Renderer.Line(anchorPos, carrotPos, color);
                 }
 
-                this.Renderer.Point(carrotPos, 0.35f, color);
+                Renderer.Point(carrotPos, 0.35f, color);
 
                 var label = new FixedString64Bytes();
                 label.Append("carrot #");
@@ -93,7 +85,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                     label.Append("cm");
                 }
 
-                this.Renderer.Text64(carrotPos + new float3(0f, 0.55f, 0f), label, color, 11f);
+                Renderer.Text64(carrotPos + new float3(0f, 0.55f, 0f), label, color, 11f);
             }
         }
     }

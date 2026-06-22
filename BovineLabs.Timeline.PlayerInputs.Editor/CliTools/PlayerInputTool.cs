@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
@@ -7,75 +8,18 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.InputSystem.Users;
+using Object = UnityEngine.Object;
 
 namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
 {
-    /// <summary>
-    /// Full-flexibility player-input driver for the new Input System, exposed to the CLI so the
-    /// game can be played/tested without a human at the controls. Three axes of flexibility:
-    ///
-    ///   • PROVIDER  — which device feeds the input: a real keyboard/gamepad/mouse, OR a virtual
-    ///                 device created on demand (`add_device`) so it works fully headless.
-    ///   • PLAYER ID — which joined player (index) the input is delivered to.
-    ///   • INPUT TYPE— buttons/axes (float) and sticks (Vector2) are both supported; you can drive
-    ///                 a named input ACTION or an explicit CONTROL path for total control.
-    ///
-    /// Injection uses a queued <see cref="StateEvent"/> + WriteValueIntoEvent (correct for bitfield
-    /// keyboard keys, and the only thing that works for Vector2 sticks), consumed by the play loop
-    /// next frame so the ECS input consumer sees a clean edge. `tap` auto-releases after N frames.
-    /// `editorInputBehaviorInPlayMode` is forced to AllDeviceInputAlwaysGoesToGameView so Game-View
-    /// focus never gates injected input. Purely Input-System level — no ECS writes.
-    /// </summary>
     [UnityCliTool(
         Name = "player_input",
         Group = "vex",
-        Description = "Drive player input via the new Input System with full flexibility (provider/device, player id, button/axis/Vector2). ops: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap.")]
+        Description =
+            "Drive player input via the new Input System with full flexibility (provider/device, player id, button/axis/Vector2). ops: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap.")]
     public static class PlayerInputTool
     {
-        public class Parameters
-        {
-            [ToolParameter("Operation: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap (default list).")]
-            public string Op { get; set; }
-
-            [ToolParameter("Player index into the joined-players list (default 0). Used by leave/pair/press/release/tap.")]
-            public int Player { get; set; }
-
-            [ToolParameter("Input action name to drive, e.g. Jump or Move (default Jump). Used by press/release/tap.")]
-            public string Action { get; set; }
-
-            [ToolParameter("Explicit control to drive instead of an action, e.g. buttonSouth, leftStick, <Keyboard>/space. Resolved against the player's paired devices.")]
-            public string Control { get; set; }
-
-            [ToolParameter("Scalar value for buttons/axes, 0..1 (default 1). Also used as X for a stick if X is omitted.")]
-            public float Value { get; set; }
-
-            [ToolParameter("X component for a Vector2 control (stick/Move/Look).")]
-            public float X { get; set; }
-
-            [ToolParameter("Y component for a Vector2 control (stick/Move/Look).")]
-            public float Y { get; set; }
-
-            [ToolParameter("tap only: frames to hold before auto-release (default 6).")]
-            public int HoldFrames { get; set; }
-
-            [ToolParameter("Provider/device: keyboard, gamepad, mouse, touch, or a device name. join/add_device/remove_device/pair use it to pick the device; press uses it to pick which paired device's control to drive.")]
-            public string Provider { get; set; }
-
-            [ToolParameter("join only: control scheme name to pair with (optional).")]
-            public string Scheme { get; set; }
-        }
-
-        private class PendingRelease
-        {
-            // Key identifies the pending release for CancelPending (an InputControl for single controls, or the
-            // InputAction for a button composite). Release performs the actual zeroing - for a composite that means
-            // one device-grouped state event, not N per-key events (those clobber siblings; see DriveComposite).
-            public object Key;
-            public System.Action Release;
-            public int ReleaseAtFrame;
-        }
-
-        private static readonly List<PendingRelease> Pending = new List<PendingRelease>();
+        private static readonly List<PendingRelease> Pending = new();
         private static bool _hooked;
 
         public static object HandleCommand(JObject @params)
@@ -83,19 +27,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             var p = new ToolParams(@params);
             var op = (p.Get("op", "list") ?? "list").Trim().ToLowerInvariant();
 
-            // Make injected input survive while Unity is unfocused. No player-loop nudges
-            // (those drop events) — just the three settings that, together, let the normal
-            // play loop process injected input in the background.
             EnsureInputAwake();
 
             switch (op)
             {
                 case "list": return List();
                 case "devices": return Devices();
-                case "add_device": return AddDeviceOp(p.Get("provider", null));
-                case "remove_device": return RemoveDeviceOp(p.Get("provider", null));
-                case "join": return Join(p.Get("provider", null), p.Get("scheme", null));
-                case "pair": return Pair(p.GetInt("player", 0) ?? 0, p.Get("provider", null));
+                case "add_device": return AddDeviceOp(p.Get("provider"));
+                case "remove_device": return RemoveDeviceOp(p.Get("provider"));
+                case "join": return Join(p.Get("provider"), p.Get("scheme"));
+                case "pair": return Pair(p.GetInt("player", 0) ?? 0, p.Get("provider"));
                 case "leave": return Leave(p.GetInt("player", 0) ?? 0);
                 case "leave_all": return LeaveAll();
                 case "press":
@@ -107,34 +48,33 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             }
         }
 
-        // ---- queries ------------------------------------------------------
-
         private static object List()
         {
             var mgr = PlayerInputManager.instance;
             var players = PlayerInput.all.Select((pi, i) => new
             {
                 index = i,
-                playerIndex = pi.playerIndex,
-                name = pi.gameObject.name,
+                pi.playerIndex,
+                pi.gameObject.name,
                 devices = pi.devices.Select(d => d.displayName).ToArray(),
                 currentMap = pi.currentActionMap != null ? pi.currentActionMap.name : null,
                 actions = pi.actions != null
                     ? pi.actions.Where(a => a.actionMap == pi.currentActionMap).Select(a => a.name).ToArray()
-                    : new string[0],
+                    : new string[0]
             }).ToArray();
 
             return new SuccessResponse(
                 $"{players.Length} player(s) joined" + (mgr == null ? " (no PlayerInputManager in scene)" : ""),
                 new
                 {
-                    isPlaying = Application.isPlaying,
+                    Application.isPlaying,
                     manager = mgr != null
-                        ? (object)new { joinBehavior = mgr.joinBehavior.ToString(), playerCount = mgr.playerCount, joiningEnabled = mgr.joiningEnabled }
+                        ? (object)new
+                            { joinBehavior = mgr.joinBehavior.ToString(), mgr.playerCount, mgr.joiningEnabled }
                         : null,
                     playerCount = players.Length,
                     players,
-                    pendingReleases = Pending.Count,
+                    pendingReleases = Pending.Count
                 });
         }
 
@@ -142,30 +82,36 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
         {
             var devices = InputSystem.devices.Select(d => new
             {
-                name = d.name,
-                displayName = d.displayName,
-                layout = d.layout,
-                deviceId = d.deviceId,
-                added = d.added,
-                kind = ProviderKind(d),
+                d.name,
+                d.displayName,
+                d.layout,
+                d.deviceId,
+                d.added,
+                kind = ProviderKind(d)
             }).ToArray();
             return new SuccessResponse($"{devices.Length} input device(s) present.", new { devices });
         }
 
-        // ---- virtual devices ----------------------------------------------
-
         private static object AddDeviceOp(string provider)
         {
             if (string.IsNullOrEmpty(provider))
-                return new ErrorResponse("add_device needs a provider: keyboard, gamepad, mouse, touch (or a layout name).");
-            string layout = NormalizeLayout(provider);
+                return new ErrorResponse(
+                    "add_device needs a provider: keyboard, gamepad, mouse, touch (or a layout name).");
+            var layout = NormalizeLayout(provider);
             InputDevice device;
-            try { device = InputSystem.AddDevice(layout); }
-            catch (System.Exception e) { return new ErrorResponse($"Could not add device of layout '{layout}': {e.Message}"); }
+            try
+            {
+                device = InputSystem.AddDevice(layout);
+            }
+            catch (Exception e)
+            {
+                return new ErrorResponse($"Could not add device of layout '{layout}': {e.Message}");
+            }
+
             if (device == null) return new ErrorResponse($"AddDevice('{layout}') returned null.");
             return new SuccessResponse(
                 $"Added virtual {device.displayName} (layout {device.layout}, id {device.deviceId}).",
-                new { name = device.name, layout = device.layout, deviceId = device.deviceId });
+                new { device.name, device.layout, device.deviceId });
         }
 
         private static object RemoveDeviceOp(string providerOrName)
@@ -177,33 +123,35 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             return new SuccessResponse($"Removed device {label}.");
         }
 
-        // ---- join / pair / leave ------------------------------------------
-
         private static object Join(string provider, string scheme)
         {
-            if (!Application.isPlaying) return new ErrorResponse("join needs play mode (it instantiates the player prefab).");
+            if (!Application.isPlaying)
+                return new ErrorResponse("join needs play mode (it instantiates the player prefab).");
             var mgr = PlayerInputManager.instance;
             if (mgr == null)
-                return new ErrorResponse("No PlayerInputManager in the scene — cannot join. Add one, or instantiate the player prefab directly.");
+                return new ErrorResponse(
+                    "No PlayerInputManager in the scene — cannot join. Add one, or instantiate the player prefab directly.");
 
             InputDevice device;
             if (!string.IsNullOrEmpty(provider))
             {
                 device = ResolveDevice(provider);
                 if (device == null)
-                    return new ErrorResponse($"No '{provider}' device present. Plug one in or `add_device` a virtual one first. See `devices`.");
+                    return new ErrorResponse(
+                        $"No '{provider}' device present. Plug one in or `add_device` a virtual one first. See `devices`.");
             }
             else
             {
-                device = (InputDevice)Keyboard.current ?? (InputDevice)Gamepad.current ?? (InputDevice)Mouse.current;
+                device = (InputDevice)Keyboard.current ?? (InputDevice)Gamepad.current ?? Mouse.current;
             }
 
             var pi = mgr.JoinPlayer(-1, -1, scheme, device);
             if (pi == null)
-                return new ErrorResponse("JoinPlayer returned null (joining disabled, max players reached, or no free device). Check `list`.");
+                return new ErrorResponse(
+                    "JoinPlayer returned null (joining disabled, max players reached, or no free device). Check `list`.");
             return new SuccessResponse(
                 $"Joined player {pi.playerIndex} ('{pi.gameObject.name}') on {(device != null ? device.displayName : "no device")}.",
-                new { playerIndex = pi.playerIndex, name = pi.gameObject.name, devices = pi.devices.Select(d => d.displayName).ToArray() });
+                new { pi.playerIndex, pi.gameObject.name, devices = pi.devices.Select(d => d.displayName).ToArray() });
         }
 
         private static object Pair(int index, string providerOrName)
@@ -213,7 +161,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             if (pi == null) return err;
             var device = ResolveDevice(providerOrName);
             if (device == null) return new ErrorResponse($"No device matching '{providerOrName}'. See `devices`.");
-            InputUser.PerformPairingWithDevice(device, pi.user, InputUserPairingOptions.None);
+            InputUser.PerformPairingWithDevice(device, pi.user);
             return new SuccessResponse(
                 $"Paired {device.displayName} to player {index}.",
                 new { devices = pi.devices.Select(d => d.displayName).ToArray() });
@@ -237,30 +185,31 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             return new SuccessResponse($"Removed {count} player(s).");
         }
 
-        // ---- input injection ----------------------------------------------
-
         private static object Drive(string op, ToolParams p)
         {
             if (!Application.isPlaying) return new ErrorResponse($"{op} needs play mode.");
 
-            int playerIndex = p.GetInt("player", 0) ?? 0;
+            var playerIndex = p.GetInt("player", 0) ?? 0;
             var pi = PlayerAt(playerIndex, out var err);
             if (pi == null) return err;
 
-            string provider = p.Get("provider", null);
-            string controlPath = p.Get("control", null);
-            string actionName = p.Get("action", "Jump");
-            float value = p.GetFloat("value", 1f) ?? 1f;
-            float x = p.GetFloat("x", value) ?? value;
-            float y = p.GetFloat("y", 0f) ?? 0f;
-            bool released = op == "release";
+            var provider = p.Get("provider");
+            var controlPath = p.Get("control");
+            var actionName = p.Get("action", "Jump");
+            var value = p.GetFloat("value", 1f) ?? 1f;
+            var x = p.GetFloat("x", value) ?? value;
+            var y = p.GetFloat("y", 0f) ?? 0f;
+            var released = op == "release";
 
             var devices = FilterDevices(pi.devices, provider);
             if (devices.Count == 0)
                 return new ErrorResponse("Player has no paired device" +
-                    (string.IsNullOrEmpty(provider) ? "." : $" matching provider '{provider}'. See `list`."));
+                                         (string.IsNullOrEmpty(provider)
+                                             ? "."
+                                             : $" matching provider '{provider}'. See `list`."));
 
-            var compositeResult = TryDriveButtonComposite(pi, devices, controlPath, actionName, playerIndex, x, y, released, op, p);
+            var compositeResult = TryDriveButtonComposite(pi, devices, controlPath, actionName, playerIndex, x, y,
+                released, op, p);
             if (compositeResult != null) return compositeResult;
 
             var control = ResolveControl(pi, controlPath, actionName, provider, out var why);
@@ -268,23 +217,25 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
 
             var vec2Control = control as InputControl<Vector2>;
             if (control is not InputControl<float> && vec2Control == null)
-                return new ErrorResponse($"Control '{control.path}' is {control.valueType.Name}; only float (button/axis) and Vector2 (stick) are supported.");
+                return new ErrorResponse(
+                    $"Control '{control.path}' is {control.valueType.Name}; only float (button/axis) and Vector2 (stick) are supported.");
 
             ApplyValue(control, released ? 0f : value, p, released);
 
-            string label = Describe(actionName, controlPath);
+            var label = Describe(actionName, controlPath);
             if (op == "release")
             {
                 CancelPending(control);
                 return new SuccessResponse($"Released '{label}' on player {playerIndex} ({control.path}).");
             }
 
-            string what = vec2Control != null ? $"({x},{y})" : value.ToString();
+            var what = vec2Control != null ? $"({x},{y})" : value.ToString();
 
             if (op == "press")
-                return new SuccessResponse($"Pressed '{label}'={what} on player {playerIndex} ({control.path}). op=release to let go.");
+                return new SuccessResponse(
+                    $"Pressed '{label}'={what} on player {playerIndex} ({control.path}). op=release to let go.");
 
-            int holdFrames = System.Math.Max(1, p.GetInt("hold_frames", 6) ?? 6);
+            var holdFrames = Math.Max(1, p.GetInt("hold_frames", 6) ?? 6);
             CancelPending(control);
             var releaseControl = control;
             Pending.Add(new PendingRelease
@@ -295,59 +246,50 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                     if (releaseControl is InputControl<Vector2>) WriteVector(releaseControl, Vector2.zero);
                     else WriteFloat(releaseControl, 0f);
                 },
-                ReleaseAtFrame = Time.frameCount + holdFrames,
+                ReleaseAtFrame = Time.frameCount + holdFrames
             });
             EnsureHooked();
-            return new SuccessResponse($"Tapped '{label}'={what} on player {playerIndex} ({control.path}); auto-release in {holdFrames} frames.");
+            return new SuccessResponse(
+                $"Tapped '{label}'={what} on player {playerIndex} ({control.path}); auto-release in {holdFrames} frames.");
         }
 
-        // A keyboard 'Move' (and similar) is a 2D-vector composite of button parts
-        // (up/down/left/right keys), NOT a single Vector2 stick — so drive the part
-        // keys from x/y. (Gamepad sticks resolve to a real Vector2 and take the path
-        // below.) Part names/paths are read from the action's own bindings, not hardcoded.
-        // Returns a response when the action is a button composite (handled here), or null
-        // when the caller should fall through to the normal single-control path.
         private static object TryDriveButtonComposite(PlayerInput pi, List<InputDevice> devices,
-            string controlPath, string actionName, int playerIndex, float x, float y, bool released, string op, ToolParams p)
+            string controlPath, string actionName, int playerIndex, float x, float y, bool released, string op,
+            ToolParams p)
         {
             if (!string.IsNullOrEmpty(controlPath)) return null;
 
-            var act = pi.actions != null ? pi.actions.FindAction(actionName, throwIfNotFound: false) : null;
+            var act = pi.actions != null ? pi.actions.FindAction(actionName) : null;
             if (act == null) return new ErrorResponse($"Player has no action named '{actionName}'. See `list`.");
             if (!act.enabled) act.Enable();
             if (!IsButtonComposite(act, devices)) return null;
 
-            // Snapshot the device list - the auto-release closure below outlives this call.
             var devs = devices.ToList();
-            int n = DriveComposite(act, devs, x, y, released);
-            if (n == 0) return new ErrorResponse($"Could not resolve composite parts for '{actionName}' on the player's device(s).");
+            var n = DriveComposite(act, devs, x, y, released);
+            if (n == 0)
+                return new ErrorResponse(
+                    $"Could not resolve composite parts for '{actionName}' on the player's device(s).");
 
             CancelPending(act);
             if (op == "tap")
             {
-                // Single device-grouped zeroing event per part-device (re-runs DriveComposite released) - NOT one
-                // PendingRelease per key, which would clobber siblings. Without this, a composite tap is held forever
-                // (the single-control tap auto-releases, but this path used to return before that logic ran).
-                int holdFrames = System.Math.Max(1, p.GetInt("hold_frames", 6) ?? 6);
+                var holdFrames = Math.Max(1, p.GetInt("hold_frames", 6) ?? 6);
                 Pending.Add(new PendingRelease
                 {
                     Key = act,
                     Release = () => DriveComposite(act, devs, 0f, 0f, true),
-                    ReleaseAtFrame = Time.frameCount + holdFrames,
+                    ReleaseAtFrame = Time.frameCount + holdFrames
                 });
                 EnsureHooked();
-                return new SuccessResponse($"Tapped '{actionName}' = ({x},{y}) via {n} key(s) on player {playerIndex}; auto-release in {holdFrames} frames.");
+                return new SuccessResponse(
+                    $"Tapped '{actionName}' = ({x},{y}) via {n} key(s) on player {playerIndex}; auto-release in {holdFrames} frames.");
             }
 
-            string vlabel = released ? "(0,0)" : $"({x},{y})";
-            return new SuccessResponse($"{(released ? "Released" : "Set")} '{actionName}' = {vlabel} via {n} key(s) on player {playerIndex}.");
+            var vlabel = released ? "(0,0)" : $"({x},{y})";
+            return new SuccessResponse(
+                $"{(released ? "Released" : "Set")} '{actionName}' = {vlabel} via {n} key(s) on player {playerIndex}.");
         }
 
-        // Set the three settings that together let injected input be processed while Unity
-        // is unfocused: keep the play loop running, keep devices alive on focus loss, and
-        // route editor input to the game view regardless of focus. These reset on domain
-        // reload, so we re-assert them on every call. No QueuePlayerLoopUpdate — forcing
-        // the loop at request time discards the queued events.
         private static void EnsureInputAwake()
         {
             if (Application.isPlaying)
@@ -355,30 +297,30 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             var s = InputSystem.settings;
             if (s.backgroundBehavior != InputSettings.BackgroundBehavior.IgnoreFocus)
                 s.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
-            if (s.editorInputBehaviorInPlayMode != InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView)
-                s.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            if (s.editorInputBehaviorInPlayMode !=
+                InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView)
+                s.editorInputBehaviorInPlayMode =
+                    InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
         }
 
-        // True when, ON THE CHOSEN DEVICES, the action is a Vector2 made of button parts
-        // (e.g. keyboard WASD) rather than a single Vector2 control (a gamepad stick). Being
-        // device-aware lets a player with both keyboard+gamepad pick the right path per provider.
         private static bool IsButtonComposite(InputAction action, List<InputDevice> devices)
         {
             foreach (var c in action.controls)
-                if (c is InputControl<Vector2> && devices.Contains(c.device)) return false; // a real stick on our device
+                if (c is InputControl<Vector2> && devices.Contains(c.device))
+                    return false;
             foreach (var b in action.bindings)
             {
                 if (!b.isPartOfComposite) continue;
                 foreach (var d in devices)
-                    if (InputControlPath.TryFindControl(d, b.effectivePath) is InputControl<float>) return true;
+                    if (InputControlPath.TryFindControl(d, b.effectivePath) is InputControl<float>)
+                        return true;
             }
+
             return false;
         }
 
-        // Drive a 2D-vector button composite from x/y: press the up/down/left/right part
-        // keys (resolved from the action's own bindings) and zero the rest. released=true
-        // zeroes all four.
-        private static int DriveComposite(InputAction action, List<InputDevice> devices, float x, float y, bool released)
+        private static int DriveComposite(InputAction action, List<InputDevice> devices, float x, float y,
+            bool released)
         {
             var want = new Dictionary<string, float> { { "up", 0f }, { "down", 0f }, { "left", 0f }, { "right", 0f } };
             if (!released)
@@ -388,9 +330,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 if (x > 0f) want["right"] = Mathf.Abs(x);
                 else if (x < 0f) want["left"] = Mathf.Abs(x);
             }
-            // Collect every part control + its target value, grouped by device. All parts
-            // on one device MUST be written into a SINGLE state event — separate per-key
-            // events each snapshot the whole device and clobber each other (net zero).
+
             var byDevice = new Dictionary<InputDevice, List<KeyValuePair<InputControl<float>, float>>>();
             foreach (var b in action.bindings)
             {
@@ -400,26 +340,35 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 foreach (var d in devices)
                 {
                     if (!(InputControlPath.TryFindControl(d, b.effectivePath) is InputControl<float> fc)) continue;
-                    if (!byDevice.TryGetValue(d, out var list)) { list = new List<KeyValuePair<InputControl<float>, float>>(); byDevice[d] = list; }
+                    if (!byDevice.TryGetValue(d, out var list))
+                    {
+                        list = new List<KeyValuePair<InputControl<float>, float>>();
+                        byDevice[d] = list;
+                    }
+
                     list.Add(new KeyValuePair<InputControl<float>, float>(fc, want[nm]));
                     break;
                 }
             }
-            int driven = 0;
+
+            var driven = 0;
             foreach (var kv in byDevice)
-            {
                 using (StateEvent.From(kv.Key, out var eventPtr))
                 {
-                    foreach (var cv in kv.Value) { cv.Key.WriteValueIntoEvent(cv.Value, eventPtr); driven++; }
+                    foreach (var cv in kv.Value)
+                    {
+                        cv.Key.WriteValueIntoEvent(cv.Value, eventPtr);
+                        driven++;
+                    }
+
                     InputSystem.QueueEvent(eventPtr);
                 }
-            }
+
             return driven;
         }
 
-        // Resolve the control to drive: explicit control path first, else the action's control
-        // (preferring one on the requested provider's device).
-        private static InputControl ResolveControl(PlayerInput pi, string controlPath, string actionName, string provider, out string why)
+        private static InputControl ResolveControl(PlayerInput pi, string controlPath, string actionName,
+            string provider, out string why)
         {
             why = null;
             var candidateDevices = FilterDevices(pi.devices, provider);
@@ -435,21 +384,33 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             {
                 foreach (var d in candidateDevices)
                 {
-                    var c = InputControlPath.TryFindControl(d, controlPath) ?? InputControlPath.TryFindControl(d, "**/" + controlPath);
+                    var c = InputControlPath.TryFindControl(d, controlPath) ??
+                            InputControlPath.TryFindControl(d, "**/" + controlPath);
                     if (c != null) return c;
                 }
-                why = $"No control '{controlPath}' on device(s): {string.Join(", ", candidateDevices.Select(d => d.displayName))}.";
+
+                why =
+                    $"No control '{controlPath}' on device(s): {string.Join(", ", candidateDevices.Select(d => d.displayName))}.";
                 return null;
             }
 
-            var action = pi.actions != null ? pi.actions.FindAction(actionName, throwIfNotFound: false) : null;
-            if (action == null) { why = $"Player has no action named '{actionName}'. See `list`."; return null; }
-            if (!action.enabled) action.Enable();
-            if (action.controls.Count == 0) { why = $"Action '{actionName}' resolves to no control (nothing bound / no paired device)."; return null; }
+            var action = pi.actions != null ? pi.actions.FindAction(actionName) : null;
+            if (action == null)
+            {
+                why = $"Player has no action named '{actionName}'. See `list`.";
+                return null;
+            }
 
-            // Prefer a control on a candidate device (honours provider filter).
+            if (!action.enabled) action.Enable();
+            if (action.controls.Count == 0)
+            {
+                why = $"Action '{actionName}' resolves to no control (nothing bound / no paired device).";
+                return null;
+            }
+
             foreach (var c in action.controls)
-                if (candidateDevices.Contains(c.device)) return c;
+                if (candidateDevices.Contains(c.device))
+                    return c;
             return action.controls[0];
         }
 
@@ -457,8 +418,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
         {
             if (control is InputControl<Vector2>)
             {
-                float baseV = p.GetFloat("value", 1f) ?? 1f;
-                var v = released ? Vector2.zero : new Vector2(p.GetFloat("x", baseV) ?? baseV, p.GetFloat("y", 0f) ?? 0f);
+                var baseV = p.GetFloat("value", 1f) ?? 1f;
+                var v = released
+                    ? Vector2.zero
+                    : new Vector2(p.GetFloat("x", baseV) ?? baseV, p.GetFloat("y", 0f) ?? 0f);
                 WriteVector(control, v);
             }
             else
@@ -466,8 +429,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 WriteFloat(control, scalar);
             }
         }
-
-        // ---- low-level state-event writes ---------------------------------
 
         private static void WriteFloat(InputControl control, float value)
         {
@@ -489,38 +450,59 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             }
         }
 
-        // ---- auto-release pump --------------------------------------------
+        private static void EnsureHooked()
+        {
+            if (_hooked) return;
+            EditorApplication.update += Pump;
+            _hooked = true;
+        }
 
-        private static void EnsureHooked() { if (_hooked) return; EditorApplication.update += Pump; _hooked = true; }
-
-        // Match by Key: an InputControl for single controls, an InputAction for a composite. Re-tapping the same
-        // control/action cancels its in-flight auto-release so two timers can't stack and double-zero.
-        private static void CancelPending(object key) => Pending.RemoveAll(r => Equals(r.Key, key));
+        private static void CancelPending(object key)
+        {
+            Pending.RemoveAll(r => Equals(r.Key, key));
+        }
 
         private static void Pump()
         {
-            if (Pending.Count == 0) { EditorApplication.update -= Pump; _hooked = false; return; }
-            if (!Application.isPlaying) { Pending.Clear(); return; }
-            int now = Time.frameCount;
-            for (int i = Pending.Count - 1; i >= 0; i--)
+            if (Pending.Count == 0)
+            {
+                EditorApplication.update -= Pump;
+                _hooked = false;
+                return;
+            }
+
+            if (!Application.isPlaying)
+            {
+                Pending.Clear();
+                return;
+            }
+
+            var now = Time.frameCount;
+            for (var i = Pending.Count - 1; i >= 0; i--)
             {
                 if (now < Pending[i].ReleaseAtFrame) continue;
-                try { Pending[i].Release(); }
-                catch { /* control/action may have gone with a destroyed player/device */ }
+                try
+                {
+                    Pending[i].Release();
+                }
+                catch
+                {
+                }
+
                 Pending.RemoveAt(i);
             }
         }
-
-        // ---- helpers ------------------------------------------------------
 
         private static PlayerInput PlayerAt(int index, out object error)
         {
             error = null;
             if (index < 0 || index >= PlayerInput.all.Count)
             {
-                error = new ErrorResponse($"No player at index {index} (have {PlayerInput.all.Count}). Join one first, or see `list`.");
+                error = new ErrorResponse(
+                    $"No player at index {index} (have {PlayerInput.all.Count}). Join one first, or see `list`.");
                 return null;
             }
+
             return PlayerInput.all[index];
         }
 
@@ -536,8 +518,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
             var pr = provider.Trim().ToLowerInvariant();
             if (kind == pr) return true;
             return d.name.ToLowerInvariant().Contains(pr)
-                || d.displayName.ToLowerInvariant().Contains(pr)
-                || d.layout.ToLowerInvariant().Contains(pr);
+                   || d.displayName.ToLowerInvariant().Contains(pr)
+                   || d.layout.ToLowerInvariant().Contains(pr);
         }
 
         private static string ProviderKind(InputDevice d)
@@ -563,6 +545,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 case "mouse": return Mouse.current ?? InputSystem.devices.FirstOrDefault(d => d is Mouse);
                 case "touch": return Touchscreen.current ?? InputSystem.devices.FirstOrDefault(d => d is Touchscreen);
             }
+
             return InputSystem.devices.FirstOrDefault(d => MatchesProvider(d, providerOrName));
         }
 
@@ -574,11 +557,58 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
                 case "gamepad": return "Gamepad";
                 case "mouse": return "Mouse";
                 case "touch": return "Touchscreen";
-                default: return provider; // assume it's a real layout name
+                default: return provider;
             }
         }
 
         private static string Describe(string action, string controlPath)
-            => !string.IsNullOrEmpty(controlPath) ? controlPath : action;
+        {
+            return !string.IsNullOrEmpty(controlPath) ? controlPath : action;
+        }
+
+        public class Parameters
+        {
+            [ToolParameter(
+                "Operation: list, devices, add_device, remove_device, join, pair, leave, leave_all, press, release, tap (default list).")]
+            public string Op { get; set; }
+
+            [ToolParameter(
+                "Player index into the joined-players list (default 0). Used by leave/pair/press/release/tap.")]
+            public int Player { get; set; }
+
+            [ToolParameter("Input action name to drive, e.g. Jump or Move (default Jump). Used by press/release/tap.")]
+            public string Action { get; set; }
+
+            [ToolParameter(
+                "Explicit control to drive instead of an action, e.g. buttonSouth, leftStick, <Keyboard>/space. Resolved against the player's paired devices.")]
+            public string Control { get; set; }
+
+            [ToolParameter(
+                "Scalar value for buttons/axes, 0..1 (default 1). Also used as X for a stick if X is omitted.")]
+            public float Value { get; set; }
+
+            [ToolParameter("X component for a Vector2 control (stick/Move/Look).")]
+            public float X { get; set; }
+
+            [ToolParameter("Y component for a Vector2 control (stick/Move/Look).")]
+            public float Y { get; set; }
+
+            [ToolParameter("tap only: frames to hold before auto-release (default 6).")]
+            public int HoldFrames { get; set; }
+
+            [ToolParameter(
+                "Provider/device: keyboard, gamepad, mouse, touch, or a device name. join/add_device/remove_device/pair use it to pick the device; press uses it to pick which paired device's control to drive.")]
+            public string Provider { get; set; }
+
+            [ToolParameter("join only: control scheme name to pair with (optional).")]
+            public string Scheme { get; set; }
+        }
+
+        private class PendingRelease
+        {
+            public object Key;
+            public Action Release;
+            public int ReleaseAtFrame;
+        }
     }
 }

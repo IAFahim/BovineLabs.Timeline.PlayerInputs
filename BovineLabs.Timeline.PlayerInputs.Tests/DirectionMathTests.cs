@@ -32,10 +32,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         [Test]
         public void Quantise_FacingFlipsBackForward()
         {
-            // Facing -1 mirrors X: a +X stick now reads as Back.
             Assert.AreEqual(Direction.Back, DirectionMath.Quantise(new float2(1f, 0f), 0.2f, -1));
             Assert.AreEqual(Direction.Forward, DirectionMath.Quantise(new float2(-1f, 0f), 0.2f, -1));
-            // Up/Down are unaffected by facing.
+
             Assert.AreEqual(Direction.Up, DirectionMath.Quantise(new float2(0f, 1f), 0.2f, -1));
         }
 

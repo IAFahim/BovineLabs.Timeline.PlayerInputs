@@ -23,8 +23,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Input action whose start/end edges fire the events below.")]
         public InputActionReference Action;
 
-        [Header("Events")]
-        [Tooltip("Where to resolve the entity that receives the fired events from.")]
+        [Header("Events")] [Tooltip("Where to resolve the entity that receives the fired events from.")]
         public Target EventRouteTo = Target.Self;
 
         [Tooltip("Link used to resolve the event target when EventRouteTo needs one.")]
@@ -51,13 +50,18 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             EntityLinkAuthoringUtility.TryGetKey(EventRouteLink, out var eventRouteLinkKey);
 
-            byte actionId = byte.MaxValue;
+            var actionId = byte.MaxValue;
             if (Action == null)
-                Debug.LogError($"InputEventsClip '{name}' has no Action assigned; it will watch no action and fire no events.", this);
+            {
+                Debug.LogError(
+                    $"InputEventsClip '{name}' has no Action assigned; it will watch no action and fire no events.",
+                    this);
+            }
             else if (!MultiInputSettingsAuthoringUtility.TryGetIndex(Action, out actionId))
             {
                 actionId = byte.MaxValue;
-                Debug.LogError($"InputEventsClip '{name}' action '{Action.name}' not found in MultiInputSettings.", this);
+                Debug.LogError($"InputEventsClip '{name}' action '{Action.name}' not found in MultiInputSettings.",
+                    this);
             }
 
             var commands = new BakerCommands(context.Baker, entity);

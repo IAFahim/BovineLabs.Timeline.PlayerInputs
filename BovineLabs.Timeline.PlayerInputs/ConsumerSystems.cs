@@ -7,7 +7,6 @@ using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
@@ -48,9 +47,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Masks = _masks
             }.Schedule(state.Dependency);
 
-            // A CommandSequenceClip self-buffers: while active it opens its own actions' recording so a
-            // designer never needs a separate InputBufferWindow track for the actions a combo reads.
-            // Runs after the window job; both write masks single-threaded so they chain sequentially.
             state.Dependency = new AccumulateCommandMaskJob
             {
                 TargetsLookup = _targetsLookup,
@@ -106,13 +102,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             private void Execute(in CommandSequenceConfig config, in CommandSequenceState commandState,
                 EnabledRefRO<ClipActivePrevious> activePrevious, in TrackBinding binding)
             {
-                // A once-only clip that has already fired stops matching/consuming (GatherJob bails on
-                // IsCompleted); it must also stop self-buffering, or it would keep recording orphaned edges
-                // into the shared per-consumer history for the rest of its active span.
-                // BUT not on its re-activation edge: CommandSequenceResetSystem (which clears IsCompleted on
-                // the activation edge) runs AFTER this system, so on the first frame of a fresh activation
-                // the flag is still stale-true. ClipActivePrevious is disabled on that edge, so only honour
-                // IsCompleted once the clip has been active for at least a frame.
                 if (commandState.IsCompleted && activePrevious.ValueRO) return;
                 if (config.Actions.AllFalse || binding.Value == Entity.Null) return;
                 if (!TargetsLookup.TryGetComponent(binding.Value, out var targets)) return;
