@@ -88,13 +88,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 Renderer.Point(carrotPos, 0.35f, color);
 
                 var label = new FixedString64Bytes();
-                label.Append("carrot #");
+                label.Append((FixedString32Bytes)"carrot #");
                 label.Append(carrot.Index);
                 if (isActive)
                 {
-                    label.Append(" d=");
+                    label.Append((FixedString32Bytes)" d=");
                     label.Append((int)math.round(math.distance(anchorPos, carrotPos) * 100f));
-                    label.Append("cm");
+                    label.Append((FixedString32Bytes)"cm");
                 }
 
                 Renderer.Text64(carrotPos + new float3(0f, 0.55f, 0f), label, color, 11f);
