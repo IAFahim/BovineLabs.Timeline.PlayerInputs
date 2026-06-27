@@ -8,8 +8,10 @@ using UnityEngine.InputSystem;
 namespace BovineLabs.Timeline.PlayerInputs.Data
 {
     [SettingsGroup("Input")]
-    public sealed class MultiInputSettings : KSettingsBase<MultiInputSettings, byte>
+    public sealed partial class MultiInputSettings : KSettingsBase<MultiInputSettings, byte>
     {
+        public const int MaxActions = 255;
+
         [SerializeField] private InputActionReference[] inputActions = Array.Empty<InputActionReference>();
 
         public IReadOnlyList<InputActionReference> InputActions => inputActions;
@@ -18,7 +20,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             get
             {
-                var count = Math.Min(inputActions.Length, 256);
+                var count = Math.Min(inputActions.Length, MaxActions);
                 for (var i = 0; i < count; i++)
                 {
                     var id = (byte)i;
@@ -34,7 +36,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             index = 0;
             if (reference?.action == null) return false;
 
-            var count = Math.Min(inputActions.Length, 256);
+            var count = Math.Min(inputActions.Length, MaxActions);
 
             for (var i = 0; i < count; i++)
             {

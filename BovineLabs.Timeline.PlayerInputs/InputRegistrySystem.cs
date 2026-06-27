@@ -1,4 +1,5 @@
 using BovineLabs.Timeline.PlayerInputs.Data;
+using BovineLabs.Timeline.PlayerInputs.Flow.Data;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -13,8 +14,12 @@ namespace BovineLabs.Timeline.PlayerInputs
     {
         private const int SlotCount = 256;
 
+        private ComponentLookup<SyntheticProviderTag> synthetic;
+
         public void OnCreate(ref SystemState state)
         {
+            synthetic = state.GetComponentLookup<SyntheticProviderTag>(true);
+
             var entity = state.EntityManager.CreateEntity();
             state.EntityManager.SetName(entity, "InputRegistry");
             state.EntityManager.AddBuffer<PlayerJoined>(entity);
@@ -35,6 +40,8 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            synthetic.Update(ref state);
+
             var next = CollectionHelper.CreateNativeArray<Entity>(
                 SlotCount, state.WorldUpdateAllocator);
 
@@ -50,6 +57,16 @@ namespace BovineLabs.Timeline.PlayerInputs
                     if (existingRetiring != entityRetiring)
                     {
                         if (entityRetiring) continue;
+                        next[slot] = entity;
+                        continue;
+                    }
+
+                    var existingSynthetic = synthetic.HasComponent(existing);
+                    var entitySynthetic = synthetic.HasComponent(entity);
+                    if (existingSynthetic != entitySynthetic)
+                    {
+                        ReportSyntheticCollision(slot);
+                        if (entitySynthetic) continue;
                         next[slot] = entity;
                         continue;
                     }
@@ -87,6 +104,13 @@ namespace BovineLabs.Timeline.PlayerInputs
         private static void ReportDuplicate(int slot)
         {
             Debug.LogError($"Duplicate provider for PlayerId {slot}; keeping first.");
+        }
+
+        [BurstDiscard]
+        private static void ReportSyntheticCollision(int slot)
+        {
+            Debug.LogError(
+                $"Human and synthetic provider both claim PlayerId {slot}; keeping the human, ignoring the synthetic.");
         }
     }
 }

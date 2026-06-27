@@ -33,11 +33,45 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         private Entity provider;
         private World world;
 
+        private bool focused = true;
+        private bool wasFocused = true;
+
         private void Update()
         {
             if (initialized &&
                 (provider == Entity.Null || world == null || !world.IsCreated || !manager.Exists(provider)))
                 TryCreateProvider(out provider);
+
+            if (!focused)
+            {
+                if (wasFocused)
+                {
+                    edges.Reset();
+                    CurrentAxes.Clear();
+                    edges.Publish(out CurrentDown, out CurrentUp, out CurrentHeld);
+                    wasFocused = false;
+                }
+
+                return;
+            }
+
+            if (!wasFocused)
+            {
+                foreach (var button in buttonActions)
+                    if (button.Action.IsPressed())
+                        edges.Seed(button.Id);
+
+                foreach (var axis in valueActions)
+                {
+                    var resumed = axis.IsVec2
+                        ? (float2)axis.Action.ReadValue<Vector2>()
+                        : new float2(axis.Action.ReadValue<float>(), 0f);
+                    if (math.lengthsq(resumed) > AxisPublishThresholdSq)
+                        edges.Seed(axis.Id);
+                }
+
+                wasFocused = true;
+            }
 
             CurrentAxes.Clear();
             foreach (var axis in valueActions)
@@ -66,6 +100,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             edges.Publish(out CurrentDown, out CurrentUp, out CurrentHeld);
         }
 
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            focused = hasFocus;
+        }
+
         private void OnEnable()
         {
             var playerInput = GetComponent<PlayerInput>();
@@ -85,6 +124,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             }
 
             ClearState();
+
+            focused = Application.isFocused;
+            wasFocused = focused;
 
             var count = Math.Min(MultiInputSettings.I.InputActions.Count, 256);
             for (var i = 0; i < count; i++)
