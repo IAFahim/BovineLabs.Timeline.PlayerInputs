@@ -22,7 +22,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         private readonly List<Subscription> subscriptions = new();
 
-        private readonly List<(byte Id, InputAction Action)> valueActions = new();
+        private readonly List<(byte Id, InputAction Action, bool IsVec2)> valueActions = new();
+
+        private readonly List<(byte Id, InputAction Action)> buttonActions = new();
 
         private EdgeAccumulator edges;
 
@@ -40,8 +42,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             CurrentAxes.Clear();
             foreach (var axis in valueActions)
             {
-                var isVec2 = IsTwoDimensional(axis.Action);
-                var val = isVec2
+                var val = axis.IsVec2
                     ? (float2)axis.Action.ReadValue<Vector2>()
                     : new float2(axis.Action.ReadValue<float>(), 0f);
 
@@ -52,6 +53,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
                 if (actuated)
                     CurrentAxes.Add(new InputAxis { ActionId = axis.Id, Value = val });
+            }
+
+            foreach (var button in buttonActions)
+            {
+                var down = button.Action.IsPressed();
+                var was = edges.IsPressed(button.Id);
+                if (down && !was) edges.Press(button.Id);
+                else if (!down && was) edges.Release(button.Id);
             }
 
             edges.Publish(out CurrentDown, out CurrentUp, out CurrentHeld);
@@ -90,12 +99,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 }
 
                 var id = (byte)i;
+                var isVec2 = IsTwoDimensional(action);
                 var isAxis = action.type == InputActionType.Value ||
-                             (action.type == InputActionType.PassThrough && IsTwoDimensional(action));
+                             (action.type == InputActionType.PassThrough && isVec2);
 
                 if (isAxis)
                 {
-                    valueActions.Add((id, action));
+                    valueActions.Add((id, action, isVec2));
                 }
                 else
                 {
@@ -108,6 +118,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                     action.started += sub.OnStarted;
                     action.canceled += sub.OnCanceled;
                     subscriptions.Add(sub);
+                    buttonActions.Add((id, action));
                 }
 
                 if (action.IsPressed())
@@ -130,6 +141,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
             subscriptions.Clear();
             valueActions.Clear();
+            buttonActions.Clear();
 
             if (world != null && world.IsCreated && manager.Exists(provider))
                 RetireProvider();
@@ -152,6 +164,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         {
             subscriptions.Clear();
             valueActions.Clear();
+            buttonActions.Clear();
             CurrentAxes.Clear();
             CurrentDown = default;
             CurrentHeld = default;
@@ -188,7 +201,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         private static bool IsTwoDimensional(InputAction action)
         {
             var type = action.expectedControlType;
-            if (type == "Vector2" || type == "Stick" || type == "Dpad") return true;
+            if (type == "Vector2" || type == "Stick" || type == "Dpad" || type == "Delta") return true;
             if (!string.IsNullOrEmpty(type)) return false;
 
             var controls = action.controls;
