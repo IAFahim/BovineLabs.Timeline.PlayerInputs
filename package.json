@@ -23,5 +23,12 @@
     "timeline",
     "ecs",
     "physics"
+  ],
+  "samples": [
+    {
+      "displayName": "PlayerInputs Showcase",
+      "description": "All five PlayerInputs tracks (CommandSequence, InputBuffer, InputEvents, AxisTransform, FlowInput) demonstrating combos, motion inputs, buffers and edges.",
+      "path": "Sample~/PlayerInputs Showcase"
+    }
   ]
 }
