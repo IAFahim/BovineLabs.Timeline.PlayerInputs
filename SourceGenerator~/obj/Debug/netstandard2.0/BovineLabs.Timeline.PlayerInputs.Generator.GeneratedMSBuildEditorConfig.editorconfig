@@ -1,0 +1,8 @@
+is_global = true
+build_property.RootNamespace = BovineLabs.Timeline.PlayerInputs.Generator
+build_property.ProjectDir = /home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.CsWinRTUseWindowsUIXamlProjections = false
+build_property.EffectiveAnalysisLevelStyle = 
+build_property.EnableCodeStyleSeverity = 

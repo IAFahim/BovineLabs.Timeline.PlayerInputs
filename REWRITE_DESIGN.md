@@ -173,6 +173,29 @@ typed consumers / AxisTransform / CommandSequence / InputEvents → read.
 7. Seat identity (C10) — phaseable.
 8. Tests per layer; remove dead old API once parity proven.
 
+## Typed API — designer usage (generated)
+
+Declare once (top-level, partial):
+```csharp
+public partial struct PlayerInput : IPlayerInput {
+    [InputAction] public ButtonState Jump;   // Down/Pressed/Up
+    [InputAction] public float2 Move;
+    [InputActionDelta] public float2 Look;   // ×dt (stick RATE; use [InputAction] raw for a mouse delta — C5)
+    [InputActionDown] public bool Dodge;
+}
+```
+The generator emits, in the SAME assembly: `PlayerInput.Bindings` (InputActionReference per field),
+`PlayerInput_Map` (baked byte-ids), `PlayerInput_Authoring` (drop ONE in a subscene, assign the refs →
+bakes the Map singleton), and `PlayerInput_Projection` (ensures `PlayerInput` on every provider, fills it
+from that provider's own InputState/InputAxis each frame in `PlayerInputProjectionGroup`). Gameplay reads
+`PlayerInput` per player via the registry (synthetic AI providers get it filled too). Unresolved/renamed
+refs bake to byte 255 (reserved sentinel) → safe all-false/zero defaults + a `Debug.LogError`.
+
+REQUIRED asmdef references for the assembly containing your IPlayerInput struct (generated code needs them):
+PlayerInputs.Data, PlayerInputs (systems), PlayerInputs.Authoring, Unity.Entities, Unity.Entities.Hybrid,
+Unity.InputSystem, Unity.Mathematics — and the generator DLL is applied as a RoslynAnalyzer
+(SourceGenerators/, isExplicitlyReferenced). Generator source lives in SourceGenerator~/ (build → copy DLL).
+
 ## Refuted by the panel (do NOT spend effort here)
 Edge-model double-handling (SetSingleton-before-Reset is fine); hot-leave Up reaches consumers (retire
 ordering is correct); CoreCLR settings re-seed (SettingsSingleton uses RuntimeInitializeOnLoad);

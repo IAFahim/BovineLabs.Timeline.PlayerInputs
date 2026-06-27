@@ -73,6 +73,16 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
+            // Cursor world ray for PointFromCursor aim (one shared system pointer). Optional: no InputCommon / no
+            // camera / cursor off-screen or unfocused => CursorValid false => aim holds its last direction.
+            var cursorRay = default(CameraRay);
+            var cursorValid = false;
+            if (SystemAPI.TryGetSingleton<InputCommon>(out var common))
+            {
+                cursorRay = common.CameraRay;
+                cursorValid = common.HasCamera && common.InViewWithFocus;
+            }
+
             state.Dependency = new InitJob().ScheduleParallel(state.Dependency);
 
             state.Dependency = new ApplyJob
@@ -87,7 +97,9 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Parents = _parents,
                 Ltws = _ltws,
                 DeltaTime = SystemAPI.Time.DeltaTime,
-                CameraRotation = cameraRotation
+                CameraRotation = cameraRotation,
+                Cursor = cursorRay,
+                CursorValid = cursorValid
             }.Schedule(state.Dependency);
         }
 
@@ -125,6 +137,8 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             public float DeltaTime;
             public quaternion CameraRotation;
+            public CameraRay Cursor;
+            public bool CursorValid;
 
             private void Execute(in TrackBinding binding, in AxisTransformConfig config, ref AxisTransformState state)
             {
@@ -147,18 +161,42 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 if (!Transforms.HasComponent(carrot)) return;
 
-                var axisValue = InputAccess.ReadAxis(axesBuf, config.ActionId);
-
                 var planeNormal = math.lengthsq(config.Plane) > 1e-8f ? math.normalize(config.Plane) : math.up();
                 AxisBasis.ComputePlaneBasis(planeNormal, config.Flags.Has(AxisTransformFlags.CameraRelative),
                     CameraRotation, out var basisForward, out var basisRight);
-                var inputVec = basisRight * axisValue.x + basisForward * axisValue.y;
-                var hasInput = math.lengthsq(inputVec) > 0.0001f;
 
                 var t = Transforms[carrot];
                 var writeTransform = false;
 
                 var parented = TryGetParentWorld(carrot, out var parentPos, out var parentRot, out var parentScale);
+
+                float3 inputVec;
+                if (config.Mode == AxisTransformMode.Aim && config.Flags.Has(AxisTransformFlags.PointFromCursor))
+                {
+                    // Aim at the mouse cursor: project its world ray onto the body's aim plane, face that point.
+                    // Off-screen / no camera => inputVec stays zero => hasInput false => ComputeAim holds last aim.
+                    inputVec = float3.zero;
+                    if (CursorValid)
+                    {
+                        // Pivot on the BODY (the carrot's parent), never the carrot's own position: with AimRadius>0
+                        // the carrot is displaced along the aim dir each frame, so using it as the pivot feeds back
+                        // and flickers between two spots (worse at Smoothing=0, no damping). parentPos is the body.
+                        var bodyWorld = parented ? parentPos : t.Position;
+                        if (AxisAim.TryProjectCursorToPlane(Cursor.Origin, Cursor.Direction, bodyWorld, planeNormal,
+                                out var aimPoint))
+                        {
+                            var toAim = aimPoint - bodyWorld;
+                            inputVec = toAim - (planeNormal * math.dot(toAim, planeNormal));
+                        }
+                    }
+                }
+                else
+                {
+                    var axisValue = InputAccess.ReadAxis(axesBuf, config.ActionId);
+                    inputVec = (basisRight * axisValue.x) + (basisForward * axisValue.y);
+                }
+
+                var hasInput = math.lengthsq(inputVec) > 0.0001f;
 
                 if (!state.Initialized)
                 {
@@ -178,12 +216,25 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                     t.Position = localPos;
                     state.HeldWorldPosition = newHeldWorldPos;
+
+                    // Lateral offset (Move): fixed sideways shift along the plane-right basis, so two clips at +/-X
+                    // make two parallel movement trails. Same perpendicular intent as Aim, but along a fixed axis
+                    // (Move has no facing to be perpendicular to).
+                    if (config.LateralOffset != 0f)
+                    {
+                        var lateralWorld = basisRight * config.LateralOffset;
+                        t.Position += parented
+                            ? math.rotate(math.inverse(parentRot), lateralWorld) / parentScale
+                            : lateralWorld;
+                    }
+
                     writeTransform = true;
                 }
                 else
                 {
                     AxisAim.ComputeAim(inputVec, hasInput, planeNormal, config.Smoothing, DeltaTime, config.AimRadius,
-                        state.HasAimed, parented, parentRot, parentScale, state.HeldWorldRotation,
+                        config.LateralOffset, config.Flags.Has(AxisTransformFlags.RotateInPlace), state.HasAimed,
+                        parented, parentRot, parentScale, state.HeldWorldRotation,
                         out var newHeldWorldRot, out var newHasAimed, out var wroteLocalPos, out var localPos);
 
                     state.HeldWorldRotation = newHeldWorldRot;

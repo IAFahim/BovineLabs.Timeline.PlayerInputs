@@ -53,7 +53,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         // MOVE only: when the stick is released, keep the carrot at its last lead point instead of snapping it
         // back onto the body. Off (default) the lead recenters on the body so the body stops and can't diverge.
         // AIM ignores this - it ALWAYS holds the last input direction (you keep facing where you aimed).
-        KeepLead = 1 << 1
+        KeepLead = 1 << 1,
+
+        // AIM only: derive the aim direction from the MOUSE CURSOR's world point instead of the stick axis. The
+        // cursor ray (InputCommon, one shared system pointer) is intersected with the body's aim plane and the
+        // direction is (cursorPoint - bodyPos). Off-screen / no camera / no focus holds the last aim. The bound
+        // Action axis is unused in this mode. ponytail: single system cursor - per-seat split-screen pointers TODO.
+        PointFromCursor = 1 << 2,
+
+        // AIM only: only ROTATE the carrot, never drive its position from the aim (for decals/turrets). Suppresses
+        // the AimRadius radial slide. A fixed LateralOffset still applies (so offset decals can rotate in place).
+        RotateInPlace = 1 << 3
     }
 
     public struct InputState : IComponentData
@@ -186,6 +196,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         // AIM: if > 0, the carrot also TRANSLATES to (held aim direction × this radius) around the body, so the
         // sphere sits at the arrow's tip and holds there on release. 0 = rotation-only (legacy). MOVE ignores it.
         public float AimRadius;
+
+        // AIM: sideways shift perpendicular to the aim direction (in the plane), in units. Two clips at +X and -X
+        // draw two parallel lines/decals that both face the cursor. Applies even with RotateInPlace. MOVE ignores it.
+        public float LateralOffset;
 
         // MOVE: max lead distance from the body. 0 = unlimited. AIM ignores it.
         public float LeashRadius;

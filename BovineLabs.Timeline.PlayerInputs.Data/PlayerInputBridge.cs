@@ -128,7 +128,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             focused = Application.isFocused;
             wasFocused = focused;
 
-            var count = Math.Min(MultiInputSettings.I.InputActions.Count, 256);
+            var count = Math.Min(MultiInputSettings.I.InputActions.Count, MultiInputSettings.MaxActions);
             for (var i = 0; i < count; i++)
             {
                 var binding = MultiInputSettings.I.InputActions[i];

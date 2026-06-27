@@ -52,6 +52,21 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                  "sits at the arrow's tip and holds there on release. 0 = rotate in place only.")]
         public float AimRadius;
 
+        [Tooltip("Aim only: ONLY rotate the carrot, never drive its position (for decals / turrets). Overrides the " +
+                 "Aim Radius slide. A Lateral Offset still applies, so offset decals can rotate in place.")]
+        public bool RotateInPlace;
+
+        [Tooltip("Aim only: face the MOUSE CURSOR instead of the stick. The cursor's world point on the aim plane " +
+                 "drives the facing (top-down mouse aim). The Action above is ignored in this mode. Uses one shared " +
+                 "system pointer (the mouse player); pads should leave this off and use the stick.")]
+        public bool AimAtCursor;
+
+        [Header("Offset (Move & Aim)")]
+        [Tooltip("Shift the carrot sideways by this many units. AIM: perpendicular to the aim direction (rotates " +
+                 "with it). MOVE: along the camera/world right axis. Put two clips at +X and -X to draw two PARALLEL " +
+                 "lines / trails / decals.")]
+        public float LateralOffset;
+
         [Header("Options")]
         [Tooltip("Interpret the stick relative to the Main Camera instead of world axes.")]
         public bool CameraRelative = true;
@@ -71,8 +86,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
             EntityLinkAuthoringUtility.TryGetKey(AnchorLink, out var anchorLinkKey);
 
+            var aimAtCursor = Mode == AxisTransformMode.Aim && AimAtCursor;
+
             var actionId = byte.MaxValue;
-            if (Action == null)
+            if (aimAtCursor)
+            {
+                // Cursor aim ignores the axis; Action is optional here.
+            }
+            else if (Action == null)
             {
                 Debug.LogError(
                     $"AxisTransformClip '{name}' has no Action assigned; it will read no axis (the clip does nothing).",
@@ -88,6 +109,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             var flags = AxisTransformFlags.None;
             if (CameraRelative) flags |= AxisTransformFlags.CameraRelative;
             if (Mode == AxisTransformMode.Move && !SnapBackOnRelease) flags |= AxisTransformFlags.KeepLead;
+            if (aimAtCursor) flags |= AxisTransformFlags.PointFromCursor;
+            if (Mode == AxisTransformMode.Aim && RotateInPlace) flags |= AxisTransformFlags.RotateInPlace;
 
             var commands = new BakerCommands(context.Baker, entity);
             commands.AddComponent(new AxisTransformConfig
@@ -100,6 +123,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Plane = Plane,
                 Smoothing = Smoothing,
                 AimRadius = AimRadius,
+                LateralOffset = LateralOffset,
                 LeashRadius = LeashRadius,
                 Mode = Mode,
                 Flags = flags

@@ -1,0 +1,76 @@
+{
+  "format": 1,
+  "restore": {
+    "/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/BovineLabs.Timeline.PlayerInputs.Generator.csproj": {}
+  },
+  "projects": {
+    "/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/BovineLabs.Timeline.PlayerInputs.Generator.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/BovineLabs.Timeline.PlayerInputs.Generator.csproj",
+        "projectName": "BovineLabs.Timeline.PlayerInputs.Generator",
+        "projectPath": "/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/BovineLabs.Timeline.PlayerInputs.Generator.csproj",
+        "packagesPath": "/home/i/.nuget/packages/",
+        "outputPath": "/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/i/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "netstandard2.0"
+        ],
+        "sources": {
+          "/usr/lib/dotnet/library-packs": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "netstandard2.0": {
+            "targetAlias": "netstandard2.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.100"
+      },
+      "frameworks": {
+        "netstandard2.0": {
+          "targetAlias": "netstandard2.0",
+          "dependencies": {
+            "Microsoft.CodeAnalysis.CSharp": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[4.3.0, )"
+            },
+            "NETStandard.Library": {
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[2.0.3, )",
+              "autoReferenced": true
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/10.0.109/RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

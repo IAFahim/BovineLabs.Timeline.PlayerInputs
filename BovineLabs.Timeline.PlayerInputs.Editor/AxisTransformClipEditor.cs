@@ -45,7 +45,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
                     continue;
                 if (isAim && (n == "Range" || n == "LeashRadius" || n == "SnapBackOnRelease"))
                     continue;
-                if (!isAim && (n == "Smoothing" || n == "AimRadius"))
+                if (!isAim && (n == "Smoothing" || n == "AimRadius" || n == "RotateInPlace" || n == "AimAtCursor"))
                     continue;
 
                 EditorGUILayout.PropertyField(it, true);

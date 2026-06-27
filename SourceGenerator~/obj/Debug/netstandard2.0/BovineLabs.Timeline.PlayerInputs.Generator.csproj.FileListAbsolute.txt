@@ -1,0 +1,11 @@
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.csproj.AssemblyReference.cache
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.GeneratedMSBuildEditorConfig.editorconfig
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.AssemblyInfoInputs.cache
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.AssemblyInfo.cs
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.csproj.CoreCompileInputs.cache
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.sourcelink.json
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/bin/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.deps.json
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/bin/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.dll
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/bin/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.pdb
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.dll
+/home/i/GitHub/vex-ee/Packages/BovineLabs.Timeline.PlayerInputs/SourceGenerator~/obj/Debug/netstandard2.0/BovineLabs.Timeline.PlayerInputs.Generator.pdb

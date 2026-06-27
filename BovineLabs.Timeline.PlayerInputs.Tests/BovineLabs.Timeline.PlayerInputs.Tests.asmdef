@@ -6,6 +6,7 @@
     "BovineLabs.Core.Extensions",
     "BovineLabs.Testing",
     "BovineLabs.Timeline.PlayerInputs",
+    "BovineLabs.Timeline.PlayerInputs.Authoring",
     "BovineLabs.Timeline.PlayerInputs.Data",
     "BovineLabs.Reaction.Data",
     "BovineLabs.Timeline.Grid.Influence.Data",
