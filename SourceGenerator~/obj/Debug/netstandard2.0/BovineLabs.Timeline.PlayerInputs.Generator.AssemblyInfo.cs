@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BovineLabs.Timeline.PlayerInputs.Generator")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7f8aab820a4826e633c7f753c8aa0a21c8ee051a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6f5ebfcb754ba647d6b121e22b8f3390ddf69d50")]
 [assembly: System.Reflection.AssemblyProductAttribute("BovineLabs.Timeline.PlayerInputs.Generator")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BovineLabs.Timeline.PlayerInputs.Generator")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

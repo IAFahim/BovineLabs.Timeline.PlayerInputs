@@ -24,6 +24,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<PlayerId> _playerIds;
+        private ComponentLookup<PointerProviderTag> _pointerProviders;
         private ComponentLookup<LocalTransform> _transforms;
         private ComponentLookup<Parent> _parents;
         private ComponentLookup<LocalToWorld> _ltws;
@@ -40,6 +41,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
+            _pointerProviders = state.GetComponentLookup<PointerProviderTag>(true);
             _transforms = state.GetComponentLookup<LocalTransform>();
             _parents = state.GetComponentLookup<Parent>(true);
             _ltws = state.GetComponentLookup<LocalToWorld>(true);
@@ -55,6 +57,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _entries.Update(ref state);
             _axes.Update(ref state);
             _playerIds.Update(ref state);
+            _pointerProviders.Update(ref state);
             _transforms.Update(ref state);
             _parents.Update(ref state);
             _ltws.Update(ref state);
@@ -62,7 +65,10 @@ namespace BovineLabs.Timeline.PlayerInputs
             var cameraRotation = quaternion.identity;
             if (!_cameraQuery.IsEmpty)
             {
-                var cameraEntity = _cameraQuery.GetSingletonEntity();
+                // Split-screen coop registers multiple CameraMain; take the first instead of GetSingletonEntity,
+                // which throws on count != 1 and would break EVERY player's aim that frame. Matches InputCommonSystem.
+                using var cameras = _cameraQuery.ToEntityArray(Allocator.Temp);
+                var cameraEntity = cameras[0];
 
                 if (_ltws.TryGetComponent(cameraEntity, out var camLtw))
                     cameraRotation = camLtw.Rotation;
@@ -93,6 +99,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Registry = registry.ProviderByPlayer,
                 Axes = _axes,
                 PlayerIds = _playerIds,
+                PointerProviders = _pointerProviders,
                 Transforms = _transforms,
                 Parents = _parents,
                 Ltws = _ltws,
@@ -130,6 +137,9 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] [NativeDisableContainerSafetyRestriction]
             public ComponentLookup<PlayerId> PlayerIds;
 
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<PointerProviderTag> PointerProviders;
+
             [ReadOnly] public ComponentLookup<Parent> Parents;
             [ReadOnly] public ComponentLookup<LocalToWorld> Ltws;
 
@@ -150,7 +160,12 @@ namespace BovineLabs.Timeline.PlayerInputs
                         boundEntity, targets, config.ReadRootFrom, config.ConsumerLinkKey,
                         Sources, Entries, out var consumer)) return;
                 if (!PlayerIds.TryGetComponent(consumer, out var pid)) return;
-                if (!InputAccess.TryGetAxes(Registry, Axes, pid.Value, out var axesBuf)) return;
+
+                // Cursor aim reads the global pointer, not the seat's axis buffer - don't make a missing/late buffer
+                // silently kill it. Stick aim still requires the buffer.
+                var cursorAim = config.Mode == AxisTransformMode.Aim &&
+                                config.Flags.Has(AxisTransformFlags.PointFromCursor);
+                if (!InputAccess.TryGetAxes(Registry, Axes, pid.Value, out var axesBuf) && !cursorAim) return;
 
                 var carrot = boundEntity;
                 if (config.AnchorLinkKey != 0 &&
@@ -170,18 +185,41 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 var parented = TryGetParentWorld(carrot, out var parentPos, out var parentRot, out var parentScale);
 
+                // A zero/near-zero parent scale would make the world->local divides below produce Inf/NaN and poison
+                // LocalTransform. Treat a degenerate parent scale as 1.
+                if (parented && math.abs(parentScale) < 1e-6f)
+                    parentScale = 1f;
+
+                // Capture the carrot's start world pose ONCE per activation, before deriving input: Aim's cursor
+                // pivot and its unparented orbit base both read HeldWorldPosition, so it must be set first.
+                if (!state.Initialized)
+                {
+                    state.HeldWorldRotation = parented ? math.mul(parentRot, t.Rotation) : t.Rotation;
+                    state.HeldWorldPosition = parented
+                        ? parentPos + math.rotate(parentRot, t.Position * parentScale)
+                        : t.Position;
+                    state.HasAimed = false;
+                    state.Initialized = true;
+                }
+
                 float3 inputVec;
-                if (config.Mode == AxisTransformMode.Aim && config.Flags.Has(AxisTransformFlags.PointFromCursor))
+                if (cursorAim)
                 {
                     // Aim at the mouse cursor: project its world ray onto the body's aim plane, face that point.
                     // Off-screen / no camera => inputVec stays zero => hasInput false => ComputeAim holds last aim.
                     inputVec = float3.zero;
-                    if (CursorValid)
+
+                    // Local coop: only the seat that OWNS the pointer device follows the (single, global) cursor.
+                    // Other seats (gamepad) hold their last aim instead of snapping to player 1's mouse.
+                    var seatProvider = pid.Value < Registry.Length ? Registry[pid.Value] : Entity.Null;
+                    var ownsPointer = seatProvider != Entity.Null && PointerProviders.HasComponent(seatProvider);
+
+                    if (CursorValid && ownsPointer)
                     {
-                        // Pivot on the BODY (the carrot's parent), never the carrot's own position: with AimRadius>0
-                        // the carrot is displaced along the aim dir each frame, so using it as the pivot feeds back
-                        // and flickers between two spots (worse at Smoothing=0, no damping). parentPos is the body.
-                        var bodyWorld = parented ? parentPos : t.Position;
+                        // Pivot on the BODY, never the carrot's own (AimRadius-displaced) position - that feeds back
+                        // and flickers. Parented: the parent body. Unparented (carrot==body): the captured start,
+                        // which is stable (t.Position is the already-displaced carrot, so it would feed back).
+                        var bodyWorld = parented ? parentPos : state.HeldWorldPosition;
                         if (AxisAim.TryProjectCursorToPlane(Cursor.Origin, Cursor.Direction, bodyWorld, planeNormal,
                                 out var aimPoint))
                         {
@@ -197,16 +235,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                 }
 
                 var hasInput = math.lengthsq(inputVec) > 0.0001f;
-
-                if (!state.Initialized)
-                {
-                    state.HeldWorldRotation = parented ? math.mul(parentRot, t.Rotation) : t.Rotation;
-                    state.HeldWorldPosition = parented
-                        ? parentPos + math.rotate(parentRot, t.Position * parentScale)
-                        : t.Position;
-                    state.HasAimed = false;
-                    state.Initialized = true;
-                }
 
                 if (config.Mode == AxisTransformMode.Move)
                 {
@@ -245,7 +273,12 @@ namespace BovineLabs.Timeline.PlayerInputs
                         : state.HeldWorldRotation;
 
                     if (wroteLocalPos)
-                        t.Position = localPos;
+                    {
+                        // Parented: ComputeAim returns a parent-LOCAL offset (orbit the parent origin = the body).
+                        // Unparented: it returns a raw WORLD offset; anchor it to the captured start so the carrot
+                        // orbits where it began instead of collapsing toward the world origin.
+                        t.Position = parented ? localPos : state.HeldWorldPosition + localPos;
+                    }
 
                     writeTransform = true;
                 }

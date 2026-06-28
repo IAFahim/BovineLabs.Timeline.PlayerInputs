@@ -35,12 +35,25 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         private bool focused = true;
         private bool wasFocused = true;
+        private bool hasPointerTag;
 
         private void Update()
         {
             if (initialized &&
                 (provider == Entity.Null || world == null || !world.IsCreated || !manager.Exists(provider)))
                 TryCreateProvider(out provider);
+
+            // Keep the pointer tag in sync with the seat's paired devices (hot-join / device switch).
+            if (initialized && world != null && world.IsCreated && manager.Exists(provider))
+            {
+                var pointer = ControlsPointer();
+                if (pointer != hasPointerTag)
+                {
+                    if (pointer) manager.AddComponent<PointerProviderTag>(provider);
+                    else manager.RemoveComponent<PointerProviderTag>(provider);
+                    hasPointerTag = pointer;
+                }
+            }
 
             if (!focused)
             {
@@ -57,6 +70,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
             if (!wasFocused)
             {
+                // Clear any edges the InputSystem callbacks accumulated while unfocused (reachable when the
+                // PlayerInput runs in background / IgnoreFocus), THEN re-seed the currently-held state with no Down
+                // edge. Without the Reset those stale press/release pairs would flush as a spurious double-fire.
+                edges.Reset();
+
                 foreach (var button in buttonActions)
                     if (button.Action.IsPressed())
                         edges.Seed(button.Id);
@@ -191,6 +209,21 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             provider = Entity.Null;
             world = null;
             initialized = false;
+            hasPointerTag = false;
+        }
+
+        private bool ControlsPointer()
+        {
+            var input = GetComponent<PlayerInput>();
+            if (input == null)
+                return false;
+
+            var devices = input.devices;
+            for (var i = 0; i < devices.Count; i++)
+                if (devices[i] is Pointer)
+                    return true;
+
+            return false;
         }
 
         private void RetireProvider()
@@ -230,6 +263,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 manager.AddComponent<InputState>(entity);
                 manager.AddBuffer<InputAxis>(entity);
                 manager.AddComponentObject(entity, new PlayerInputBridgeComponent { Value = this });
+
+                hasPointerTag = ControlsPointer();
+                if (hasPointerTag)
+                    manager.AddComponent<PointerProviderTag>(entity);
             }
             catch (InvalidOperationException)
             {

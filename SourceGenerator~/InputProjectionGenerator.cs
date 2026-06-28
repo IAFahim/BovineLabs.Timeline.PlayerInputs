@@ -12,7 +12,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
     public sealed class InputProjectionGenerator : IIncrementalGenerator
     {
         private const string Ns = "BovineLabs.Timeline.PlayerInputs.Data";
-        private const string Marker = "IPlayerInput";
+        private const string Marker = "BovineLabs.Timeline.PlayerInputs.Data.IPlayerInput";
 
         private const int KindAction = 0;
         private const int KindDelta = 1;
@@ -65,8 +65,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
                 : type.ContainingNamespace.ToDisplayString();
             var isStruct = type?.TypeKind == TypeKind.Struct;
             var isNested = type?.ContainingType != null;
+            var isGeneric = type != null && type.Arity > 0;
             var isPartial = typeDecl?.Modifiers.Any(SyntaxKind.PartialKeyword) ?? false;
-            var implementsMarker = type != null && type.AllInterfaces.Any(i => i.Name == Marker);
+            var implementsMarker = type != null && type.AllInterfaces.Any(i => i.ToDisplayString() == Marker);
 
             var fieldType = field == null ? "?" : MapType(field.Type);
             var loc = field?.Locations.FirstOrDefault() ?? Location.None;
@@ -77,7 +78,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
                 lineSpan.Start.Line, lineSpan.Start.Character, lineSpan.End.Line, lineSpan.End.Character);
 
             return new FieldCandidate(
-                ns, type?.Name ?? "?", isStruct, isNested, isPartial, implementsMarker,
+                ns, type?.Name ?? "?", isStruct, isNested, isGeneric, isPartial, implementsMarker,
                 field?.Name ?? "?", fieldType, kind, skip, locInfo);
         }
 
@@ -95,9 +96,17 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
         {
             foreach (var group in fields.GroupBy(f => f.Namespace + "::" + f.TypeName))
             {
-                var members = group.Where(f => !f.Skip).ToImmutableArray();
+                var raw = group.ToImmutableArray();
+                var members = raw.Where(f => !f.Skip).ToImmutableArray();
                 if (members.IsEmpty)
                 {
+                    // Every attributed field was skipped (static/const/non-field). Don't silently emit nothing on a
+                    // real IPlayerInput type - tell the designer their input slots produced no codegen.
+                    if (raw[0].ImplementsMarker)
+                    {
+                        Report(ctx, Rules.NoFields, raw[0], raw[0].TypeName);
+                    }
+
                     continue;
                 }
 
@@ -118,6 +127,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
                 if (head.IsNested)
                 {
                     Report(ctx, Rules.Nested, head, head.TypeName);
+                    continue;
+                }
+
+                if (head.IsGeneric)
+                {
+                    Report(ctx, Rules.Generic, head, head.TypeName);
                     continue;
                 }
 
@@ -160,8 +175,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
                     continue;
                 }
 
-                ctx.AddSource($"{head.Namespace.Replace('.', '_')}_{head.TypeName}.PlayerInput.g.cs",
-                    SourceText.From(Render(head, members), Encoding.UTF8));
+                // Use '.' (legal in hint names) rather than flattening '.'->'_', which is non-injective and can
+                // collide two distinct types (ns "A.B"+type "C" vs ns "A"+type "B_C") -> "hintName must be unique".
+                var hint = head.Namespace.Length > 0
+                    ? $"{head.Namespace}.{head.TypeName}.PlayerInput.g.cs"
+                    : $"{head.TypeName}.PlayerInput.g.cs";
+                ctx.AddSource(hint, SourceText.From(Render(head, members), Encoding.UTF8));
             }
         }
 
@@ -225,24 +244,25 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             foreach (var f in members)
             {
                 var isDelta = f.Kind == KindDelta ? "true" : "false";
-                sb.Append("            map.").Append(f.FieldName).Append(" = Resolve(authoring.Bindings?.")
+                sb.Append("            map.").Append(f.FieldName).Append(" = Resolve(authoring, authoring.Bindings?.")
                     .Append(f.FieldName).Append(", \"").Append(f.FieldName).Append("\", ").Append(isDelta).AppendLine(");");
             }
 
             sb.AppendLine("            AddComponent(entity, map);");
             sb.AppendLine("        }");
             sb.AppendLine();
-            sb.Append("        private static byte Resolve(").Append(Iar).AppendLine(" reference, string field, bool isDelta)");
+            sb.Append("        private static byte Resolve(").Append(t).Append("_Authoring context, ").Append(Iar)
+                .AppendLine(" reference, string field, bool isDelta)");
             sb.AppendLine("        {");
             sb.Append("            if (reference != null && ").Append(AuthUtil)
                 .AppendLine(".TryGetIndex(reference, out var index))");
             sb.AppendLine("            {");
             sb.Append("                if (isDelta && IsPointerDelta(reference)) global::UnityEngine.Debug.LogError(\"").Append(t)
-                .AppendLine("_Authoring: field '\" + field + \"' is [InputActionDelta] but is bound to a pointer Delta control; use [InputAction] (raw) for mouse — Delta is already per-frame travel and multiplying by dt makes it framerate-dependent.\");");
+                .AppendLine("_Authoring: field '\" + field + \"' is [InputActionDelta] but is bound to a pointer Delta control; use [InputAction] (raw) for mouse — Delta is already per-frame travel and multiplying by dt makes it framerate-dependent.\", context);");
             sb.AppendLine("                return index;");
             sb.AppendLine("            }");
             sb.Append("            global::UnityEngine.Debug.LogError(\"").Append(t)
-                .AppendLine("_Authoring: input field '\" + field + \"' did not resolve its InputActionReference in MultiInputSettings.\");");
+                .AppendLine("_Authoring: input field '\" + field + \"' did not resolve its InputActionReference in MultiInputSettings.\", context);");
             sb.AppendLine("            return byte.MaxValue;");
             sb.AppendLine("        }");
             sb.AppendLine();
@@ -271,7 +291,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
                 .AppendLine(".WorldSystemFilterFlags.ServerSimulation)]");
             sb.Append("public partial struct ").Append(t).Append("_Projection : ").Append(Ent).AppendLine(".ISystem");
             sb.AppendLine("{");
-            sb.AppendLine("    private bool warned;");
+            sb.AppendLine("    private bool warnedZero;");
+            sb.AppendLine("    private bool warnedMulti;");
             sb.AppendLine();
             sb.Append("    public void OnCreate(ref ").Append(Ent).AppendLine(".SystemState state)");
             sb.AppendLine("    {");
@@ -293,7 +314,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             sb.AppendLine();
             sb.AppendLine("        if (mapCount == 0)");
             sb.AppendLine("        {");
-            sb.AppendLine("            if (!this.warned)");
+            sb.AppendLine("            if (!this.warnedZero)");
             sb.AppendLine("            {");
             sb.Append("                var anyProvider = ").Append(Ent).Append(".SystemAPI.QueryBuilder().WithAll<")
                 .Append(Data).AppendLine(".ProviderTag>().Build();");
@@ -301,18 +322,21 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             sb.AppendLine("                {");
             sb.Append("                    global::UnityEngine.Debug.LogError(\"").Append(map)
                 .AppendLine(": no \" + nameof(" + t + "_Authoring) + \" was baked but input providers exist; typed input is disabled. Add exactly one " + t + "_Authoring to the scene.\");");
-            sb.AppendLine("                    this.warned = true;");
+            sb.AppendLine("                    this.warnedZero = true;");
             sb.AppendLine("                }");
             sb.AppendLine("            }");
             sb.AppendLine("            return;");
             sb.AppendLine("        }");
             sb.AppendLine();
-            sb.AppendLine("        if (mapCount > 1 && !this.warned)");
+            // Separate latch from the zero-map case: a subscene streaming 2->0 maps must still warn for zero.
+            sb.AppendLine("        this.warnedZero = false;");
+            sb.AppendLine("        if (mapCount > 1 && !this.warnedMulti)");
             sb.AppendLine("        {");
             sb.Append("            global::UnityEngine.Debug.LogError(\"").Append(map)
                 .AppendLine(": found \" + mapCount + \" " + t + "_Authoring instances but expected exactly one; using the first. Keep a single " + t + "_Authoring per world.\");");
-            sb.AppendLine("            this.warned = true;");
+            sb.AppendLine("            this.warnedMulti = true;");
             sb.AppendLine("        }");
+            sb.AppendLine("        if (mapCount == 1) this.warnedMulti = false;");
             sb.AppendLine();
             sb.Append("        var missing = ").Append(Ent).Append(".SystemAPI.QueryBuilder().WithAll<").Append(Data)
                 .Append(".ProviderTag>().WithNone<").Append(t).AppendLine(">().Build();");
@@ -384,8 +408,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
         }
 
         private readonly record struct FieldCandidate(
-            string Namespace, string TypeName, bool IsStruct, bool IsNested, bool IsPartial, bool ImplementsMarker,
-            string FieldName, string FieldType, int Kind, bool Skip, LocationInfo Loc);
+            string Namespace, string TypeName, bool IsStruct, bool IsNested, bool IsGeneric, bool IsPartial,
+            bool ImplementsMarker, string FieldName, string FieldType, int Kind, bool Skip, LocationInfo Loc);
 
         // Source location for diagnostics only. Equality is constant so a line shift elsewhere in the file
         // never busts the incremental cache for an otherwise-unchanged candidate.
@@ -445,6 +469,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             public static readonly DiagnosticDescriptor Conflict = Make(
                 "BLI008", "Conflicting input attributes",
                 "Input field '{0}' has more than one [InputAction*] attribute; keep exactly one");
+
+            public static readonly DiagnosticDescriptor Generic = Make(
+                "BLI009", "Generic type unsupported", "IPlayerInput struct '{0}' must not be generic");
+
+            public static readonly DiagnosticDescriptor NoFields = Make(
+                "BLI010", "No usable input fields",
+                "IPlayerInput struct '{0}' has only static/const input fields; mark instance fields to generate input");
 
             private static DiagnosticDescriptor Make(string id, string title, string message)
             {

@@ -33,6 +33,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             var modeProp = serializedObject.FindProperty("Mode");
             var isAim = modeProp != null && modeProp.enumValueIndex == (int)AxisTransformMode.Aim;
 
+            var aimAtCursorProp = serializedObject.FindProperty("AimAtCursor");
+            var aimAtCursor = isAim && aimAtCursorProp != null && aimAtCursorProp.boolValue;
+
             this.hasCameraRelativeRow = false;
 
             var it = serializedObject.GetIterator();
@@ -46,6 +49,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
                 if (isAim && (n == "Range" || n == "LeashRadius" || n == "SnapBackOnRelease"))
                     continue;
                 if (!isAim && (n == "Smoothing" || n == "AimRadius" || n == "RotateInPlace" || n == "AimAtCursor"))
+                    continue;
+                // Cursor aim uses the global pointer, not the stick Action or the camera-relative basis - hide both
+                // so the inspector doesn't show (and the hover overlay doesn't explain) options that do nothing here.
+                if (aimAtCursor && (n == "Action" || n == "CameraRelative"))
                     continue;
 
                 EditorGUILayout.PropertyField(it, true);

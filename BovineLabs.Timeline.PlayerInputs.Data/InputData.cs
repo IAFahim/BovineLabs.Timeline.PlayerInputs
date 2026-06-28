@@ -106,6 +106,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
     }
 
+    // Marks a provider whose seat controls a pointer (mouse/pen/touch). Set by PlayerInputBridge from the
+    // PlayerInput's paired devices. PointFromCursor aim only drives the seat whose provider has this tag, so in
+    // local coop the single system cursor never hijacks gamepad seats' aim.
+    public struct PointerProviderTag : IComponentData
+    {
+    }
+
     public struct ConsumerTag : IComponentData
     {
     }
