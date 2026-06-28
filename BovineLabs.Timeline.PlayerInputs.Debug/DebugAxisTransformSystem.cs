@@ -62,42 +62,20 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 if (carrot == Entity.Null || !Ltws.HasComponent(carrot)) return;
 
                 var isActive = Active.HasComponent(clip) && Active.IsComponentEnabled(clip);
-                var color = isActive ? new Color(1f, 0.55f, 0.05f) : new Color(0.45f, 0.45f, 0.45f, 0.6f);
+                var color = isActive ? Color.yellow : new Color(0.5f, 0.5f, 0.5f, 0.5f);
 
-                var carrotLtw = Ltws[carrot];
-                var carrotPos = carrotLtw.Position;
+                var ltw = Ltws[carrot];
+                var pos = ltw.Position;
 
-                var anchorPos = carrotPos;
                 if (Parents.HasComponent(carrot) && Ltws.HasComponent(Parents[carrot].Value))
                 {
-                    var parentLtw = Ltws[Parents[carrot].Value];
-                    anchorPos = parentLtw.Position;
-                    Renderer.Line(anchorPos, carrotPos, color);
-
-                    // Body's actual facing (red): the PID drives this toward the carrot's facing.
-                    Renderer.Line(parentLtw.Position, parentLtw.Position + math.normalize(parentLtw.Forward) * 1.5f,
-                        new Color(1f, 0.2f, 0.2f));
+                    var pLtw = Ltws[Parents[carrot].Value];
+                    Renderer.Line(pLtw.Position, pos, color);
+                    Renderer.Line(pLtw.Position, pLtw.Position + pLtw.Forward, Color.red);
                 }
 
-                // The carrot's held-aim facing (cyan): for an Aim clip this should STAY put when input is released.
-                // If this ray snaps back to neutral on release, the hold is broken; if it holds but the body (red)
-                // swings away, the PID/body coupling is the culprit.
-                Renderer.Line(carrotPos, carrotPos + math.normalize(carrotLtw.Forward) * 1.5f,
-                    new Color(0.1f, 0.9f, 1f));
-
-                Renderer.Point(carrotPos, 0.35f, color);
-
-                var label = new FixedString64Bytes();
-                label.Append((FixedString32Bytes)"carrot #");
-                label.Append(carrot.Index);
-                if (isActive)
-                {
-                    label.Append((FixedString32Bytes)" d=");
-                    label.Append((int)math.round(math.distance(anchorPos, carrotPos) * 100f));
-                    label.Append((FixedString32Bytes)"cm");
-                }
-
-                Renderer.Text64(carrotPos + new float3(0f, 0.55f, 0f), label, color, 11f);
+                Renderer.Line(pos, pos + ltw.Forward, Color.cyan);
+                Renderer.Point(pos, 0.1f, color);
             }
         }
     }
