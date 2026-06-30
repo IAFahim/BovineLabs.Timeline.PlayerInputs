@@ -25,7 +25,9 @@
     "BovineLabs.Timeline.PlayerInputs.Data",
     "BovineLabs.Timeline.EntityLinks.Authoring",
     "BovineLabs.Timeline.Grid.Influence.Authoring",
-    "BovineLabs.Timeline.Grid.Influence.Data"
+    "BovineLabs.Timeline.Grid.Influence.Data",
+    "BovineLabs.Timeline.Physics.Authoring",
+    "BovineLabs.Timeline.Physics.Data"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

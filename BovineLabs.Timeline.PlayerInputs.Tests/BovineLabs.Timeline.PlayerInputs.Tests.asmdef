@@ -8,6 +8,7 @@
     "BovineLabs.Timeline.PlayerInputs",
     "BovineLabs.Timeline.PlayerInputs.Authoring",
     "BovineLabs.Timeline.PlayerInputs.Data",
+    "BovineLabs.Timeline.Physics.Data",
     "BovineLabs.Reaction.Data",
     "BovineLabs.Timeline.Grid.Influence.Data",
     "Unity.Burst",
