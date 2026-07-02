@@ -68,9 +68,16 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 if (!Histories.TryGetBuffer(consumer, out var history)) return;
 
-                if (config.ActionMask.AllFalse)
+                if (config.ClearAll)
                 {
                     history.Clear();
+                    return;
+                }
+
+                // Actions were requested but none resolved (AllFalse mask, ClearAll false): compact removes
+                // nothing — a harmless no-op — rather than silently wiping the entire history.
+                if (config.ActionMask.AllFalse)
+                {
                     return;
                 }
 

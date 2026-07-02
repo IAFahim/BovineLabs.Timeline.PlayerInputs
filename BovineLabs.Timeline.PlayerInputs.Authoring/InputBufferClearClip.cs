@@ -37,10 +37,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             }
 
             var mask = default(BitArray256);
+            var requestedAny = false;
             if (ActionsToClear != null)
                 foreach (var action in ActionsToClear)
                 {
                     if (action == null) continue;
+                    requestedAny = true;
                     if (MultiInputSettingsAuthoringUtility.TryGetIndex(action, out var id))
                         mask[id] = true;
                     else
@@ -54,7 +56,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             {
                 ReadRootFrom = ReadRootFrom,
                 ConsumerLinkKey = consumerLinkKey,
-                ActionMask = mask
+                ActionMask = mask,
+
+                // Clear-everything only when the designer specified no actions at all; a requested-but-unresolved
+                // list must NOT wipe the whole history (the per-action error above already flags the misconfig).
+                ClearAll = !requestedAny,
             });
             base.Bake(entity, context);
         }

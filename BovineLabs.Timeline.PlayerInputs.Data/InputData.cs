@@ -180,6 +180,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public Target ReadRootFrom;
         public ushort ConsumerLinkKey;
         public BitArray256 ActionMask;
+
+        // True only when the designer specified NO actions (clear the whole history). A requested-but-unresolved
+        // action list bakes ActionMask.AllFalse WITHOUT this flag, so it no-ops instead of wiping everything.
+        public bool ClearAll;
     }
 
     public struct AxisTransformConfig : IComponentData
