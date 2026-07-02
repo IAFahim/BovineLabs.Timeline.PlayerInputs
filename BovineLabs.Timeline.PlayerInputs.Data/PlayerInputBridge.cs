@@ -59,9 +59,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             {
                 if (wasFocused)
                 {
+                    // Snapshot the held set BEFORE resetting so focus-loss emits an Up edge for every held button
+                    // (release-edge consumers derive Up solely from state.Up). Mirrors RetireProvider's Up synthesis.
+                    edges.Prime(out var heldOnBlur);
                     edges.Reset();
                     CurrentAxes.Clear();
                     edges.Publish(out CurrentDown, out CurrentUp, out CurrentHeld);
+                    CurrentUp = heldOnBlur;
                     wasFocused = false;
                 }
 

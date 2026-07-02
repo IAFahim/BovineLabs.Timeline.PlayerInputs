@@ -8,6 +8,7 @@ using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
+using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
@@ -22,7 +23,6 @@ namespace BovineLabs.Timeline.PlayerInputs
     public partial struct CommandSequenceSystem : ISystem
     {
         private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
-        private NativeParallelHashSet<Entity> _uniqueKeySet;
         private NativeList<Entity> _uniqueKeys;
         private ConditionEventWriter.Lookup _writers;
 
@@ -45,7 +45,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             if (_uniqueKeys.IsCreated)
             {
                 _eventChanges.Dispose();
-                _uniqueKeySet.Dispose();
                 _uniqueKeys.Dispose();
             }
         }
@@ -57,7 +56,6 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.RequireForUpdate<InputRegistry>();
 
             _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
-            _uniqueKeySet = new NativeParallelHashSet<Entity>(64, Allocator.Persistent);
             _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
             _writers.Create(ref state);
 
@@ -94,7 +92,10 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 
-            _uniqueKeySet.Clear();
+            // Fresh per-frame set (auto-freed): sizing to the live clip count removes the old fixed-64 overflow, and
+            // allocating anew each frame removes the main-thread Clear()-vs-in-flight-job race on a persistent set.
+            var uniqueKeySet = new NativeParallelHashSet<Entity>(
+                math.max(1, _clipQuery.CalculateEntityCount()), state.WorldUpdateAllocator);
 
             var activeClips = _clipQuery.ToEntityListAsync(Allocator.TempJob, state.Dependency, out var gatherInput);
             state.Dependency = gatherInput;
@@ -103,7 +104,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 Clips = activeClips,
                 EventChanges = _eventChanges.AsWriter(),
-                UniqueKeys = _uniqueKeySet.AsParallelWriter(),
+                UniqueKeys = uniqueKeySet.AsParallelWriter(),
                 Configs = _configs,
                 Bindings = _bindings,
                 CommandStates = _commandStates,
@@ -123,7 +124,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.Dependency = new CollectEventKeysJob
             {
                 UniqueKeys = _uniqueKeys,
-                UniqueKeySet = _uniqueKeySet
+                UniqueKeySet = uniqueKeySet
             }.Schedule(state.Dependency);
 
             state.Dependency = new TriggerEventsJob
