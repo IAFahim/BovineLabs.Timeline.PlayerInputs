@@ -81,10 +81,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             var registry = SystemAPI.GetSingleton<InputRegistry>().ProviderByPlayer;
             var dt = SystemAPI.Time.DeltaTime;
 
-            foreach (var (config, stateRef, binding, weight) in
-                     SystemAPI.Query<RefRO<SplineFlowInputConfig>, RefRW<SplineFlowInputState>, RefRO<TrackBinding>, RefRO<ClipWeight>>()
-                         .WithAll<ClipActive>())
+            foreach (var (config, stateRef, binding, weight, activePrev) in
+                     SystemAPI.Query<RefRO<SplineFlowInputConfig>, RefRW<SplineFlowInputState>, RefRO<TrackBinding>, RefRO<ClipWeight>, EnabledRefRO<ClipActivePrevious>>()
+                         .WithAll<ClipActive>()
+                         .WithPresent<ClipActivePrevious>())
             {
+                if (!activePrev.ValueRO)
+                    stateRef.ValueRW.Progress = 0f;
                 var cfg = config.ValueRO;
 
                 if (cfg.ActionId == byte.MaxValue)
