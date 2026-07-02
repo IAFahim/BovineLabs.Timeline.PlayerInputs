@@ -25,6 +25,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
+        private ComponentLookup<InputState> _states;
         private ComponentLookup<PlayerId> _playerIds;
 
         private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
@@ -53,6 +54,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
+            _states = state.GetComponentLookup<InputState>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
 
             _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
@@ -75,6 +77,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _sources.Update(ref state);
             _entries.Update(ref state);
             _axes.Update(ref state);
+            _states.Update(ref state);
             _playerIds.Update(ref state);
             _writers.Update(ref state);
 
@@ -95,6 +98,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 Entries = _entries,
                 Registry = registry.ProviderByPlayer,
                 Axes = _axes,
+                States = _states,
                 PlayerIds = _playerIds
             }.ScheduleParallel(state.Dependency);
 
@@ -150,6 +154,9 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public BufferLookup<InputAxis> Axes;
 
             [ReadOnly] [NativeDisableContainerSafetyRestriction]
+            public ComponentLookup<InputState> States;
+
+            [ReadOnly] [NativeDisableContainerSafetyRestriction]
             public ComponentLookup<PlayerId> PlayerIds;
 
             public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
@@ -166,14 +173,25 @@ namespace BovineLabs.Timeline.PlayerInputs
                         Sources, Entries, out var consumer)) return;
 
                 if (!PlayerIds.TryGetComponent(consumer, out var pid)) return;
-                if (!InputAccess.TryGetAxes(Registry, Axes, pid.Value, out var axesBuf)) return;
 
                 var hasInput = false;
-                for (var i = 0; i < axesBuf.Length; i++)
+                var foundAxis = false;
+                if (InputAccess.TryGetAxes(Registry, Axes, pid.Value, out var axesBuf))
                 {
-                    if (axesBuf[i].ActionId != config.ActionId) continue;
-                    hasInput = math.lengthsq(axesBuf[i].Value) > 0.0001f;
-                    break;
+                    for (var i = 0; i < axesBuf.Length; i++)
+                    {
+                        if (axesBuf[i].ActionId != config.ActionId) continue;
+                        hasInput = math.lengthsq(axesBuf[i].Value) > 0.0001f;
+                        foundAxis = true;
+                        break;
+                    }
+                }
+
+                // Button-type actions never appear in the axis buffer — the bridge only writes axes.
+                // Fall back to the held bit in InputState so start/end edges fire for buttons too.
+                if (!foundAxis && InputAccess.TryGetState(Registry, States, pid.Value, out var inputState))
+                {
+                    hasInput = inputState.Held[config.ActionId];
                 }
 
                 var risingEdge = hasInput && !state.WasInputActive;
