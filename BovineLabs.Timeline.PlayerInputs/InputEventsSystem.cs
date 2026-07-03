@@ -168,9 +168,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (targetEntity == Entity.Null) return;
                 if (!TargetsLookup.TryGetComponent(targetEntity, out var targets)) return;
 
-                if (!EntityLinkResolver.TryResolve(
-                        targetEntity, targets, config.ReadRootFrom, config.ConsumerLinkKey,
-                        Sources, Entries, out var consumer)) return;
+                if (!config.Consumer.TryResolve(targetEntity, targets, Sources, Entries, out var consumer)) return;
 
                 if (!PlayerIds.TryGetComponent(consumer, out var pid)) return;
 
@@ -198,7 +196,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 var fallingEdge = !hasInput && state.WasInputActive;
 
                 if (risingEdge && config.OnInputStart != ConditionKey.Null &&
-                    InputRouting.TryResolveRoute(targetEntity, targets, config.EventRouteTo, config.EventRouteLinkKey,
+                    InputRouting.TryResolveRoute(targetEntity, targets, config.EventRoute,
                         Sources, Entries, out var startTarget))
                 {
                     EventChanges.Add(startTarget, new EventAmount(config.OnInputStart, 1));
@@ -206,7 +204,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 }
 
                 if (fallingEdge && config.OnInputEnd != ConditionKey.Null &&
-                    InputRouting.TryResolveRoute(targetEntity, targets, config.EventRouteTo, config.EventRouteLinkKey,
+                    InputRouting.TryResolveRoute(targetEntity, targets, config.EventRoute,
                         Sources, Entries, out var endTarget))
                 {
                     EventChanges.Add(endTarget, new EventAmount(config.OnInputEnd, 1));
@@ -240,7 +238,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (targetEntity == Entity.Null) return;
                 if (!TargetsLookup.TryGetComponent(targetEntity, out var targets)) return;
 
-                if (!InputRouting.TryResolveRoute(targetEntity, targets, config.EventRouteTo, config.EventRouteLinkKey,
+                if (!InputRouting.TryResolveRoute(targetEntity, targets, config.EventRoute,
                         Sources, Entries, out var endTarget)) return;
 
                 EventChanges.Add(endTarget, new EventAmount(config.OnInputEnd, 1));

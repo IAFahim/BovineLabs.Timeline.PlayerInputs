@@ -21,6 +21,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
     /// </summary>
     public sealed class SplineFlowInputClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Link to the input consumer whose action axis this fake input replaces. " +
+                 "The bound AxisTransform Move clip MUST have CameraRelative=false — the synthetic axis is computed in " +
+                 "world XZ, so a camera-relative clip would rotate it into the wrong direction.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("ConsumerLink")]
+        public EntityLinkSchema consumerLink;
+
         [Header("Path")]
         [Tooltip("Which path to follow. A SplinePathAuthoring GameObject must register this same schema.")]
         public SplineSchema Spline;
@@ -44,11 +50,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
         [Header("Routing")] [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
 
-        [Tooltip("Link to the input consumer whose action axis this fake input replaces. " +
-                 "The bound AxisTransform Move clip MUST have CameraRelative=false — the synthetic axis is computed in " +
-                 "world XZ, so a camera-relative clip would rotate it into the wrong direction.")]
-        public EntityLinkSchema ConsumerLink;
-
         [Tooltip("Movement action whose axis this fake input replaces. " +
                  "Must match the ActionId the consumer's AxisTransform clip reads.")]
         public InputActionReference Action;
@@ -68,12 +69,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
             if (Spline == null)
             {
                 Debug.LogError($"SplineFlowInputClip '{name}' has no Spline schema assigned. Clip will be skipped.", this);
-                return;
-            }
-
-            if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var linkKey))
-            {
-                Debug.LogError($"SplineFlowInputClip '{name}' missing ConsumerLink schema.", this);
                 return;
             }
 
@@ -101,8 +96,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
                 TraversalSeconds = TraversalSeconds,
                 Lead = Lead,
                 ActionId = actionId,
-                ReadRootFrom = ReadRootFrom,
-                ConsumerLinkKey = linkKey,
+                Consumer = EntityLinkAuthoringUtility.BakeRef(context.Baker, consumerLink, ReadRootFrom),
                 Gain = Gain,
                 Direction = (sbyte)(Reverse ? -1 : 1)
             };

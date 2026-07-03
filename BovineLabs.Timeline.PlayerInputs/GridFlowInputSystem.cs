@@ -90,8 +90,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (!_targets.TryGetComponent(target, out var targets))
                     continue;
 
-                if (!EntityLinkResolver.TryResolve(
-                        target, targets, cfg.ReadRootFrom, cfg.ConsumerLinkKey, _sources, _entries, out var consumer))
+                if (!cfg.Consumer.TryResolve(target, targets, _sources, _entries, out var consumer))
                     continue;
 
                 if (!_playerIds.TryGetComponent(consumer, out var playerId))

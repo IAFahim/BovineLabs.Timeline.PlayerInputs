@@ -2,6 +2,7 @@ using System;
 using BovineLabs.Core.Collections;
 using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.EntityLinks.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 
@@ -156,11 +157,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         public BitArray256 Actions;
 
-        public Target ReadRootFrom;
-        public ushort ConsumerLinkKey;
+        public EntityLinkRef Consumer;
 
-        public Target EventRouteTo;
-        public ushort EventRouteLinkKey;
+        public EntityLinkRef EventRoute;
     }
 
     public struct CommandSequenceState : IComponentData
@@ -170,15 +169,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
     public struct BufferWindowConfig : IComponentData
     {
-        public Target ReadRootFrom;
-        public ushort ConsumerLinkKey;
+        public EntityLinkRef Consumer;
         public BitArray256 AllowedActions;
     }
 
     public struct BufferClearConfig : IComponentData, IEnableableComponent
     {
-        public Target ReadRootFrom;
-        public ushort ConsumerLinkKey;
+        public EntityLinkRef Consumer;
         public BitArray256 ActionMask;
 
         // True only when the designer specified NO actions (clear the whole history). A requested-but-unresolved
@@ -243,11 +240,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
     public struct InputEventsConfig : IComponentData
     {
-        public Target ReadRootFrom;
-        public ushort ConsumerLinkKey;
+        public EntityLinkRef Consumer;
         public byte ActionId;
-        public Target EventRouteTo;
-        public ushort EventRouteLinkKey;
+        public EntityLinkRef EventRoute;
         public ConditionKey OnInputStart;
         public ConditionKey OnInputEnd;
     }

@@ -20,6 +20,7 @@
     "Unity.Transforms",
     "BovineLabs.Reaction.Data",
     "BovineLabs.Reaction",
+    "BovineLabs.Timeline.EntityLinks.Data",
     "BovineLabs.Timeline.Grid.Influence.Data",
     "BovineLabs.Timeline.Physics.Data"
   ],

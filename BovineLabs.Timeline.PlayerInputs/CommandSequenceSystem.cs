@@ -183,9 +183,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (commandState.IsCompleted || binding.Value == Entity.Null) return;
                 if (!TargetsLookup.TryGetComponent(binding.Value, out var targets)) return;
 
-                if (!EntityLinkResolver.TryResolve(
-                        binding.Value, targets, config.ReadRootFrom, config.ConsumerLinkKey,
-                        Sources, Entries, out var consumer)) return;
+                if (!config.Consumer.TryResolve(binding.Value, targets, Sources, Entries, out var consumer)) return;
 
                 if (!PlayerIds.TryGetComponent(consumer, out var pid)) return;
                 if (!InputAccess.TryGetState(Registry, States, pid.Value, out var state)) return;
@@ -216,8 +214,8 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                     CommitConsumes(history, ref consumeMask);
 
-                    if (InputRouting.TryResolveRoute(binding.Value, targets, config.EventRouteTo,
-                            config.EventRouteLinkKey, Sources, Entries, out var routeTarget))
+                    if (InputRouting.TryResolveRoute(binding.Value, targets, config.EventRoute,
+                            Sources, Entries, out var routeTarget))
                     {
                         EventChanges.Add(routeTarget, new EventAmount(seq.Condition, seq.Value));
                         UniqueKeys.Add(routeTarget);

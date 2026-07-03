@@ -62,9 +62,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (binding.Value == Entity.Null) return;
                 if (!TargetsLookup.TryGetComponent(binding.Value, out var targets)) return;
 
-                if (!EntityLinkResolver.TryResolve(
-                        binding.Value, targets, config.ReadRootFrom, config.ConsumerLinkKey,
-                        Sources, Entries, out var consumer)) return;
+                if (!config.Consumer.TryResolve(binding.Value, targets, Sources, Entries, out var consumer)) return;
 
                 if (!Histories.TryGetBuffer(consumer, out var history)) return;
 

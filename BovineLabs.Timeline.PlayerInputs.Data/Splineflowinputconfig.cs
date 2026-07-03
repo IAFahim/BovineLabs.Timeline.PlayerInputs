@@ -1,4 +1,4 @@
-using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Physics;
 using Unity.Entities;
 
@@ -19,8 +19,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Data
         public float TraversalSeconds;
         public float Lead;
         public byte ActionId;
-        public Target ReadRootFrom;
-        public ushort ConsumerLinkKey;
+        public EntityLinkRef Consumer;
         public float Gain;
 
         /// <summary> +1 follows the spline forward, -1 reverses it. </summary>

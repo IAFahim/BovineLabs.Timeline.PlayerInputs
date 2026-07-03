@@ -14,20 +14,22 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public sealed class InputEventsClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Link to the input consumer whose action this clip watches.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("ConsumerLink")]
+        public EntityLinkSchema consumerLink;
+
+        [Tooltip("Link used to resolve the event target when EventRouteTo needs one.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("EventRouteLink")]
+        public EntityLinkSchema eventRouteLink;
+
         [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
-
-        [Tooltip("Link to the input consumer whose action this clip watches.")]
-        public EntityLinkSchema ConsumerLink;
 
         [Tooltip("Input action whose start/end edges fire the events below.")]
         public InputActionReference Action;
 
         [Header("Events")] [Tooltip("Where to resolve the entity that receives the fired events from.")]
         public Target EventRouteTo = Target.Self;
-
-        [Tooltip("Link used to resolve the event target when EventRouteTo needs one.")]
-        public EntityLinkSchema EventRouteLink;
 
         [Tooltip("Condition event fired when the action input begins.")]
         public ConditionEventObject OnInputStart;
@@ -41,14 +43,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public override void Bake(Entity entity, BakingContext context)
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
-
-            if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var linkKey))
-            {
-                Debug.LogError($"InputEventsClip '{name}' missing ConsumerLink schema.");
-                return;
-            }
-
-            EntityLinkAuthoringUtility.TryGetKey(EventRouteLink, out var eventRouteLinkKey);
 
             var actionId = byte.MaxValue;
             if (Action == null)
@@ -69,11 +63,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             context.Baker.DependsOn(OnInputEnd);
             commands.AddComponent(new InputEventsConfig
             {
-                ReadRootFrom = ReadRootFrom,
-                ConsumerLinkKey = linkKey,
+                Consumer = EntityLinkAuthoringUtility.BakeRef(context.Baker, consumerLink, ReadRootFrom),
                 ActionId = actionId,
-                EventRouteTo = EventRouteTo,
-                EventRouteLinkKey = eventRouteLinkKey,
+                EventRoute = EntityLinkAuthoringUtility.BakeRef(context.Baker, eventRouteLink, EventRouteTo),
                 OnInputStart = OnInputStart != null ? OnInputStart.Key : ConditionKey.Null,
                 OnInputEnd = OnInputEnd != null ? OnInputEnd.Key : ConditionKey.Null
             });

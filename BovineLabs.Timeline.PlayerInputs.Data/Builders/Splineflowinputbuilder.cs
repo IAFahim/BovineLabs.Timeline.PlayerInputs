@@ -1,5 +1,5 @@
 using BovineLabs.Core.EntityCommands;
-using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Physics;
 
 namespace BovineLabs.Timeline.PlayerInputs.Flow.Data.Builders
@@ -13,8 +13,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Data.Builders
         public float TraversalSeconds;
         public float Lead;
         public byte ActionId;
-        public Target ReadRootFrom;
-        public ushort ConsumerLinkKey;
+        public EntityLinkRef Consumer;
         public float Gain;
         public sbyte Direction;
 
@@ -30,8 +29,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Data.Builders
                 TraversalSeconds = TraversalSeconds,
                 Lead = Lead,
                 ActionId = ActionId,
-                ReadRootFrom = ReadRootFrom,
-                ConsumerLinkKey = ConsumerLinkKey,
+                Consumer = Consumer,
                 Gain = Gain,
                 Direction = Direction
             });

@@ -14,11 +14,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public sealed class InputBufferWindowClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Link to the input consumer whose buffer this window opens.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("ConsumerLink")]
+        public EntityLinkSchema consumerLink;
+
         [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
-
-        [Tooltip("Link to the input consumer whose buffer this window opens.")]
-        public EntityLinkSchema ConsumerLink;
 
         [Tooltip("Empty means ALL inputs buffered. Specifics mean ONLY those are buffered.")]
         public InputActionReference[] AllowedActions = Array.Empty<InputActionReference>();
@@ -29,12 +30,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public override void Bake(Entity entity, BakingContext context)
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
-
-            if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var consumerLinkKey))
-            {
-                Debug.LogError($"InputBufferWindowClip '{name}' missing ConsumerLink schema.", this);
-                return;
-            }
 
             var mask = default(BitArray256);
             if (AllowedActions == null || AllowedActions.Length == 0)
@@ -55,8 +50,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             var commands = new BakerCommands(context.Baker, entity);
             commands.AddComponent(new BufferWindowConfig
             {
-                ReadRootFrom = ReadRootFrom,
-                ConsumerLinkKey = consumerLinkKey,
+                Consumer = EntityLinkAuthoringUtility.BakeRef(context.Baker, consumerLink, ReadRootFrom),
                 AllowedActions = mask
             });
             base.Bake(entity, context);

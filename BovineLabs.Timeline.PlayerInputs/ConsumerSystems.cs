@@ -80,9 +80,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (binding.Value == Entity.Null) return;
                 if (!TargetsLookup.TryGetComponent(binding.Value, out var targets)) return;
 
-                if (!EntityLinkResolver.TryResolve(
-                        binding.Value, targets, config.ReadRootFrom, config.ConsumerLinkKey,
-                        Sources, Entries, out var consumer)) return;
+                if (!config.Consumer.TryResolve(binding.Value, targets, Sources, Entries, out var consumer)) return;
 
                 if (!Masks.TryGetComponent(consumer, out var mask)) return;
                 mask.Value = mask.Value.BitOr(config.AllowedActions);
@@ -106,9 +104,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (config.Actions.AllFalse || binding.Value == Entity.Null) return;
                 if (!TargetsLookup.TryGetComponent(binding.Value, out var targets)) return;
 
-                if (!EntityLinkResolver.TryResolve(
-                        binding.Value, targets, config.ReadRootFrom, config.ConsumerLinkKey,
-                        Sources, Entries, out var consumer)) return;
+                if (!config.Consumer.TryResolve(binding.Value, targets, Sources, Entries, out var consumer)) return;
 
                 if (!Masks.TryGetComponent(consumer, out var mask)) return;
                 mask.Value = mask.Value.BitOr(config.Actions);

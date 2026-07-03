@@ -55,20 +55,22 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         "Sequences are evaluated top-to-bottom. High priority should be first. First successful match triggers event and completes sequence clip.")]
     public sealed class CommandSequenceClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Link to the input consumer whose history/state these sequences read.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("ConsumerLink")]
+        public EntityLinkSchema consumerLink;
+
+        [Tooltip("Link used to resolve the event target when EventRouteTo needs one.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("EventRouteLink")]
+        public EntityLinkSchema eventRouteLink;
+
         [Tooltip("Sequences evaluated top-to-bottom; the first that matches fires and completes the clip.")]
         public CommandSequenceData[] Sequences = Array.Empty<CommandSequenceData>();
 
         [Header("Consumer")] [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
 
-        [Tooltip("Link to the input consumer whose history/state these sequences read.")]
-        public EntityLinkSchema ConsumerLink;
-
         [Header("Events")] [Tooltip("Where to resolve the entity that receives the fired events from.")]
         public Target EventRouteTo = Target.Self;
-
-        [Tooltip("Link used to resolve the event target when EventRouteTo needs one.")]
-        public EntityLinkSchema EventRouteLink;
 
         public override double duration => .5f;
 
@@ -77,14 +79,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public override void Bake(Entity entity, BakingContext context)
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
-
-            if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var consumerLinkKey))
-            {
-                Debug.LogError($"CommandSequenceClip '{name}' missing ConsumerLink schema.", this);
-                return;
-            }
-
-            EntityLinkAuthoringUtility.TryGetKey(EventRouteLink, out var eventRouteLinkKey);
 
             var builder = new BlobBuilder(Allocator.Temp);
             ref var root = ref builder.ConstructRoot<CommandBlob>();
@@ -125,10 +119,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             {
                 Blob = blobRef,
                 Actions = actions,
-                ReadRootFrom = ReadRootFrom,
-                ConsumerLinkKey = consumerLinkKey,
-                EventRouteTo = EventRouteTo,
-                EventRouteLinkKey = eventRouteLinkKey
+                Consumer = EntityLinkAuthoringUtility.BakeRef(context.Baker, consumerLink, ReadRootFrom),
+                EventRoute = EntityLinkAuthoringUtility.BakeRef(context.Baker, eventRouteLink, EventRouteTo),
             });
             commands.AddComponent<CommandSequenceState>();
 

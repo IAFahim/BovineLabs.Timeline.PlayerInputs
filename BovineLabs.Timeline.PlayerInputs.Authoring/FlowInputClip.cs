@@ -15,6 +15,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
 {
     public sealed class FlowInputClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Link to the input consumer whose action axis this fake input replaces.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("ConsumerLink")]
+        public EntityLinkSchema consumerLink;
+
         [Header("Field")] [Tooltip("Grid field schema sampled to synthesise the fake axis.")]
         public GridFieldSchemaObject Field;
 
@@ -23,9 +27,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
 
         [Header("Routing")] [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
-
-        [Tooltip("Link to the input consumer whose action axis this fake input replaces.")]
-        public EntityLinkSchema ConsumerLink;
 
         [Tooltip("Movement action whose axis this fake input replaces. " +
                  "Must match the ActionId the consumer's AxisTransform clip reads.")]
@@ -52,12 +53,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
                 return;
             }
 
-            if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var linkKey))
-            {
-                Debug.LogError($"FlowInputClip '{name}' missing ConsumerLink schema.", this);
-                return;
-            }
-
             var actionId = byte.MaxValue;
             if (Action == null)
             {
@@ -77,8 +72,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
                 FieldKey = Field.Id,
                 Bias = Bias,
                 ActionId = actionId,
-                ReadRootFrom = ReadRootFrom,
-                ConsumerLinkKey = linkKey,
+                Consumer = EntityLinkAuthoringUtility.BakeRef(context.Baker, consumerLink, ReadRootFrom),
                 LocalOffset = LocalOffset,
                 Gain = Gain
             };

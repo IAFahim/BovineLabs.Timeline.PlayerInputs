@@ -1,4 +1,4 @@
-using BovineLabs.Reaction.Data.Core;
+using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.Grid.Influence.Data.Flows;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -10,8 +10,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Data
         public ushort FieldKey;
         public FlowBias Bias;
         public byte ActionId;
-        public Target ReadRootFrom;
-        public ushort ConsumerLinkKey;
+        public EntityLinkRef Consumer;
         public float3 LocalOffset;
         public float Gain;
     }

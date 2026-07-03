@@ -284,16 +284,16 @@ public static class PlayerInputsShowcaseBuilder
             var bt = timeline.CreateTrack<BufferTrack>(null, "Buffer");
             var win = AddClip<BufferWindowClip>(bt, 0.0, 5.0, "window: ALL");
             ((BufferWindowClip)win.asset).AllowedActions = System.Array.Empty<InputActionReference>();
-            ((BufferWindowClip)win.asset).ConsumerLink = consumerLink;
+            ((BufferWindowClip)win.asset).consumerLink = consumerLink;
             Dirty(win.asset);
 
             var ct = timeline.CreateTrack<CommandTrack>(null, "Command");
             var clip = AddClip<CommandClip>(ct, 0.0, 5.0, "Attack -> OnLightHit");
             var ca = (CommandClip)clip.asset;
             ca.ReadRootFrom = TargetSlot.Owner;
-            ca.ConsumerLink = consumerLink;
+            ca.consumerLink = consumerLink;
             ca.EventRouteTo = TargetSlot.Owner;
-            ca.EventRouteLink = essenceLink;
+            ca.eventRouteLink = essenceLink;
             ca.Sequences = new[]
             {
                 new CommandSequenceData
@@ -328,16 +328,16 @@ public static class PlayerInputsShowcaseBuilder
             var bt = timeline.CreateTrack<BufferTrack>(null, "Buffer");
             var win = AddClip<BufferWindowClip>(bt, 0.0, 5.0, "window: ALL");
             ((BufferWindowClip)win.asset).AllowedActions = System.Array.Empty<InputActionReference>();
-            ((BufferWindowClip)win.asset).ConsumerLink = consumerLink;
+            ((BufferWindowClip)win.asset).consumerLink = consumerLink;
             Dirty(win.asset);
 
             var ct = timeline.CreateTrack<CommandTrack>(null, "Command");
             var clip = AddClip<CommandClip>(ct, 0.0, 5.0, "236P -> OnFireball");
             var ca = (CommandClip)clip.asset;
             ca.ReadRootFrom = TargetSlot.Owner;
-            ca.ConsumerLink = consumerLink;
+            ca.consumerLink = consumerLink;
             ca.EventRouteTo = TargetSlot.Owner;
-            ca.EventRouteLink = essenceLink;
+            ca.eventRouteLink = essenceLink;
             // Only registered actions resolve; unregistered direction actions fail-closed at bake.
             // We express the motion with the registered Move axis (Down/DownForward/Forward share Move)
             // followed by Attack, using OrderedConsume + MaxGapTicks for a true timed link.
@@ -381,7 +381,7 @@ public static class PlayerInputsShowcaseBuilder
             var bt = timeline.CreateTrack<BufferTrack>(null, "Buffer");
             var win = AddClip<BufferWindowClip>(bt, 0.0, 5.0, "window: ALL");
             ((BufferWindowClip)win.asset).AllowedActions = System.Array.Empty<InputActionReference>();
-            ((BufferWindowClip)win.asset).ConsumerLink = consumerLink;
+            ((BufferWindowClip)win.asset).consumerLink = consumerLink;
             Dirty(win.asset);
 
             var wire = NewWire(timeline, "Buf0_Director");
@@ -401,11 +401,11 @@ public static class PlayerInputsShowcaseBuilder
             var bt = timeline.CreateTrack<BufferTrack>(null, "Buffer");
             var clr = AddClip<BufferClearClip>(bt, 0.0, 1.0, "clear ALL");
             ((BufferClearClip)clr.asset).ActionsToClear = System.Array.Empty<InputActionReference>();
-            ((BufferClearClip)clr.asset).ConsumerLink = consumerLink;
+            ((BufferClearClip)clr.asset).consumerLink = consumerLink;
             Dirty(clr.asset);
             var win = AddClip<BufferWindowClip>(bt, 1.0, 4.0, "window: ALL");
             ((BufferWindowClip)win.asset).AllowedActions = System.Array.Empty<InputActionReference>();
-            ((BufferWindowClip)win.asset).ConsumerLink = consumerLink;
+            ((BufferWindowClip)win.asset).consumerLink = consumerLink;
             Dirty(win.asset);
 
             var wire = NewWire(timeline, "Buf1_Director");
@@ -430,7 +430,7 @@ public static class PlayerInputsShowcaseBuilder
         var clip = AddClip<EventsClip>(et, 0.0, 5.0, "Attack start/end edges");
         var ca = (EventsClip)clip.asset;
         ca.ReadRootFrom = TargetSlot.Owner;
-        ca.ConsumerLink = consumerLink;
+        ca.consumerLink = consumerLink;
         ca.Action = attackAction;
         ca.EventRouteTo = TargetSlot.Self;
         ca.OnInputStart = evPressBegin;
@@ -515,7 +515,7 @@ public static class PlayerInputsShowcaseBuilder
         var ca = (FlowClip)clip.asset;
         ca.Field = gridField;
         ca.ReadRootFrom = TargetSlot.Owner;
-        ca.ConsumerLink = consumerLink;
+        ca.consumerLink = consumerLink;
         ca.Action = moveAction;
         ca.Gain = 1f;
         Dirty(clip.asset);

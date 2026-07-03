@@ -114,20 +114,17 @@ namespace BovineLabs.Timeline.PlayerInputs
 
     internal static class InputRouting
     {
-        public static bool TryResolveRoute(Entity self, in Targets targets, Target routeTo, ushort routeLinkKey,
+        public static bool TryResolveRoute(Entity self, in Targets targets, in EntityLinkRef route,
             in UnsafeComponentLookup<EntityLinkSource> sources, in UnsafeBufferLookup<EntityLinkEntry> entries,
             out Entity target)
         {
-            if (routeLinkKey == 0 && routeTo is Target.Self or Target.None)
+            if (route.LinkKey == 0 && route.ReadRootFrom is Target.Self or Target.None)
             {
                 target = self;
                 return true;
             }
 
-            target = EntityLinkResolver.TryResolve(self, targets, routeTo, routeLinkKey, sources, entries, out var t)
-                ? t
-                : Entity.Null;
-            return target != Entity.Null;
+            return route.TryResolve(self, targets, sources, entries, out target);
         }
     }
 }
