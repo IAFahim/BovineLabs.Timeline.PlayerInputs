@@ -200,7 +200,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 {
                     Renderer.Line(pos, pos + up * RowHead, new Color(1f, 0.3f, 0.3f, 0.4f));
                     var miss = new FixedString64Bytes();
-                    miss.Append("BUFFER ? link miss");
+                    miss.Append((FixedString32Bytes)"BUFFER ? link miss");
                     Renderer.Text64(pos + up * RowHead, miss, new Color(1f, 0.35f, 0.35f), 12f * Scale);
                     return;
                 }
@@ -217,25 +217,25 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                     new Color(panel.r, panel.g, panel.b, 0.3f));
 
                 var head = new FixedString64Bytes();
-                head.Append("BUF ");
+                head.Append((FixedString32Bytes)"BUF ");
                 if (open)
                 {
-                    head.Append("OPEN x");
+                    head.Append((FixedString32Bytes)"OPEN x");
                     head.Append(bits);
                 }
                 else
                 {
-                    head.Append("----");
+                    head.Append((FixedString32Bytes)"----");
                 }
 
                 Renderer.Text64(pos + up * RowHead, head, panel, 12f * Scale);
 
                 var hl = new FixedString64Bytes();
-                hl.Append("hist ");
+                hl.Append((FixedString32Bytes)"hist ");
                 hl.Append(histLen);
                 if (limit > 0)
                 {
-                    hl.Append(" / ");
+                    hl.Append((FixedString32Bytes)" / ");
                     hl.Append((int)limit);
                 }
 
@@ -254,7 +254,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 if (histLen == 0)
                 {
                     var empty = new FixedString64Bytes();
-                    empty.Append("(empty)");
+                    empty.Append((FixedString32Bytes)"(empty)");
                     Renderer.Text64(pos + up * LogTop, empty, new Color(0.6f, 0.6f, 0.65f), 10f * Scale);
                     return;
                 }
@@ -270,21 +270,21 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                     switch (entry.Phase)
                     {
                         case InputPhase.Down:
-                            row.Append("v A");
+                            row.Append((FixedString32Bytes)"v A");
                             color = new Color(0.35f, 1f, 1f);
                             break;
                         case InputPhase.Up:
-                            row.Append("^ A");
+                            row.Append((FixedString32Bytes)"^ A");
                             color = new Color(1f, 0.5f, 0.4f);
                             break;
                         default:
-                            row.Append("= A");
+                            row.Append((FixedString32Bytes)"= A");
                             color = new Color(0.66f, 0.66f, 0.72f);
                             break;
                     }
 
                     row.Append((int)entry.ActionId);
-                    row.Append("  t-");
+                    row.Append((FixedString32Bytes)"  t-");
                     row.Append(age);
                     if (age == 0) color = new Color(1f, 1f, 0.4f); // fired this frame
 
@@ -294,9 +294,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 if (histLen > n)
                 {
                     var more = new FixedString64Bytes();
-                    more.Append("+");
+                    more.Append((FixedString32Bytes)"+");
                     more.Append(histLen - n);
-                    more.Append(" older");
+                    more.Append((FixedString32Bytes)" older");
                     Renderer.Text64(pos + up * (LogTop - n * RowStep), more,
                         new Color(0.6f, 0.6f, 0.65f), 9f * Scale);
                 }
@@ -342,9 +342,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 Renderer.Line(pos + up * 2.4f, anchor + up * 2.4f, new Color(accent.r, accent.g, accent.b, 0.3f));
 
                 var head = new FixedString64Bytes();
-                head.Append(isActive ? "CLR " : "clr ");
+                head.Append(isActive ? (FixedString32Bytes)"CLR " : (FixedString32Bytes)"clr ");
                 head.Append(clip.Index);
-                if (!resolved) head.Append(" ?");
+                if (!resolved) head.Append((FixedString32Bytes)" ?");
                 Renderer.Text64(anchor + up * 3.4f, head, accent, 12f * Scale);
 
                 if (!resolved)
@@ -357,10 +357,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 }
 
                 var mode = new FixedString64Bytes();
-                mode.Append(config.ClearAll ? "ALL" : "sel ");
+                mode.Append(config.ClearAll ? (FixedString32Bytes)"ALL" : (FixedString32Bytes)"sel ");
                 if (!config.ClearAll)
                 {
-                    mode.Append(" ");
+                    mode.Append((FixedString32Bytes)" ");
                     mode.Append(config.ActionMask.CountBits());
                 }
 
