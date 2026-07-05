@@ -31,6 +31,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
         private NativeList<Entity> _uniqueKeys;
         private ConditionEventWriter.Lookup _writers;
+        private ConditionEventWriter.SingletonData _writersSingletonData;
 
         private EntityQuery _activeClipQuery;
         private EntityQuery _deactivatedClipQuery;
@@ -59,6 +60,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
             _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
+            _writersSingletonData.Create(ref state);
             _writers.Create(ref state);
 
             _activeClipQuery = new EntityQueryBuilder(Allocator.Temp)
@@ -79,7 +81,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _axes.Update(ref state);
             _states.Update(ref state);
             _playerIds.Update(ref state);
-            _writers.Update(ref state);
+            _writers.Update(ref state, _writersSingletonData);
 
             var registry = SystemAPI.GetSingleton<InputRegistry>();
 

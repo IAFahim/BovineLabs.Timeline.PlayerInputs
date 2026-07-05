@@ -25,6 +25,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
         private NativeList<Entity> _uniqueKeys;
         private ConditionEventWriter.Lookup _writers;
+        private ConditionEventWriter.SingletonData _writersSingletonData;
 
         private UnsafeComponentLookup<Targets> _targetsLookup;
         private UnsafeComponentLookup<EntityLinkSource> _sources;
@@ -57,6 +58,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
             _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
+            _writersSingletonData.Create(ref state);
             _writers.Create(ref state);
 
             _targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
@@ -79,7 +81,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            _writers.Update(ref state);
+            _writers.Update(ref state, _writersSingletonData);
             _targetsLookup.Update(ref state);
             _sources.Update(ref state);
             _entries.Update(ref state);
