@@ -68,6 +68,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
         private ComponentLookup<ClipActive> _active;
         private ComponentLookup<ActiveBufferMask> _masks;
         private BufferLookup<InputHistory> _histories;
+        private ComponentLookup<InputHistoryLimit> _limits;
         private ComponentLookup<LocalToWorld> _ltws;
 
         private UnsafeComponentLookup<Targets> _targets;
@@ -83,6 +84,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             _active = state.GetComponentLookup<ClipActive>(true);
             _masks = state.GetComponentLookup<ActiveBufferMask>(true);
             _histories = state.GetBufferLookup<InputHistory>(true);
+            _limits = state.GetComponentLookup<InputHistoryLimit>(true);
             _ltws = state.GetComponentLookup<LocalToWorld>(true);
 
             _targets = state.GetUnsafeComponentLookup<Targets>(true);
@@ -101,6 +103,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             _active.Update(ref state);
             _masks.Update(ref state);
             _histories.Update(ref state);
+            _limits.Update(ref state);
             _ltws.Update(ref state);
             _targets.Update(ref state);
             _sources.Update(ref state);
@@ -120,6 +123,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 Active = _active,
                 Masks = _masks,
                 Histories = _histories,
+                Limits = _limits,
                 Targets = _targets,
                 Sources = _sources,
                 Entries = _entries,
@@ -152,6 +156,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             [ReadOnly] public ComponentLookup<ClipActive> Active;
             [ReadOnly] public ComponentLookup<ActiveBufferMask> Masks;
             [ReadOnly] public BufferLookup<InputHistory> Histories;
+            [ReadOnly] public ComponentLookup<InputHistoryLimit> Limits;
 
             [ReadOnly] public UnsafeComponentLookup<Targets> Targets;
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
@@ -162,89 +167,138 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             public float3 Offset;
             public Color Accent;
 
+            // Layout (all ABOVE the character, one tidy column so it never fights the mesh/other drawers):
+            //   up*5.0  header   "BUF OPEN x3" / "BUF ----"   (state = the CONSUMER's live mask, not per-clip)
+            //   up*4.6  "hist 16 / 64"                        (recorded count / limit)
+            //   up*4.42 divider
+            //   up*4.1  -> down   readable history log, NEWEST FIRST, 6 rows, colour by phase
+            // The per-clip index is intentionally GONE: many window clips share one consumer, so stamping
+            // clip.Index just drew "win 2721" over "win 2724". Every clip now paints the SAME consumer panel
+            // (identical overdraw = invisible), and the state comes from the consumer's ActiveBufferMask.
+            private const float RowHead = 5.0f;
+            private const float RowHist = 4.6f;
+            private const float LogTop = 4.1f;
+            private const float RowStep = 0.34f;
+            private const int MaxRows = 6;
+
             private void Execute(Entity clip, in TrackBinding binding, in BufferWindowConfig config)
             {
                 var bound = binding.Value;
                 if (bound == Entity.Null || !Ltws.HasComponent(bound)) return;
 
-                var isActive = Active.HasComponent(clip) && Active.IsComponentEnabled(clip);
-                var accent = isActive ? Accent : new Color(0.5f, 0.5f, 0.5f, 0.5f);
-
                 var pos = Ltws[bound].Position + Offset;
                 var up = new float3(0f, 1f, 0f) * Scale;
                 var right = new float3(1f, 0f, 0f) * Scale;
-
-                Renderer.Point(pos, 0.15f * Scale, accent);
 
                 var consumer = Entity.Null;
                 var resolved = Targets.TryGetComponent(bound, out var targets)
                     && config.Consumer.TryResolve(bound, targets, Sources, Entries, out consumer);
 
-                // Vertical stack above the entity, top-down: WIN / buf / hist. Even 0.4 spacing, no overlaps.
-                // History ticks live at 0.8..~1.9; the stalk stops at 2.4; text rows start at 2.6.
-                const float rowHead = 3.4f;
-                const float rowBuf = 3.0f;
-                const float rowHist = 2.6f;
-
-                Renderer.Line(pos, pos + up * 2.4f, accent);
-
-                var head = new FixedString64Bytes();
-                head.Append(isActive ? "WIN " : "win ");
-                head.Append(clip.Index);
-                if (!resolved) head.Append(" ?");
-                Renderer.Text64(pos + up * rowHead, head, accent, 12f * Scale);
+                Renderer.Point(pos, 0.12f * Scale, resolved ? Accent : new Color(1f, 0.3f, 0.3f));
 
                 if (!resolved)
                 {
-                    DrawUnresolved(pos + up * rowBuf, right, up);
+                    Renderer.Line(pos, pos + up * RowHead, new Color(1f, 0.3f, 0.3f, 0.4f));
+                    var miss = new FixedString64Bytes();
+                    miss.Append("BUFFER ? link miss");
+                    Renderer.Text64(pos + up * RowHead, miss, new Color(1f, 0.35f, 0.35f), 12f * Scale);
                     return;
                 }
 
                 var open = Masks.TryGetComponent(consumer, out var mask) && !mask.Value.AllFalse;
-                var stateColor = open
-                    ? new Color(0.3f, 1f, 0.6f)
-                    : new Color(1f, 0.4f, 0.3f);
-
-                var bits = new FixedString64Bytes();
-                bits.Append("buf ");
-                bits.Append(open ? mask.Value.CountBits() : 0);
-                Renderer.Text64(pos + up * rowBuf, bits, stateColor, 11f * Scale);
-
+                var bits = open ? mask.Value.CountBits() : 0;
                 var histLen = Histories.TryGetBuffer(consumer, out var history) ? history.Length : 0;
+                var limit = Limits.TryGetComponent(consumer, out var lim) ? lim.Value : (ushort)0;
+
+                var panel = open ? new Color(0.35f, 1f, 0.6f) : new Color(0.72f, 0.72f, 0.78f);
+
+                // stalk from the character up to the bottom of the log
+                Renderer.Line(pos, pos + up * (LogTop - (MaxRows - 1) * RowStep),
+                    new Color(panel.r, panel.g, panel.b, 0.3f));
+
+                var head = new FixedString64Bytes();
+                head.Append("BUF ");
+                if (open)
+                {
+                    head.Append("OPEN x");
+                    head.Append(bits);
+                }
+                else
+                {
+                    head.Append("----");
+                }
+
+                Renderer.Text64(pos + up * RowHead, head, panel, 12f * Scale);
+
                 var hl = new FixedString64Bytes();
                 hl.Append("hist ");
                 hl.Append(histLen);
-                Renderer.Text64(pos + up * rowHist, hl, new Color(1f, 1f, 1f, 0.8f), 11f * Scale);
+                if (limit > 0)
+                {
+                    hl.Append(" / ");
+                    hl.Append((int)limit);
+                }
 
-                DrawHistoryTicks(pos, right, up, history, histLen);
+                Renderer.Text64(pos + up * RowHist, hl, new Color(1f, 1f, 1f, 0.85f), 11f * Scale);
+                Renderer.Line(pos + up * 4.42f - right * 0.05f, pos + up * 4.42f + right * 1.7f,
+                    new Color(1f, 1f, 1f, 0.22f));
+
+                DrawHistoryLog(pos, up, history, histLen);
             }
 
-            private void DrawUnresolved(float3 center, float3 right, float3 up)
+            // Newest press at the top, oldest at the bottom. Each row: phase glyph + action id + age in ticks.
+            //   v = Down (press)   ^ = Up (release)   = = Held      yellow row = happened THIS frame.
+            // ActionId is the MultiInputSettings slot index (A0 = first configured action, etc.).
+            private void DrawHistoryLog(float3 pos, float3 up, DynamicBuffer<InputHistory> history, int histLen)
             {
-                var red = new Color(1f, 0.3f, 0.3f);
-                Renderer.Line(center - right * 0.25f, center + up * 0.4f + right * 0.25f, red);
-                Renderer.Line(center + right * 0.25f, center + up * 0.4f - right * 0.25f, red);
-            }
+                if (histLen == 0)
+                {
+                    var empty = new FixedString64Bytes();
+                    empty.Append("(empty)");
+                    Renderer.Text64(pos + up * LogTop, empty, new Color(0.6f, 0.6f, 0.65f), 10f * Scale);
+                    return;
+                }
 
-            private void DrawHistoryTicks(float3 pos, float3 right, float3 up,
-                DynamicBuffer<InputHistory> history, int histLen)
-            {
-                if (histLen == 0) return;
-
-                var cursor = pos + up * 0.8f;
-                var n = math.min(history.Length, 8);
+                var n = math.min(histLen, MaxRows);
                 for (var i = 0; i < n; i++)
                 {
-                    var entry = history[history.Length - 1 - i];
+                    var entry = history[histLen - 1 - i]; // newest first
                     var age = (int)(Tick - entry.Tick);
-                    var phaseColor = entry.Phase == InputPhase.Down
-                        ? new Color(0.3f, 1f, 1f)
-                        : entry.Phase == InputPhase.Up
-                            ? new Color(1f, 0.3f, 0.3f)
-                            : new Color(0.6f, 0.6f, 0.6f);
-                    var len = age == 0 ? 0.5f : age < 5 ? 0.35f : 0.2f;
-                    Renderer.Line(cursor, cursor + right * len, phaseColor);
-                    cursor += up * 0.13f;
+
+                    var row = new FixedString64Bytes();
+                    Color color;
+                    switch (entry.Phase)
+                    {
+                        case InputPhase.Down:
+                            row.Append("v A");
+                            color = new Color(0.35f, 1f, 1f);
+                            break;
+                        case InputPhase.Up:
+                            row.Append("^ A");
+                            color = new Color(1f, 0.5f, 0.4f);
+                            break;
+                        default:
+                            row.Append("= A");
+                            color = new Color(0.66f, 0.66f, 0.72f);
+                            break;
+                    }
+
+                    row.Append((int)entry.ActionId);
+                    row.Append("  t-");
+                    row.Append(age);
+                    if (age == 0) color = new Color(1f, 1f, 0.4f); // fired this frame
+
+                    Renderer.Text64(pos + up * (LogTop - i * RowStep), row, color, 10f * Scale);
+                }
+
+                if (histLen > n)
+                {
+                    var more = new FixedString64Bytes();
+                    more.Append("+");
+                    more.Append(histLen - n);
+                    more.Append(" older");
+                    Renderer.Text64(pos + up * (LogTop - n * RowStep), more,
+                        new Color(0.6f, 0.6f, 0.65f), 9f * Scale);
                 }
             }
         }

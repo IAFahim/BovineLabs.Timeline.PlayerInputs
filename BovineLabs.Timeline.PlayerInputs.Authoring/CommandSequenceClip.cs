@@ -55,9 +55,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         "Sequences are evaluated top-to-bottom. High priority should be first. First successful match triggers event and completes sequence clip.")]
     public sealed class CommandSequenceClip : DOTSClip, ITimelineClipAsset
     {
+        [Header("Consumer")] [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
+        public Target ReadRootFrom = Target.Owner;
+        
         [Tooltip("Link to the input consumer whose history/state these sequences read.")]
         [UnityEngine.Serialization.FormerlySerializedAs("ConsumerLink")]
         public EntityLinkSchema consumerLink;
+
+        [Header("Events")] [Tooltip("Where to resolve the entity that receives the fired events from.")]
+        public Target EventRouteTo = Target.Self;
 
         [Tooltip("Link used to resolve the event target when EventRouteTo needs one.")]
         [UnityEngine.Serialization.FormerlySerializedAs("EventRouteLink")]
@@ -65,13 +71,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         [Tooltip("Sequences evaluated top-to-bottom; the first that matches fires and completes the clip.")]
         public CommandSequenceData[] Sequences = Array.Empty<CommandSequenceData>();
-
-        [Header("Consumer")] [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
-        public Target ReadRootFrom = Target.Owner;
-
-        [Header("Events")] [Tooltip("Where to resolve the entity that receives the fired events from.")]
-        public Target EventRouteTo = Target.Self;
-
+        
         public override double duration => .5f;
 
         public ClipCaps clipCaps => ClipCaps.Looping;
