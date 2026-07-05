@@ -15,7 +15,6 @@ using Unity.Transforms;
 namespace BovineLabs.Timeline.PlayerInputs.Flow
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
-    [UpdateBefore(typeof(AxisTransformSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
                        WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     public partial struct GridFlowInputSystem : ISystem
