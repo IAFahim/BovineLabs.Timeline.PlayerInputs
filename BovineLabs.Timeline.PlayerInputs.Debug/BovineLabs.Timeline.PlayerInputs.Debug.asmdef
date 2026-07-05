@@ -6,6 +6,8 @@
     "BovineLabs.Core.Extensions",
     "BovineLabs.Timeline.Core.Debug",
     "BovineLabs.Timeline.Data",
+    "BovineLabs.Timeline.EntityLinks",
+    "BovineLabs.Timeline.EntityLinks.Data",
     "BovineLabs.Quill",
     "PlayerInputs.Data",
     "Unity.Burst",
