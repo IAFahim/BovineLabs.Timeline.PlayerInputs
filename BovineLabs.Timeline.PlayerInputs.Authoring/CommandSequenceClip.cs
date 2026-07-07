@@ -89,7 +89,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             for (var s = 0; s < Sequences.Length; s++)
             {
                 var seqData = Sequences[s];
-                seqArray[s].Condition = seqData.Condition ? seqData.Condition.Key : ConditionKey.Null;
+                seqArray[s].Condition = seqData.Condition ? new ConditionKey(seqData.Condition.Key) : ConditionKey.Null;
                 seqArray[s].Value = seqData.Value;
                 seqArray[s].Repeat = seqData.Repeatable ? (byte)1 : (byte)0;
 

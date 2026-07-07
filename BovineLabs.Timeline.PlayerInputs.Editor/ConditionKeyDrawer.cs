@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
+using BovineLabs.Timeline.Core;
 using UnityEditor;
 using UnityEngine;
 
@@ -24,7 +25,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             var next = (ConditionEventObject)EditorGUI.ObjectField(
                 position, label, current, typeof(ConditionEventObject), false);
 
-            if (!ReferenceEquals(next, current) && valueProp != null) valueProp.intValue = next != null ? next.Key : 0;
+            if (!ReferenceEquals(next, current) && valueProp != null) valueProp.intValue = next != null ? next.Key.RawValue : 0;
 
             EditorGUI.EndProperty();
         }
@@ -59,7 +60,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var obj = AssetDatabase.LoadAssetAtPath<ConditionEventObject>(path);
                 if (obj != null)
-                    s_Cache[obj.Key] = obj;
+                    s_Cache[obj.Key.RawValue] = obj;
             }
         }
 

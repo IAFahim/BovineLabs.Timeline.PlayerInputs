@@ -20,7 +20,8 @@
     "BovineLabs.Reaction",
     "BovineLabs.Reaction.Authoring",
     "Unity.InputSystem",
-    "UnityCliConnector.Editor"
+    "UnityCliConnector.Editor",
+    "BovineLabs.Timeline.Core"
   ],
   "includePlatforms": [
     "Editor"

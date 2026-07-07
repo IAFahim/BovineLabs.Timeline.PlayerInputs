@@ -66,8 +66,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Consumer = EntityLinkAuthoringUtility.BakeRef(context.Baker, consumerLink, ReadRootFrom),
                 ActionId = actionId,
                 EventRoute = EntityLinkAuthoringUtility.BakeRef(context.Baker, eventRouteLink, EventRouteTo),
-                OnInputStart = OnInputStart != null ? OnInputStart.Key : ConditionKey.Null,
-                OnInputEnd = OnInputEnd != null ? OnInputEnd.Key : ConditionKey.Null
+                OnInputStart = OnInputStart != null ? new ConditionKey(OnInputStart.Key) : ConditionKey.Null,
+                OnInputEnd = OnInputEnd != null ? new ConditionKey(OnInputEnd.Key) : ConditionKey.Null
             });
 
             commands.AddComponent<InputEventsState>();

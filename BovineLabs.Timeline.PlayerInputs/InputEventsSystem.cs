@@ -197,7 +197,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 var risingEdge = hasInput && !state.WasInputActive;
                 var fallingEdge = !hasInput && state.WasInputActive;
 
-                if (risingEdge && config.OnInputStart != ConditionKey.Null &&
+                if (risingEdge && !config.OnInputStart.Equals(ConditionKey.Null) &&
                     InputRouting.TryResolveRoute(targetEntity, targets, config.EventRoute,
                         Sources, Entries, out var startTarget))
                 {
@@ -205,7 +205,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                     UniqueKeys.Add(startTarget);
                 }
 
-                if (fallingEdge && config.OnInputEnd != ConditionKey.Null &&
+                if (fallingEdge && !config.OnInputEnd.Equals(ConditionKey.Null) &&
                     InputRouting.TryResolveRoute(targetEntity, targets, config.EventRoute,
                         Sources, Entries, out var endTarget))
                 {
@@ -234,7 +234,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (!state.WasInputActive) return;
                 state.WasInputActive = false;
 
-                if (config.OnInputEnd == ConditionKey.Null) return;
+                if (config.OnInputEnd.Equals(ConditionKey.Null)) return;
 
                 var targetEntity = binding.Value;
                 if (targetEntity == Entity.Null) return;
