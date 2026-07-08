@@ -1,13 +1,34 @@
 #if UNITY_EDITOR
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 
 namespace BovineLabs.Timeline.PlayerInputs.Data
 {
     public sealed partial class MultiInputSettings
     {
+        // Unity calls OnValidate DURING deserialization/import/domain-reload. At that point the
+        // InputActionReference elements (and their .action lookups) are not guaranteed to be resolved:
+        // the referenced .inputactions asset can still be pending import, so every slot transiently reads
+        // as null. Validating synchronously therefore spams false "slot N is unassigned" errors on a
+        // perfectly valid asset on every reload. Defer to delayCall, by which point the AssetDatabase has
+        // settled and references resolve correctly. Genuine problems (truly-empty slots, duplicate ids/names,
+        // overflow) still surface; the transient import race no longer does. delayCall is coalesced (-= then
+        // +=) so repeated OnValidate calls queue at most one validation pass.
         private void OnValidate()
         {
+            EditorApplication.delayCall -= this.Validate;
+            EditorApplication.delayCall += this.Validate;
+        }
+
+        private void Validate()
+        {
+            if (this == null)
+            {
+                // The asset was destroyed or reimported before the deferred callback ran.
+                return;
+            }
+
             if (inputActions == null)
             {
                 return;
