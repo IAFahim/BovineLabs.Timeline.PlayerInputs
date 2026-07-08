@@ -26,7 +26,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             var next = (ConditionEventObject)EditorGUI.ObjectField(
                 position, label, current, typeof(ConditionEventObject), false);
 
-            if (!ReferenceEquals(next, current) && valueProp != null) valueProp.intValue = next != null ? next.Key.RawValue : 0;
+            if (!ReferenceEquals(next, current) && valueProp != null) valueProp.intValue = next != null ? next.Key : 0;
 
             EditorGUI.EndProperty();
         }
@@ -61,7 +61,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var obj = AssetDatabase.LoadAssetAtPath<ConditionEventObject>(path);
                 if (obj != null)
-                    s_Cache[obj.Key.RawValue] = obj;
+                    s_Cache[obj.Key] = obj;
             }
         }
 
@@ -81,7 +81,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
             // The object's Key may have just changed - drop any stale key it was previously cached under.
             RemoveByValue(obj);
 
-            var key = obj.Key.RawValue;
+            var key = obj.Key;
             if (key == 0) return;
 
             s_Cache[key] = obj;

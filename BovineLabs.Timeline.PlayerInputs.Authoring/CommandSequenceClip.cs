@@ -107,7 +107,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                     Debug.LogError(
                         $"CommandSequenceClip '{name}' sequence {s} has no steps; it can never match.", this);
 
-                seqArray[s].Condition = seqData.Condition ? new ConditionKey(seqData.Condition.Key) : ConditionKey.Null;
+                seqArray[s].Condition = seqData.Condition ? (ConditionKey)seqData.Condition.Key : ConditionKey.Null;
                 seqArray[s].Value = seqData.Value;
                 seqArray[s].Repeat = seqData.Repeatable ? (byte)1 : (byte)0;
 

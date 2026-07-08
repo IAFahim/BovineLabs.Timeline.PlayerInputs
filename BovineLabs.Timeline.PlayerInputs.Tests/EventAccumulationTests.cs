@@ -11,9 +11,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         public void TryMerge_SameKey_SumsAmount_Merged()
         {
             var values = new FixedList4096Bytes<EventAmount>();
-            values.Add(new EventAmount(new ConditionKey(new BLId(7)), 3));
+            values.Add(new EventAmount((ConditionKey)(7), 3));
 
-            var result = EventAccumulation.TryMerge(ref values, new EventAmount(new ConditionKey(new BLId(7)), 4));
+            var result = EventAccumulation.TryMerge(ref values, new EventAmount((ConditionKey)(7), 4));
 
             Assert.AreEqual(MergeResult.Merged, result);
             Assert.AreEqual(1, values.Length);
@@ -24,9 +24,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         public void TryMerge_NewKeyWithRoom_Appended()
         {
             var values = new FixedList4096Bytes<EventAmount>();
-            values.Add(new EventAmount(new ConditionKey(new BLId(7)), 3));
+            values.Add(new EventAmount((ConditionKey)(7), 3));
 
-            var result = EventAccumulation.TryMerge(ref values, new EventAmount(new ConditionKey(new BLId(8)), 5));
+            var result = EventAccumulation.TryMerge(ref values, new EventAmount((ConditionKey)(8), 5));
 
             Assert.AreEqual(MergeResult.Appended, result);
             Assert.AreEqual(2, values.Length);
@@ -39,9 +39,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
             var values = new FixedList4096Bytes<EventAmount>();
             var key = 0;
             while (values.Length < values.Capacity)
-                values.Add(new EventAmount(new ConditionKey(new BLId(++key)), 1));
+                values.Add(new EventAmount((ConditionKey)(++key), 1));
 
-            var result = EventAccumulation.TryMerge(ref values, new EventAmount(new ConditionKey(new BLId(key + 1)), 9));
+            var result = EventAccumulation.TryMerge(ref values, new EventAmount((ConditionKey)(key + 1), 9));
 
             Assert.AreEqual(MergeResult.Overflow, result);
             Assert.AreEqual(values.Capacity, values.Length);
@@ -53,9 +53,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
             var values = new FixedList4096Bytes<EventAmount>();
             var key = 0;
             while (values.Length < values.Capacity)
-                values.Add(new EventAmount(new ConditionKey(new BLId(++key)), 1));
+                values.Add(new EventAmount((ConditionKey)(++key), 1));
 
-            var result = EventAccumulation.TryMerge(ref values, new EventAmount(new ConditionKey(new BLId(1)), 10));
+            var result = EventAccumulation.TryMerge(ref values, new EventAmount((ConditionKey)(1), 10));
 
             Assert.AreEqual(MergeResult.Merged, result);
             Assert.AreEqual(11, values[0].Amount);
