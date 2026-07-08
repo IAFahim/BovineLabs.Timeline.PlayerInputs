@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Managed-component API (AddComponentObject/GetComponentObject/ManagedAPI) deprecated in Entities 6.6; TODO: migrate to UnityObjectRef<T>/unmanaged components.
 using System;
 using System.Collections.Generic;
 using BovineLabs.Core.Collections;
