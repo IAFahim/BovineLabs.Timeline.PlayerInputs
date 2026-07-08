@@ -47,6 +47,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
 
+            if (!MultiInputSettingsAuthoringUtility.RequireLink(consumerLink, this, $"FlowInputClip '{name}'", "consumerLink"))
+                return;
+
             if (Field == null)
             {
                 Debug.LogError($"FlowInputClip '{name}' has no Field schema assigned. Clip will be skipped.", this);

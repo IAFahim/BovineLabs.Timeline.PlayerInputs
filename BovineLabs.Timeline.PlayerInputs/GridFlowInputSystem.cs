@@ -10,22 +10,25 @@ using BovineLabs.Timeline.PlayerInputs.Data;
 using BovineLabs.Timeline.PlayerInputs.Flow.Data;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Profiling;
 using Unity.Transforms;
 
 namespace BovineLabs.Timeline.PlayerInputs.Flow
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
+    [UpdateAfter(typeof(SyntheticProviderClearSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
                        WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     public partial struct GridFlowInputSystem : ISystem
     {
+        private static readonly ProfilerMarker Marker = new("GridFlowInputSystem");
+
         private UnsafeComponentLookup<Targets> _targets;
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private ComponentLookup<PlayerId> _playerIds;
         private ComponentLookup<LocalTransform> _transforms;
         private BufferLookup<InputAxis> _axisBuffers;
-        private ComponentLookup<SyntheticProviderTag> _synthetic;
 
         public void OnCreate(ref SystemState state)
         {
@@ -40,11 +43,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             _playerIds = state.GetComponentLookup<PlayerId>(true);
             _transforms = state.GetComponentLookup<LocalTransform>(true);
             _axisBuffers = state.GetBufferLookup<InputAxis>(false);
-            _synthetic = state.GetComponentLookup<SyntheticProviderTag>(true);
         }
 
         public void OnUpdate(ref SystemState state)
         {
+            using var auto = Marker.Auto();
+
             state.CompleteDependency();
 
             _targets.Update(ref state);
@@ -53,7 +57,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             _playerIds.Update(ref state);
             _transforms.Update(ref state);
             _axisBuffers.Update(ref state);
-            _synthetic.Update(ref state);
 
             var settings = SystemAPI.GetSingleton<InfluenceGridSettings>();
             ref var reg = ref SystemAPI.GetSingletonRW<FieldRegistrySingleton>().ValueRW.Registry;
@@ -68,13 +71,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                     pair.Back.Complete();
             }
 
-            var registry = SystemAPI.GetSingleton<InputRegistry>().ProviderByPlayer;
+            var slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true);
             var cellSize = math.max(0.0001f, settings.CellSize);
             var basis = new GridBasis(settings.PlaneNormal);
-
-            foreach (var axes in SystemAPI.Query<DynamicBuffer<InputAxis>>()
-                         .WithAll<ProviderTag, SyntheticProviderTag>())
-                axes.Clear();
 
             foreach (var (config, binding, weight) in
                      SystemAPI.Query<RefRO<FlowInputConfig>, RefRO<TrackBinding>, RefRO<ClipWeight>>()
@@ -95,11 +94,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (!_playerIds.TryGetComponent(consumer, out var playerId))
                     continue;
 
-                var provider = registry[playerId.Value];
+                // Synthetic flow writes the seat's SYNTHETIC slot directly (that IS what an override consumer reads).
+                var provider = slots[playerId.Value].Synthetic;
                 if (provider == Entity.Null || !_axisBuffers.HasBuffer(provider))
-                    continue;
-
-                if (!_synthetic.HasComponent(provider))
                     continue;
 
                 if (!reg.KeyToSlot.TryGetValue(cfg.FieldKey, out var slotIndex))

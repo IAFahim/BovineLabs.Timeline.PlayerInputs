@@ -37,12 +37,25 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Condition event fired when the action input ends.")]
         public ConditionEventObject OnInputEnd;
 
+        [Tooltip("On (default): if the action is already held when the clip activates, OnInputStart fires on the " +
+                 "first frame. Off: the clip treats an already-held input as 'already started' and only fires " +
+                 "OnInputStart on a fresh press after the clip opens (correct for a charge attack the player must " +
+                 "re-press inside the window).")]
+        public bool TriggerIfAlreadyHeld = true;
+
         public override double duration => 1;
         public ClipCaps clipCaps => ClipCaps.None;
 
         public override void Bake(Entity entity, BakingContext context)
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
+
+            if (!MultiInputSettingsAuthoringUtility.RequireLink(consumerLink, this, $"InputEventsClip '{name}'", "consumerLink"))
+                return;
+
+            if (OnInputStart == null && OnInputEnd == null)
+                Debug.LogWarning(
+                    $"InputEventsClip '{name}' fires no events; the clip does nothing.", this);
 
             var actionId = byte.MaxValue;
             if (Action == null)
@@ -59,15 +72,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             }
 
             var commands = new BakerCommands(context.Baker, entity);
-            context.Baker.DependsOn(OnInputStart);
-            context.Baker.DependsOn(OnInputEnd);
+            if (OnInputStart != null) context.Baker.DependsOn(OnInputStart);
+            if (OnInputEnd != null) context.Baker.DependsOn(OnInputEnd);
             commands.AddComponent(new InputEventsConfig
             {
                 Consumer = EntityLinkAuthoringUtility.BakeRef(context.Baker, consumerLink, ReadRootFrom),
                 ActionId = actionId,
                 EventRoute = EntityLinkAuthoringUtility.BakeRef(context.Baker, eventRouteLink, EventRouteTo),
                 OnInputStart = OnInputStart != null ? new ConditionKey(OnInputStart.Key) : ConditionKey.Null,
-                OnInputEnd = OnInputEnd != null ? new ConditionKey(OnInputEnd.Key) : ConditionKey.Null
+                OnInputEnd = OnInputEnd != null ? new ConditionKey(OnInputEnd.Key) : ConditionKey.Null,
+                TriggerIfAlreadyHeld = TriggerIfAlreadyHeld
             });
 
             commands.AddComponent<InputEventsState>();

@@ -9,6 +9,7 @@ using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Timeline;
@@ -28,10 +29,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Which transition to match: Down on press, Up on release, Held while sustained.")]
         public InputPhase Phase;
 
-        [Tooltip("Max simulation ticks allowed between this step and the previous matched step. " +
-                 "0 = unbounded. Use this to author motion inputs and frame links (e.g. a 236P fireball " +
-                 "where each direction must follow within a few ticks).")]
-        public ushort MaxGapTicks;
+        [Tooltip("Max ELAPSED TIME (seconds) allowed between this step and the previous matched step. This is " +
+                 "wall-clock time, so the window feels identical at 30 / 60 / 240 fps. 0 = unbounded. Use it to " +
+                 "author motion inputs and frame links (e.g. a 236P fireball where each direction must follow " +
+                 "within ~0.15 s). Baked to milliseconds; clamped to 65.535 s.")]
+        [UnityEngine.Serialization.FormerlySerializedAs("MaxGapTicks")]
+        public float MaxGapSeconds;
     }
 
     [Serializable]
@@ -71,7 +74,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 
         [Tooltip("Sequences evaluated top-to-bottom; the first that matches fires and completes the clip.")]
         public CommandSequenceData[] Sequences = Array.Empty<CommandSequenceData>();
-        
+
+        [Header("Arbitration")]
+        [Tooltip("Cross-clip priority when several CommandSequence clips share one consumer and compete to Consume " +
+                 "the same buffered inputs. LOWER value evaluates FIRST (first crack at consuming). Ties break on a " +
+                 "stable per-run order. Leave 0 unless a clip must reliably win/lose the input race (e.g. Dash " +
+                 "stealing the Attack press).")]
+        public int Priority;
+
         public override double duration => .5f;
 
         public ClipCaps clipCaps => ClipCaps.Looping;
@@ -79,6 +89,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public override void Bake(Entity entity, BakingContext context)
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
+
+            if (!MultiInputSettingsAuthoringUtility.RequireLink(consumerLink, this, $"CommandSequenceClip '{name}'", "consumerLink"))
+                return;
 
             var builder = new BlobBuilder(Allocator.Temp);
             ref var root = ref builder.ConstructRoot<CommandBlob>();
@@ -89,6 +102,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
             for (var s = 0; s < Sequences.Length; s++)
             {
                 var seqData = Sequences[s];
+
+                if (seqData.Steps == null || seqData.Steps.Length == 0)
+                    Debug.LogError(
+                        $"CommandSequenceClip '{name}' sequence {s} has no steps; it can never match.", this);
+
                 seqArray[s].Condition = seqData.Condition ? new ConditionKey(seqData.Condition.Key) : ConditionKey.Null;
                 seqArray[s].Value = seqData.Value;
                 seqArray[s].Repeat = seqData.Repeatable ? (byte)1 : (byte)0;
@@ -121,6 +139,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 Actions = actions,
                 Consumer = EntityLinkAuthoringUtility.BakeRef(context.Baker, consumerLink, ReadRootFrom),
                 EventRoute = EntityLinkAuthoringUtility.BakeRef(context.Baker, eventRouteLink, EventRouteTo),
+                Priority = Priority,
             });
             commands.AddComponent<CommandSequenceState>();
 
@@ -168,13 +187,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 id = byte.MaxValue;
             }
 
-            var maxGap = stepData.MaxGapTicks;
-            if (maxGap != 0 && id != byte.MaxValue &&
+            // Seconds -> milliseconds, clamped to the ushort field (65.535 s). Negative authoring => 0 (unbounded).
+            var maxGapMillis = (ushort)math.clamp((int)math.round(stepData.MaxGapSeconds * 1000f), 0, ushort.MaxValue);
+            if (maxGapMillis != 0 && id != byte.MaxValue &&
                 (stepIndex == 0 || stepMode is CommandMode.None or CommandMode.NotContains
                     or CommandMode.NotFirst or CommandMode.NotLast))
                 Debug.LogWarning(
-                    $"CommandSequenceClip '{name}' sequence {seq} step {stepIndex}: MaxGapTicks={maxGap} has no effect " +
-                    "here. The timing window only applies to a step after the first that reads history; " +
+                    $"CommandSequenceClip '{name}' sequence {seq} step {stepIndex}: MaxGapSeconds={stepData.MaxGapSeconds} " +
+                    "has no effect here. The timing window only applies to a step after the first that reads history; " +
                     "first steps, None probes and Not* modes ignore it.", this);
 
             return new CommandStep
@@ -182,7 +202,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
                 ActionId = id,
                 Mode = stepMode,
                 Phase = stepPhase,
-                MaxGapTicks = stepData.MaxGapTicks
+                MaxGapMillis = maxGapMillis
             };
         }
 

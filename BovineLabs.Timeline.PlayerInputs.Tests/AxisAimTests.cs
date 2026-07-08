@@ -16,7 +16,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
                 quaternion.Euler(0f, math.radians(180f), 0f), out var newRot, out _, out _, out _);
 
             var desired = quaternion.LookRotationSafe(math.normalize(input), Up);
-            Assert.AreEqual(0f, math.length(newRot.value - desired.value), 1e-3f, "snaps fully to desired");
+
+            // q and -q are the same rotation (quaternion double cover); slerp may land on either
+            // hemisphere depending on the sign of dot(from, to), so compare rotations, not components.
+            Assert.AreEqual(0f, 1f - math.abs(math.dot(newRot, desired)), 1e-3f, "snaps fully to desired");
         }
 
         [Test]

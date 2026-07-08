@@ -13,12 +13,29 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         private const float AxisPublishThresholdSq = 0.0001f;
 
+        // Monotonic seat-join sequence stamped on every created provider so InputRegistrySystem breaks same-kind
+        // duplicate ties deterministically instead of leaning on CoreCLR-recycled Entity indices.
+        private static uint providerSeqCounter;
+
         public int PlayerIdOverride = -1;
 
+        // Debug mirrors of the accumulate-and-drain state. These are NO LONGER the authoritative source the ECS reads;
+        // ProviderSyncSystem pulls edges via Drain(). They exist so the debug overlays can still show the pending set.
         public BitArray256 CurrentDown;
         public BitArray256 CurrentHeld;
         public BitArray256 CurrentUp;
         public readonly List<InputAxis> CurrentAxes = new(16);
+
+        // Accumulate-and-drain: Update() runs once per RENDER frame and OR-accumulates that frame's Down/Up edges here;
+        // ProviderSyncSystem (the single ECS-side consumer, in the default world) calls Drain() once per SIM tick to
+        // take + clear them. This decouples the render-frame publish cadence from the sim-tick consume cadence, so a
+        // fast tap between two sim ticks is not overwritten (0-consume frame) and a single press is not seen twice
+        // (2-consume frame). Held stays level-based (latest wins).
+        private BitArray256 pendingDown;
+        private BitArray256 pendingUp;
+
+        // Cached once per OnEnable so the per-frame axis reconcile never touches the settings singleton in the hot path.
+        private float axisEdgeDeadzone = AxisEdge.DefaultDeadzone;
 
         private readonly List<Subscription> subscriptions = new();
 
@@ -36,6 +53,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         private bool focused = true;
         private bool wasFocused = true;
         private bool hasPointerTag;
+        private bool warnedBadPlayerIndex;
+
+        // CoreCLR keeps statics alive across play sessions (no domain reload) - reset so seq numbers restart each run.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetProviderSeq()
+        {
+            providerSeqCounter = 0;
+        }
 
         private void Update()
         {
@@ -61,11 +86,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 {
                     // Snapshot the held set BEFORE resetting so focus-loss emits an Up edge for every held button
                     // (release-edge consumers derive Up solely from state.Up). Mirrors RetireProvider's Up synthesis.
+                    // These Up edges MUST persist in pendingUp until drained - accumulate, don't overwrite.
                     edges.Prime(out var heldOnBlur);
                     edges.Reset();
                     CurrentAxes.Clear();
-                    edges.Publish(out CurrentDown, out CurrentUp, out CurrentHeld);
-                    CurrentUp = heldOnBlur;
+                    pendingUp |= heldOnBlur;
+                    CurrentHeld = default;
+                    CurrentDown = pendingDown;
+                    CurrentUp = pendingUp;
                     wasFocused = false;
                 }
 
@@ -88,7 +116,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                     var resumed = axis.IsVec2
                         ? (float2)axis.Action.ReadValue<Vector2>()
                         : new float2(axis.Action.ReadValue<float>(), 0f);
-                    if (math.lengthsq(resumed) > AxisPublishThresholdSq)
+                    // Reseed the HELD state through the same deadzone so a drifting stick does not latch a phantom hold.
+                    if (AxisEdge.Actuated(resumed, false, this.axisEdgeDeadzone))
                         edges.Seed(axis.Id);
                 }
 
@@ -102,12 +131,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                     ? (float2)axis.Action.ReadValue<Vector2>()
                     : new float2(axis.Action.ReadValue<float>(), 0f);
 
-                var actuated = math.lengthsq(val) > AxisPublishThresholdSq;
+                // Split "worth publishing" (stream fine values from a tiny threshold) from "actuated for edge purposes"
+                // (a real deadzone + hysteresis), so stick drift never fabricates Down/Up chatter into combo history.
+                var publishable = math.lengthsq(val) > AxisPublishThresholdSq;
                 var was = edges.IsPressed(axis.Id);
+                var actuated = AxisEdge.Actuated(val, was, this.axisEdgeDeadzone);
                 if (actuated && !was) edges.Press(axis.Id);
                 else if (!actuated && was) edges.Release(axis.Id);
 
-                if (actuated)
+                if (publishable)
                     CurrentAxes.Add(new InputAxis { ActionId = axis.Id, Value = val });
             }
 
@@ -119,7 +151,29 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 else if (!down && was) edges.Release(button.Id);
             }
 
-            edges.Publish(out CurrentDown, out CurrentUp, out CurrentHeld);
+            // Accumulate this render frame's edges; Drain() (called from the ECS side) takes + clears them.
+            edges.Publish(out var frameDown, out var frameUp, out var frameHeld);
+            EdgeDrain.Accumulate(ref pendingDown, ref pendingUp, frameDown, frameUp);
+            CurrentHeld = frameHeld;
+            CurrentDown = pendingDown;
+            CurrentUp = pendingUp;
+        }
+
+        /// <summary>
+        /// Take and clear the edges accumulated since the last drain, plus the latest (level-based) held set. Called
+        /// once per simulation tick by <c>ProviderSyncSystem</c> - the single ECS-side consumer of this bridge (the
+        /// bridge-backed provider lives only in the default world, so exactly one system drains it). Between drains,
+        /// Update() OR-accumulates every render frame's edges, so no press is lost or double-counted when the sim tick
+        /// rate differs from the render rate.
+        /// </summary>
+        public void Drain(out BitArray256 down, out BitArray256 up, out BitArray256 held)
+        {
+            EdgeDrain.Drain(ref pendingDown, ref pendingUp, out down, out up);
+            held = CurrentHeld;
+
+            // Mirrors reflect the drained (now-empty) pending set until the next render-frame Update repopulates them.
+            CurrentDown = default;
+            CurrentUp = default;
         }
 
         private void OnApplicationFocus(bool hasFocus)
@@ -146,6 +200,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             }
 
             ClearState();
+
+            this.axisEdgeDeadzone = MultiInputSettings.AxisEdgeDeadzoneOrDefault;
 
             focused = Application.isFocused;
             wasFocused = focused;
@@ -248,6 +304,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             CurrentDown = default;
             CurrentHeld = default;
             CurrentUp = default;
+            pendingDown = default;
+            pendingUp = default;
             edges.Reset();
         }
 
@@ -263,6 +321,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 entity = manager.CreateEntity();
 
                 manager.AddComponentData(entity, new PlayerId { Value = GetPlayerId() });
+                manager.AddComponentData(entity, new ProviderSeq { Value = providerSeqCounter++ });
                 manager.AddComponent<ProviderTag>(entity);
                 manager.AddComponent<InputState>(entity);
                 manager.AddBuffer<InputAxis>(entity);
@@ -306,9 +365,34 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
 
         private byte GetPlayerId()
         {
-            return PlayerIdOverride >= 0
-                ? (byte)PlayerIdOverride
-                : (byte)(GetComponent<PlayerInput>()?.playerIndex ?? 0);
+            var index = PlayerIdOverride >= 0
+                ? PlayerIdOverride
+                : GetComponent<PlayerInput>()?.playerIndex ?? 0;
+
+            // playerIndex is -1 before assignment and Unity recycles it on leave/rejoin; (byte)(-1) == 255 collides
+            // with the top slot. Warn once and clamp into the valid seat range [0, 254].
+            if (index < 0)
+            {
+                WarnBadPlayerIndex(index);
+                return 0;
+            }
+
+            if (index > 254)
+            {
+                WarnBadPlayerIndex(index);
+                return 254;
+            }
+
+            return (byte)index;
+        }
+
+        private void WarnBadPlayerIndex(int index)
+        {
+            if (warnedBadPlayerIndex) return;
+            warnedBadPlayerIndex = true;
+            Debug.LogWarning(
+                $"PlayerInputBridge on '{name}': resolved player index {index} is outside the valid seat range " +
+                "[0, 254]; clamping. Assign a PlayerIdOverride to pin this seat.", this);
         }
 
         private struct Subscription
@@ -341,6 +425,33 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public override int GetHashCode()
         {
             return Value?.GetHashCode() ?? 0;
+        }
+    }
+
+    /// <summary>
+    /// Pure accumulate-and-drain edge bookkeeping used by <see cref="PlayerInputBridge"/>. Extracted so the
+    /// render-rate-vs-sim-rate cadence contract is unit-testable without a live PlayerInput: Update() OR-accumulates
+    /// each render frame's edges, and the single ECS-side consumer drains (takes + clears) once per sim tick. A tap
+    /// between two sim ticks survives a 0-consume frame; a single press is not re-seen on a 2-consume frame.
+    /// </summary>
+    public static class EdgeDrain
+    {
+        /// <summary> OR this render frame's Down/Up edges into the pending (not-yet-drained) accumulators. </summary>
+        public static void Accumulate(ref BitArray256 pendingDown, ref BitArray256 pendingUp,
+            BitArray256 frameDown, BitArray256 frameUp)
+        {
+            pendingDown |= frameDown;
+            pendingUp |= frameUp;
+        }
+
+        /// <summary> Take the accumulated edges and clear the pending set (one sim tick's consumption). </summary>
+        public static void Drain(ref BitArray256 pendingDown, ref BitArray256 pendingUp,
+            out BitArray256 down, out BitArray256 up)
+        {
+            down = pendingDown;
+            up = pendingUp;
+            pendingDown = default;
+            pendingUp = default;
         }
     }
 }

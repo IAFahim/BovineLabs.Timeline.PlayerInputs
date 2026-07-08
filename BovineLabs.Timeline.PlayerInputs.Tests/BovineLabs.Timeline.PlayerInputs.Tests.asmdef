@@ -14,13 +14,11 @@
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",
-    "Unity.Entities.Graphics",
     "Unity.Entities.Hybrid",
     "Unity.InputSystem",
     "Unity.Mathematics",
     "Unity.Mathematics.Extensions",
     "Unity.PerformanceTesting",
-    "Unity.Physics",
     "Unity.Transforms",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"

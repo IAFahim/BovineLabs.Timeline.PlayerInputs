@@ -28,6 +28,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
                 commands.AddComponent<Controllable>();
                 commands.AddComponent<PlayerOverride>();
                 commands.SetComponentEnabled<PlayerOverride>(false);
+                commands.AddComponent<TimelineOverride>();
+                commands.SetComponentEnabled<TimelineOverride>(false);
                 commands.AddComponent(new OverridePolicy
                 {
                     Trigger = overrideTrigger,

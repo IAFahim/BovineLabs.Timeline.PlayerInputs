@@ -4,16 +4,23 @@
   "displayName": "BovineLabs Timeline Player Inputs",
   "description": "Player input system with ECS backing entities, input propagation, and condition event integration.",
   "dependencies": {
-    "com.unity.entities": "1.3.0",
-    "com.unity.collections": "1.5.1",
-    "com.unity.burst": "1.8.11",
-    "com.unity.mathematics": "1.3.2",
-    "com.unity.inputsystem": "1.7.0",
-    "com.bovinelabs.reaction": "2.0.0",
-    "com.bovinelabs.timeline": "1.0.0",
-    "com.bovinelabs.timeline.core": "1.0.0"
+    "com.unity.entities": "6.5.0",
+    "com.unity.collections": "6.5.0",
+    "com.unity.burst": "2.0.0",
+    "com.unity.mathematics": "1.4.0",
+    "com.unity.inputsystem": "1.19.0",
+    "com.unity.timeline": "6.6.0",
+    "com.bovinelabs.core": "1.6.2",
+    "com.bovinelabs.reaction": "0.6.0",
+    "com.bovinelabs.timeline": "1.0.2",
+    "com.bovinelabs.timeline.core": "1.0.0",
+    "com.bovinelabs.timeline.entitylinks": "0.1.0",
+    "com.bovinelabs.timeline.physics": "1.0.2",
+    "com.bovinelabs.timeline.grid.influence": "1.0.0",
+    "com.bovinelabs.traverse": "0.12.2-exp",
+    "com.bovinelabs.bridge": "1.1.0"
   },
-  "unity": "6000.3",
+  "unity": "6000.7",
   "author": {
     "name": "BovineLabs",
     "url": "https://bovinelabs.com"
@@ -22,7 +29,9 @@
     "dots",
     "timeline",
     "ecs",
-    "physics"
+    "input",
+    "combo",
+    "gamepad"
   ],
   "samples": [
     {

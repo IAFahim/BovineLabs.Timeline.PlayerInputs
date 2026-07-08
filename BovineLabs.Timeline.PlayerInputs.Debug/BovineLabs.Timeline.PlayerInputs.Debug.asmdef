@@ -9,7 +9,6 @@
     "BovineLabs.Timeline.EntityLinks",
     "BovineLabs.Timeline.EntityLinks.Data",
     "BovineLabs.Quill",
-    "PlayerInputs.Data",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",
@@ -20,7 +19,8 @@
     "BovineLabs.Essence",
     "BovineLabs.Essence.Data",
     "BovineLabs.Reaction.Data",
-    "BovineLabs.Reaction"
+    "BovineLabs.Reaction",
+    "Unity.InputSystem"
   ],
   "includePlatforms": [
     "Editor"

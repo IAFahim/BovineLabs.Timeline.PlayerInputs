@@ -190,6 +190,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
         private const string Group = "global::BovineLabs.Timeline.PlayerInputs.PlayerInputProjectionGroup";
         private const string AuthUtil = "global::BovineLabs.Timeline.PlayerInputs.Authoring.MultiInputSettingsAuthoringUtility";
         private const string Iar = "global::UnityEngine.InputSystem.InputActionReference";
+        private const string Alloc = "global::Unity.Collections.Allocator";
 
         private static string Render(FieldCandidate head, ImmutableArray<FieldCandidate> members)
         {
@@ -293,9 +294,26 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             sb.AppendLine("{");
             sb.AppendLine("    private bool warnedZero;");
             sb.AppendLine("    private bool warnedMulti;");
+            sb.Append("    private ").Append(Ent).AppendLine(".EntityQuery mapQuery;");
+            sb.Append("    private ").Append(Ent).AppendLine(".EntityQuery providerQuery;");
+            sb.Append("    private ").Append(Ent).AppendLine(".EntityQuery missingQuery;");
+            sb.Append("    private ").Append(Ent).AppendLine(".EntityQuery anyProviderQuery;");
             sb.AppendLine();
             sb.Append("    public void OnCreate(ref ").Append(Ent).AppendLine(".SystemState state)");
             sb.AppendLine("    {");
+            // IMPORTANT: this generated code is itself generator output, so the Entities source generators never
+            // post-process it. Only non-codegen APIs may appear here (no SystemAPI.*, no idiomatic foreach).
+            sb.Append("        this.mapQuery = state.GetEntityQuery(").Append(Ent)
+                .Append(".ComponentType.ReadOnly<").Append(map).AppendLine(">());");
+            sb.Append("        this.providerQuery = new ").Append(Ent).Append(".EntityQueryBuilder(")
+                .Append(Alloc).Append(".Temp).WithAllRW<").Append(t).Append(">().WithAll<").Append(Data)
+                .Append(".InputState>().WithAll<").Append(Data).Append(".InputAxis>().WithAll<").Append(Data)
+                .AppendLine(".ProviderTag>().Build(ref state);");
+            sb.Append("        this.missingQuery = new ").Append(Ent).Append(".EntityQueryBuilder(")
+                .Append(Alloc).Append(".Temp).WithAll<").Append(Data).Append(".ProviderTag>().WithNone<")
+                .Append(t).AppendLine(">().Build(ref state);");
+            sb.Append("        this.anyProviderQuery = state.GetEntityQuery(").Append(Ent)
+                .Append(".ComponentType.ReadOnly<").Append(Data).AppendLine(".ProviderTag>());");
             sb.Append("        state.RequireForUpdate<").Append(Data).AppendLine(".InputRegistry>();");
             sb.AppendLine("    }");
             sb.AppendLine();
@@ -303,22 +321,20 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             sb.AppendLine("    {");
             // Coop designers naturally place one *_Authoring per player → multiple maps. Don't silently die:
             // take the first map and warn once. Zero maps with providers present is also a once-only error.
+            // NOTE: hand-rolled EntityQuery iteration ONLY — this is generator output the Entities source
+            // generators never see, so SystemAPI.Query/idiomatic foreach would throw "No suitable code replacement".
             sb.Append("        var map = default(").Append(map).AppendLine(");");
-            sb.AppendLine("        var mapCount = 0;");
-            sb.Append("        foreach (var m in ").Append(Ent).Append(".SystemAPI.Query<").Append(Ent)
-                .Append(".RefRO<").Append(map).AppendLine(">>())");
-            sb.AppendLine("        {");
-            sb.AppendLine("            if (mapCount == 0) map = m.ValueRO;");
-            sb.AppendLine("            mapCount++;");
-            sb.AppendLine("        }");
+            sb.Append("        var mapEntities = this.mapQuery.ToEntityArray(").Append(Alloc).AppendLine(".Temp);");
+            sb.AppendLine("        var mapCount = mapEntities.Length;");
+            sb.AppendLine("        if (mapCount > 0)");
+            sb.Append("            map = state.EntityManager.GetComponentData<").Append(map).AppendLine(">(mapEntities[0]);");
+            sb.AppendLine("        mapEntities.Dispose();");
             sb.AppendLine();
             sb.AppendLine("        if (mapCount == 0)");
             sb.AppendLine("        {");
             sb.AppendLine("            if (!this.warnedZero)");
             sb.AppendLine("            {");
-            sb.Append("                var anyProvider = ").Append(Ent).Append(".SystemAPI.QueryBuilder().WithAll<")
-                .Append(Data).AppendLine(".ProviderTag>().Build();");
-            sb.AppendLine("                if (!anyProvider.IsEmpty)");
+            sb.AppendLine("                if (!this.anyProviderQuery.IsEmpty)");
             sb.AppendLine("                {");
             sb.Append("                    global::UnityEngine.Debug.LogError(\"").Append(map)
                 .AppendLine(": no \" + nameof(" + t + "_Authoring) + \" was baked but input providers exist; typed input is disabled. Add exactly one " + t + "_Authoring to the scene.\");");
@@ -338,28 +354,38 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             sb.AppendLine("        }");
             sb.AppendLine("        if (mapCount == 1) this.warnedMulti = false;");
             sb.AppendLine();
-            sb.Append("        var missing = ").Append(Ent).Append(".SystemAPI.QueryBuilder().WithAll<").Append(Data)
-                .Append(".ProviderTag>().WithNone<").Append(t).AppendLine(">().Build();");
-            sb.Append("        if (!missing.IsEmpty) state.EntityManager.AddComponent<").Append(t).AppendLine(">(missing);");
+            sb.AppendLine("        if (!this.missingQuery.IsEmpty)");
+            sb.Append("            state.EntityManager.AddComponent<").Append(t).AppendLine(">(this.missingQuery);");
             if (needsDelta)
             {
-                sb.Append("        var dt = (float)").Append(Ent).AppendLine(".SystemAPI.Time.DeltaTime;");
+                sb.AppendLine("        var dt = (float)state.WorldUnmanaged.Time.DeltaTime; // plain state read, not codegen-rewritten.");
             }
 
             sb.AppendLine();
-            sb.Append("        foreach (var (input, st, axes) in ").Append(Ent).Append(".SystemAPI.Query<")
-                .Append(Ent).Append(".RefRW<").Append(t).Append(">, ").Append(Ent).Append(".RefRO<").Append(Data)
-                .Append(".InputState>, ").Append(Ent).Append(".DynamicBuffer<").Append(Data)
-                .Append(".InputAxis>>().WithAll<").Append(Data).AppendLine(".ProviderTag>())");
+            sb.Append("        var typeHandle = state.GetComponentTypeHandle<").Append(t).AppendLine(">(false);");
+            sb.Append("        var stateHandle = state.GetComponentTypeHandle<").Append(Data).AppendLine(".InputState>(true);");
+            sb.Append("        var axisHandle = state.GetBufferTypeHandle<").Append(Data).AppendLine(".InputAxis>(true);");
+            sb.Append("        var chunks = this.providerQuery.ToArchetypeChunkArray(").Append(Alloc).AppendLine(".Temp);");
+            sb.AppendLine("        for (var ci = 0; ci < chunks.Length; ci++)");
             sb.AppendLine("        {");
-            sb.AppendLine("            ref var v = ref input.ValueRW;");
-            sb.AppendLine("            var s = st.ValueRO;");
+            sb.AppendLine("            var chunk = chunks[ci];");
+            sb.AppendLine("            var inputs = chunk.GetNativeArray(ref typeHandle);");
+            sb.AppendLine("            var states = chunk.GetNativeArray(ref stateHandle);");
+            sb.AppendLine("            var axisAccessor = chunk.GetBufferAccessor(ref axisHandle);");
+            sb.AppendLine("            for (var ei = 0; ei < chunk.Count; ei++)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var v = inputs[ei];");
+            sb.AppendLine("                var s = states[ei];");
+            sb.AppendLine("                var axes = axisAccessor[ei];");
             foreach (var f in members)
             {
                 sb.Append(FillLines(f));
             }
 
+            sb.AppendLine("                inputs[ei] = v;");
+            sb.AppendLine("            }");
             sb.AppendLine("        }");
+            sb.AppendLine("        chunks.Dispose();");
             sb.AppendLine("    }");
             sb.AppendLine("}");
 

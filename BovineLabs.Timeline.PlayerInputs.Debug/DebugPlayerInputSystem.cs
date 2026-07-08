@@ -1,5 +1,6 @@
 #if UNITY_EDITOR || BL_DEBUG
 using BovineLabs.Core;
+using BovineLabs.Core.ConfigVars;
 using BovineLabs.Quill;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
@@ -12,6 +13,20 @@ using UnityEngine;
 
 namespace BovineLabs.Timeline.PlayerInputs.Debug
 {
+    [Configurable]
+    public static class PlayerInputDebugConfig
+    {
+        // The overlay draws at hardcoded world coordinates (origin-relative), which is fine for the showcase but useless
+        // inside a real level where (0, 8, 0) may be underground or off-camera. This shifts the whole overlay so it can
+        // be parked wherever the developer is looking. Mirrors inputbuffer.offset.
+        [ConfigVar("playerinput.offset", 0f, 0f, 0f, 0f, "World anchor offset added to the player-input registry overlay.")]
+        public static readonly SharedStatic<Vector4> Offset = SharedStatic<Vector4>.GetOrCreate<OffsetTag>();
+
+        private struct OffsetTag
+        {
+        }
+    }
+
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ServerSimulation |
                        WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(DebugSystemGroup))]
@@ -49,7 +64,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             state.Dependency = new RenderJob
             {
                 Renderer = renderer,
-                Registry = registry.ProviderByPlayer,
+                Offset = ((float4)PlayerInputDebugConfig.Offset.Data).xyz,
+                Slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true),
                 Version = registry.Version,
                 States = states,
                 Axes = axes,
@@ -88,8 +104,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
         {
             public Drawer Renderer;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public NativeArray<Entity> Registry;
+            public float3 Offset;
+
+            [ReadOnly] public DynamicBuffer<ProviderSlot> Slots;
 
             public uint Version;
             [ReadOnly] public ComponentLookup<InputState> States;
@@ -107,10 +124,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 var column = 0;
                 for (var p = 0; p < SlotCount; p++)
                 {
-                    var provider = Registry[p];
-                    if (provider == Entity.Null) continue;
+                    var slot = Slots[p];
+                    if (slot.Human == Entity.Null && slot.Synthetic == Entity.Null) continue;
 
-                    RenderPlayer((byte)p, provider, column);
+                    RenderPlayer((byte)p, slot, column);
                     column++;
                 }
             }
@@ -119,7 +136,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             {
                 var occupied = 0;
                 for (var p = 0; p < SlotCount; p++)
-                    if (Registry[p] != Entity.Null)
+                    if (Slots[p].Human != Entity.Null || Slots[p].Synthetic != Entity.Null)
                         occupied++;
 
                 var title = new FixedString128Bytes();
@@ -130,12 +147,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 title.Append('/');
                 title.Append(SlotCount);
 
-                Renderer.Text128(new float3(0f, 8f, 0f), title, Color.white, 18f);
+                Renderer.Text128(Offset + new float3(0f, 8f, 0f), title, Color.white, 18f);
             }
 
             private void RenderEvents()
             {
-                var origin = new float3(-9f, 8f, 0f);
+                var origin = Offset + new float3(-9f, 8f, 0f);
                 Renderer.Text32(origin, "EVENTS", new Color(1f, 1f, 1f, 0.8f), 12f);
 
                 var cursor = origin + new float3(0f, -0.45f, 0f);
@@ -161,15 +178,39 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 }
             }
 
-            private void RenderPlayer(byte id, Entity provider, int column)
+            private void RenderPlayer(byte id, ProviderSlot slot, int column)
             {
-                var origin = new float3(column * 6f, 6f, 0f);
+                // Show the human provider when seated; fall back to the synthetic feed (and label it) otherwise.
+                var provider = slot.Human != Entity.Null ? slot.Human : slot.Synthetic;
 
+                var origin = Offset + new float3(column * 6f, 6f, 0f);
+
+                // Show BOTH slots per seat: "P0 hum #12 / syn #34" (a dash where a slot is empty).
                 var header = new FixedString64Bytes();
                 header.Append("P");
                 header.Append(id);
-                header.Append(" -> prov #");
-                header.Append(provider.Index);
+                header.Append(" hum ");
+                if (slot.Human != Entity.Null)
+                {
+                    header.Append('#');
+                    header.Append(slot.Human.Index);
+                }
+                else
+                {
+                    header.Append('-');
+                }
+
+                header.Append(" / syn ");
+                if (slot.Synthetic != Entity.Null)
+                {
+                    header.Append('#');
+                    header.Append(slot.Synthetic.Index);
+                }
+                else
+                {
+                    header.Append('-');
+                }
+
                 Renderer.Text64(origin, header, new Color(0.2f, 1f, 0.4f), 14f);
 
                 var stats = new FixedString64Bytes();

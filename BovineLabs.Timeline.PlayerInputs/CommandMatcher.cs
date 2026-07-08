@@ -4,13 +4,21 @@ using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
+    // Accumulator threaded through a sequence's steps. Ordering is enforced on Tick (a monotonic per-frame sequence
+    // number); the timing WINDOW is enforced on Millis (wall-clock), so a motion input's gap tolerance is identical
+    // regardless of framerate. HasPrior replaces the old uint.MaxValue sentinel (no aliasing at the max tick).
+    internal struct MatchWindow
+    {
+        public bool HasPrior;
+        public uint LastTick;
+        public uint LastMillis;
+    }
+
     internal static class CommandMatcher
     {
-        private const uint NoPriorMatch = uint.MaxValue;
-
         public static bool Evaluate(ref CommandStep step, in InputState state,
             in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask, ref int searchIndex,
-            ref uint lastMatchTick)
+            ref MatchWindow window)
         {
             switch (step.Mode)
             {
@@ -19,22 +27,22 @@ namespace BovineLabs.Timeline.PlayerInputs
                     return EvaluateLiveState(in step, in state);
                 case CommandMode.Contains:
                 case CommandMode.Consume:
-                    return EvaluateContains(in step, in history, ref consumeMask, ref lastMatchTick,
+                    return EvaluateContains(in step, in history, ref consumeMask, ref window,
                         step.Mode == CommandMode.Consume);
                 case CommandMode.FirstConsume:
-                    return EvaluateFirstConsume(in step, in history, ref consumeMask, ref lastMatchTick);
+                    return EvaluateFirstConsume(in step, in history, ref consumeMask, ref window);
                 case CommandMode.LastConsume:
-                    return EvaluateLastConsume(in step, in history, ref consumeMask, ref lastMatchTick);
+                    return EvaluateLastConsume(in step, in history, ref consumeMask, ref window);
                 case CommandMode.OrderedContains:
                 case CommandMode.OrderedConsume:
                     return EvaluateOrdered(in step, in history, ref consumeMask, ref searchIndex,
-                        ref lastMatchTick, step.Mode == CommandMode.OrderedConsume);
+                        ref window, step.Mode == CommandMode.OrderedConsume);
                 case CommandMode.OrderedFirstConsume:
                     return EvaluateOrderedFirstConsume(in step, in history, ref consumeMask, ref searchIndex,
-                        ref lastMatchTick);
+                        ref window);
                 case CommandMode.OrderedLastConsume:
                     return EvaluateOrderedLastConsume(in step, in history, ref consumeMask, ref searchIndex,
-                        ref lastMatchTick);
+                        ref window);
                 case CommandMode.NotContains:
                     return EvaluateNotContains(in step, in history, ref consumeMask);
                 case CommandMode.NotFirst:
@@ -58,14 +66,14 @@ namespace BovineLabs.Timeline.PlayerInputs
         }
 
         public static bool EvaluateContains(in CommandStep step, in DynamicBuffer<InputHistory> history,
-            ref BitArray256 consumeMask, ref uint lastMatchTick, bool consume)
+            ref BitArray256 consumeMask, ref MatchWindow window, bool consume)
         {
             for (var i = 0; i < history.Length; i++)
             {
                 if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                     history[i].Phase != step.Phase) continue;
 
-                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) continue;
+                if (!WithinWindow(history[i].Tick, history[i].Millis, step.MaxGapMillis, ref window)) continue;
                 if (consume) consumeMask[i] = true;
                 return true;
             }
@@ -74,13 +82,13 @@ namespace BovineLabs.Timeline.PlayerInputs
         }
 
         public static bool EvaluateFirstConsume(in CommandStep step, in DynamicBuffer<InputHistory> history,
-            ref BitArray256 consumeMask, ref uint lastMatchTick)
+            ref BitArray256 consumeMask, ref MatchWindow window)
         {
             for (var i = 0; i < history.Length; i++)
             {
                 if (consumeMask[i]) continue;
                 if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
-                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
+                if (!WithinWindow(history[i].Tick, history[i].Millis, step.MaxGapMillis, ref window)) return false;
                 consumeMask[i] = true;
                 return true;
             }
@@ -89,13 +97,13 @@ namespace BovineLabs.Timeline.PlayerInputs
         }
 
         public static bool EvaluateLastConsume(in CommandStep step, in DynamicBuffer<InputHistory> history,
-            ref BitArray256 consumeMask, ref uint lastMatchTick)
+            ref BitArray256 consumeMask, ref MatchWindow window)
         {
             for (var i = history.Length - 1; i >= 0; i--)
             {
                 if (consumeMask[i]) continue;
                 if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
-                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
+                if (!WithinWindow(history[i].Tick, history[i].Millis, step.MaxGapMillis, ref window)) return false;
                 consumeMask[i] = true;
                 return true;
             }
@@ -104,14 +112,14 @@ namespace BovineLabs.Timeline.PlayerInputs
         }
 
         public static bool EvaluateOrdered(in CommandStep step, in DynamicBuffer<InputHistory> history,
-            ref BitArray256 consumeMask, ref int searchIndex, ref uint lastMatchTick, bool consume)
+            ref BitArray256 consumeMask, ref int searchIndex, ref MatchWindow window, bool consume)
         {
             for (var i = searchIndex; i < history.Length; i++)
             {
                 if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                     history[i].Phase != step.Phase) continue;
 
-                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) continue;
+                if (!WithinWindow(history[i].Tick, history[i].Millis, step.MaxGapMillis, ref window)) continue;
                 if (consume) consumeMask[i] = true;
                 searchIndex = i + 1;
                 return true;
@@ -122,13 +130,13 @@ namespace BovineLabs.Timeline.PlayerInputs
 
         public static bool EvaluateOrderedFirstConsume(in CommandStep step,
             in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask, ref int searchIndex,
-            ref uint lastMatchTick)
+            ref MatchWindow window)
         {
             for (var i = searchIndex; i < history.Length; i++)
             {
                 if (consumeMask[i]) continue;
                 if (history[i].ActionId != step.ActionId || history[i].Phase != step.Phase) return false;
-                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
+                if (!WithinWindow(history[i].Tick, history[i].Millis, step.MaxGapMillis, ref window)) return false;
                 consumeMask[i] = true;
                 searchIndex = i + 1;
                 return true;
@@ -139,13 +147,13 @@ namespace BovineLabs.Timeline.PlayerInputs
 
         public static bool EvaluateOrderedLastConsume(in CommandStep step,
             in DynamicBuffer<InputHistory> history, ref BitArray256 consumeMask, ref int searchIndex,
-            ref uint lastMatchTick)
+            ref MatchWindow window)
         {
             for (var i = history.Length - 1; i >= searchIndex; i--)
             {
                 if (consumeMask[i] || history[i].ActionId != step.ActionId ||
                     history[i].Phase != step.Phase) continue;
-                if (!WithinWindow(history[i].Tick, step.MaxGapTicks, ref lastMatchTick)) return false;
+                if (!WithinWindow(history[i].Tick, history[i].Millis, step.MaxGapMillis, ref window)) return false;
                 consumeMask[i] = true;
                 searchIndex = i + 1;
                 return true;
@@ -190,15 +198,19 @@ namespace BovineLabs.Timeline.PlayerInputs
             return true;
         }
 
-        public static bool WithinWindow(uint matchTick, ushort maxGapTicks, ref uint lastMatchTick)
+        // Order is enforced on Tick (matchTick may not be older than the last matched entry); the timing window is
+        // enforced on Millis (framerate-independent). maxGapMillis == 0 disables the window.
+        public static bool WithinWindow(uint matchTick, uint matchMillis, ushort maxGapMillis, ref MatchWindow window)
         {
-            if (lastMatchTick != NoPriorMatch)
+            if (window.HasPrior)
             {
-                if (matchTick < lastMatchTick) return false;
-                if (maxGapTicks != 0 && matchTick - lastMatchTick > maxGapTicks) return false;
+                if (matchTick < window.LastTick) return false;
+                if (maxGapMillis != 0 && matchMillis - window.LastMillis > maxGapMillis) return false;
             }
 
-            lastMatchTick = matchTick == NoPriorMatch ? NoPriorMatch - 1 : matchTick;
+            window.HasPrior = true;
+            window.LastTick = matchTick;
+            window.LastMillis = matchMillis;
             return true;
         }
     }

@@ -91,7 +91,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
         public byte ActionId;
         public InputPhase Phase;
+
+        // Monotonic simulation-tick sequence number (one per rendered frame). Used ONLY for the ordering guarantee
+        // (a later-matched step's entry may not be older than the previous match). Not a timing window - ticks are
+        // framerate-dependent, so the window itself is measured in Millis below.
         public uint Tick;
+
+        // Wall-clock stamp in milliseconds (SystemAPI.Time.ElapsedTime * 1000) when the transition was recorded.
+        // Sequence gap windows (MaxGapMillis) compare THIS, so a motion input feels identical at 30 / 60 / 240 fps.
+        public uint Millis;
     }
 
     public struct PlayerId : IComponentData
@@ -118,23 +126,16 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
     {
     }
 
-    public struct InputSource : IComponentData
-    {
-        public Entity Provider;
-    }
-
-    public struct PlayerMoveInput : IComponentData
-    {
-        public float2 Value;
-    }
-
     public struct CommandStep
     {
         public byte ActionId;
         public CommandMode Mode;
         public InputPhase Phase;
 
-        public ushort MaxGapTicks;
+        // Max ELAPSED TIME (milliseconds) allowed between this matched step and the previously matched one.
+        // Baked from CommandStepData.MaxGapSeconds. 0 = unbounded. Time-based so the window is framerate-independent
+        // (the old MaxGapTicks was a per-frame count: 166 ms at 60 fps but 41 ms at 240 fps).
+        public ushort MaxGapMillis;
     }
 
     public struct CommandSequence
@@ -160,6 +161,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public EntityLinkRef Consumer;
 
         public EntityLinkRef EventRoute;
+
+        // Cross-clip evaluation priority when several CommandSequence clips share one consumer and compete to
+        // Consume the same history entries. LOWER value is evaluated FIRST (first crack at consuming). Ties break
+        // on the clip entity for a stable, per-run-deterministic order. Default 0.
+        public int Priority;
     }
 
     public struct CommandSequenceState : IComponentData
@@ -173,7 +179,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public BitArray256 AllowedActions;
     }
 
-    public struct BufferClearConfig : IComponentData, IEnableableComponent
+    public struct BufferClearConfig : IComponentData
     {
         public EntityLinkRef Consumer;
         public BitArray256 ActionMask;
@@ -245,6 +251,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public EntityLinkRef EventRoute;
         public ConditionKey OnInputStart;
         public ConditionKey OnInputEnd;
+
+        // True (default): if the button is already held when the clip activates, OnInputStart fires on the enter
+        // frame (level-as-edge). False: seed the enter frame as "already active" so OnInputStart only fires on a
+        // FRESH press after activation - correct for a charge attack the player must re-press inside the window.
+        public bool TriggerIfAlreadyHeld;
     }
 
     public struct InputEventsState : IComponentData
@@ -307,14 +318,6 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public static int OverflowCount(int length, int limit)
         {
             return math.max(0, length - limit);
-        }
-
-        public static void Plan(int historyLength, int downCount, int upCount, bool hasConfiguredLimit,
-            int configuredLimit, out int totalToAdd, out int limit, out int evictBefore)
-        {
-            totalToAdd = downCount + upCount;
-            limit = hasConfiguredLimit ? ClampLimit(configuredLimit) : DefaultLimit;
-            evictBefore = EvictCount(historyLength, totalToAdd, limit);
         }
     }
 

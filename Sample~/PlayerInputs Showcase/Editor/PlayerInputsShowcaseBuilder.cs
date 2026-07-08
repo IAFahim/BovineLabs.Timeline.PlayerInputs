@@ -300,7 +300,7 @@ public static class PlayerInputsShowcaseBuilder
                 {
                     Steps = new[]
                     {
-                        new CommandStepData { Action = attackAction, Mode = CommandMode.Consume, Phase = InputPhase.Down, MaxGapTicks = 0 },
+                        new CommandStepData { Action = attackAction, Mode = CommandMode.Consume, Phase = InputPhase.Down, MaxGapSeconds = 0 },
                     },
                     Condition = evLightHit,
                     Value = 1,
@@ -340,16 +340,16 @@ public static class PlayerInputsShowcaseBuilder
             ca.eventRouteLink = essenceLink;
             // Only registered actions resolve; unregistered direction actions fail-closed at bake.
             // We express the motion with the registered Move axis (Down/DownForward/Forward share Move)
-            // followed by Attack, using OrderedConsume + MaxGapTicks for a true timed link.
+            // followed by Attack, using OrderedConsume + MaxGapSeconds for a true timed link.
             ca.Sequences = new[]
             {
                 new CommandSequenceData
                 {
                     Steps = new[]
                     {
-                        new CommandStepData { Action = moveAction, Mode = CommandMode.OrderedConsume, Phase = InputPhase.Down, MaxGapTicks = 10 },
-                        new CommandStepData { Action = moveAction, Mode = CommandMode.OrderedConsume, Phase = InputPhase.Down, MaxGapTicks = 10 },
-                        new CommandStepData { Action = attackAction, Mode = CommandMode.OrderedConsume, Phase = InputPhase.Down, MaxGapTicks = 10 },
+                        new CommandStepData { Action = moveAction, Mode = CommandMode.OrderedConsume, Phase = InputPhase.Down, MaxGapSeconds = 0.16f },
+                        new CommandStepData { Action = moveAction, Mode = CommandMode.OrderedConsume, Phase = InputPhase.Down, MaxGapSeconds = 0.16f },
+                        new CommandStepData { Action = attackAction, Mode = CommandMode.OrderedConsume, Phase = InputPhase.Down, MaxGapSeconds = 0.16f },
                     },
                     Condition = evFireball,
                     Value = 1,
@@ -363,7 +363,7 @@ public static class PlayerInputsShowcaseBuilder
             wire.Binds.Add(new TrackBind { TrackName = "Command", BindActorName = "Cmd1_Consumer", Kind = BindKind.Consumer });
             FinishWire(timeline, wire, CmdX, z,
                 "Motion combo (236P)",
-                "OrderedConsume timed link (MaxGapTicks 10) -> OnFireball, Repeatable. Needs live directional+Attack input.",
+                "OrderedConsume timed link (MaxGapSeconds 0.16) -> OnFireball, Repeatable. Needs live directional+Attack input.",
                 CmdColor);
         }
     }

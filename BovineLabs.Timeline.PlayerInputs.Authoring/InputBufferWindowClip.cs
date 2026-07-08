@@ -21,7 +21,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         [Tooltip("Where to resolve the entity that owns the ConsumerLink from.")]
         public Target ReadRootFrom = Target.Owner;
 
-        [Tooltip("Empty means ALL inputs buffered. Specifics mean ONLY those are buffered.")]
+        [Tooltip("Empty means ALL inputs buffered. Specifics mean ONLY those are buffered. " +
+                 "Empty = ALL actions. Broad windows can evict earlier combo steps under mashy input; " +
+                 "prefer listing only the actions your sequences read.")]
         public InputActionReference[] AllowedActions = Array.Empty<InputActionReference>();
 
         public override double duration => 1;
@@ -31,9 +33,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
 
+            if (!MultiInputSettingsAuthoringUtility.RequireLink(consumerLink, this, $"InputBufferWindowClip '{name}'", "consumerLink"))
+                return;
+
             var mask = default(BitArray256);
             if (AllowedActions == null || AllowedActions.Length == 0)
-                for (var i = 0; i < 256; i++)
+                for (var i = 0; i < MultiInputSettings.MaxActions; i++)
                     mask[i] = true;
             else
                 foreach (var action in AllowedActions)

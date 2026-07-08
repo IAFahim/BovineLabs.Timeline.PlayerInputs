@@ -9,6 +9,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Data.Builders
             where T : struct, IEntityCommands
         {
             commands.AddComponent(new PlayerId { Value = playerId });
+            // Baked synthetics can't use the bridge's static counter; stamp the max so they tie-break LAST in a
+            // synthetic-vs-synthetic duplicate (they occupy their own slot, so this only matters against each other).
+            commands.AddComponent(new ProviderSeq { Value = uint.MaxValue });
             commands.AddComponent<ProviderTag>();
             commands.AddComponent<SyntheticProviderTag>();
             commands.AddComponent<InputState>();

@@ -5,7 +5,6 @@
     "BovineLabs.Core",
     "BovineLabs.Core.Extensions",
     "BovineLabs.Quill",
-    "PlayerInputs.Data",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",

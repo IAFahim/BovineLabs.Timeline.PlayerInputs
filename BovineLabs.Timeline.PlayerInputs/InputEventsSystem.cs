@@ -17,8 +17,36 @@ using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
+    // Pure enter-frame seed for InputEventsState.WasInputActive. Kept separate so the level-vs-edge decision is
+    // unit-testable without the ECS/link scaffolding.
+    internal static class InputEventsLogic
+    {
+        // triggerIfAlreadyHeld: seed false so an already-held input registers as a rising edge (OnInputStart fires).
+        // !triggerIfAlreadyHeld: seed to the current level so a held input is "already started" and only a fresh
+        // press after activation fires OnInputStart.
+        public static bool SeedWasInputActive(bool triggerIfAlreadyHeld, bool hasInput)
+        {
+            return !triggerIfAlreadyHeld && hasInput;
+        }
+
+        // Deactivate edge: when a clip that had an active input turns off, OnInputEnd must fire EXACTLY once.
+        // Returns true only on the transition where the end event should be dispatched, and latches
+        // wasInputActive to false so a second deactivate frame (a lingering ClipActivePrevious) cannot re-fire.
+        public static bool ConsumeDeactivateEnd(ref bool wasInputActive)
+        {
+            if (!wasInputActive)
+            {
+                return false;
+            }
+
+            wasInputActive = false;
+            return true;
+        }
+    }
+
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct InputEventsSystem : ISystem
     {
         private UnsafeComponentLookup<Targets> _targetsLookup;
@@ -27,11 +55,10 @@ namespace BovineLabs.Timeline.PlayerInputs
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<InputState> _states;
         private ComponentLookup<PlayerId> _playerIds;
+        private ComponentLookup<PlayerOverride> _overrides;
+        private ComponentLookup<ClipActivePrevious> _clipActivePrevious;
 
-        private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
-        private NativeList<Entity> _uniqueKeys;
-        private ConditionEventWriter.Lookup _writers;
-        private ConditionEventWriter.SingletonData _writersSingletonData;
+        private ConditionEventDispatch _dispatch;
 
         private EntityQuery _activeClipQuery;
         private EntityQuery _deactivatedClipQuery;
@@ -39,11 +66,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            if (_uniqueKeys.IsCreated)
-            {
-                _eventChanges.Dispose();
-                _uniqueKeys.Dispose();
-            }
+            _dispatch.Dispose();
         }
 
         [BurstCompile]
@@ -57,11 +80,10 @@ namespace BovineLabs.Timeline.PlayerInputs
             _axes = state.GetBufferLookup<InputAxis>(true);
             _states = state.GetComponentLookup<InputState>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
+            _overrides = state.GetComponentLookup<PlayerOverride>(true);
+            _clipActivePrevious = state.GetComponentLookup<ClipActivePrevious>(true);
 
-            _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
-            _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
-            _writersSingletonData.Create(ref state);
-            _writers.Create(ref state);
+            _dispatch.Create(ref state);
 
             _activeClipQuery = new EntityQueryBuilder(Allocator.Temp)
                 .WithAll<ClipActive, InputEventsConfig, InputEventsState>()
@@ -81,65 +103,39 @@ namespace BovineLabs.Timeline.PlayerInputs
             _axes.Update(ref state);
             _states.Update(ref state);
             _playerIds.Update(ref state);
-            _writers.Update(ref state, _writersSingletonData);
-
-            var registry = SystemAPI.GetSingleton<InputRegistry>();
+            _overrides.Update(ref state);
+            _clipActivePrevious.Update(ref state);
+            _dispatch.Update(ref state);
 
             var capacity = math.max(1, _activeClipQuery.CalculateEntityCount() +
                                        _deactivatedClipQuery.CalculateEntityCount());
             var uniqueKeySet = new NativeParallelHashSet<Entity>(capacity, state.WorldUpdateAllocator);
 
-            state.Dependency = new InitJob().ScheduleParallel(state.Dependency);
-
             state.Dependency = new GatherJob
             {
-                EventChanges = _eventChanges.AsWriter(),
+                EventChanges = _dispatch.EventWriter,
                 UniqueKeys = uniqueKeySet.AsParallelWriter(),
                 TargetsLookup = _targetsLookup,
                 Sources = _sources,
                 Entries = _entries,
-                Registry = registry.ProviderByPlayer,
+                Slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true),
                 Axes = _axes,
                 States = _states,
-                PlayerIds = _playerIds
+                PlayerIds = _playerIds,
+                Overrides = _overrides,
+                ClipActivePrevious = _clipActivePrevious
             }.ScheduleParallel(state.Dependency);
 
             state.Dependency = new DeactivateJob
             {
-                EventChanges = _eventChanges.AsWriter(),
+                EventChanges = _dispatch.EventWriter,
                 UniqueKeys = uniqueKeySet.AsParallelWriter(),
                 TargetsLookup = _targetsLookup,
                 Sources = _sources,
                 Entries = _entries
             }.ScheduleParallel(state.Dependency);
 
-            state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
-
-            state.Dependency = new CollectEventKeysJob
-            {
-                UniqueKeys = _uniqueKeys,
-                UniqueKeySet = uniqueKeySet
-            }.Schedule(state.Dependency);
-
-            state.Dependency = new TriggerEventsJob
-            {
-                Keys = _uniqueKeys.AsDeferredJobArray(),
-                GroupChanges = reader,
-                Writers = _writers
-            }.Schedule(_uniqueKeys, 64, state.Dependency);
-
-            state.Dependency = _eventChanges.Clear(state.Dependency);
-        }
-
-        [BurstCompile]
-        [WithAll(typeof(ClipActive))]
-        [WithNone(typeof(ClipActivePrevious))]
-        private partial struct InitJob : IJobEntity
-        {
-            private void Execute(ref InputEventsState state)
-            {
-                state.WasInputActive = false;
-            }
+            state.Dependency = _dispatch.Flush(uniqueKeySet, state.Dependency);
         }
 
         [BurstCompile]
@@ -150,21 +146,23 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public NativeArray<Entity> Registry;
+            [ReadOnly] public DynamicBuffer<ProviderSlot> Slots;
 
             [ReadOnly] public BufferLookup<InputAxis> Axes;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public ComponentLookup<InputState> States;
+            [ReadOnly] public ComponentLookup<InputState> States;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public ComponentLookup<PlayerId> PlayerIds;
+            [ReadOnly] public ComponentLookup<PlayerId> PlayerIds;
+
+            [ReadOnly] public ComponentLookup<PlayerOverride> Overrides;
+
+            [ReadOnly] public ComponentLookup<ClipActivePrevious> ClipActivePrevious;
 
             public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
             public NativeParallelHashSet<Entity>.ParallelWriter UniqueKeys;
 
-            private void Execute(in TrackBinding binding, in InputEventsConfig config, ref InputEventsState state)
+            private void Execute(Entity entity, in TrackBinding binding, in InputEventsConfig config,
+                ref InputEventsState state)
             {
                 var targetEntity = binding.Value;
                 if (targetEntity == Entity.Null) return;
@@ -176,7 +174,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 var hasInput = false;
                 var foundAxis = false;
-                if (InputAccess.TryGetAxes(Registry, Axes, pid.Value, out var axesBuf))
+                if (InputAccess.TryGetAxes(Slots, Axes, Overrides, consumer, pid.Value, out var axesBuf))
                 {
                     for (var i = 0; i < axesBuf.Length; i++)
                     {
@@ -189,10 +187,18 @@ namespace BovineLabs.Timeline.PlayerInputs
 
                 // Button-type actions never appear in the axis buffer — the bridge only writes axes.
                 // Fall back to the held bit in InputState so start/end edges fire for buttons too.
-                if (!foundAxis && InputAccess.TryGetState(Registry, States, pid.Value, out var inputState))
+                if (!foundAxis && InputAccess.TryGetState(Slots, States, Overrides, consumer, pid.Value, out var inputState))
                 {
                     hasInput = inputState.Held[config.ActionId];
                 }
+
+                // Enter frame = ClipActive on but ClipActivePrevious not yet mirrored (ClipActivePreviousSystem runs
+                // OrderLast). Seed WasInputActive so an already-held input either fires OnInputStart immediately
+                // (TriggerIfAlreadyHeld) or is treated as already-started (a fresh press is then required).
+                var isEnter = !(ClipActivePrevious.HasComponent(entity) &&
+                                ClipActivePrevious.IsComponentEnabled(entity));
+                if (isEnter)
+                    state.WasInputActive = InputEventsLogic.SeedWasInputActive(config.TriggerIfAlreadyHeld, hasInput);
 
                 var risingEdge = hasInput && !state.WasInputActive;
                 var fallingEdge = !hasInput && state.WasInputActive;
@@ -231,8 +237,7 @@ namespace BovineLabs.Timeline.PlayerInputs
 
             private void Execute(in TrackBinding binding, in InputEventsConfig config, ref InputEventsState state)
             {
-                if (!state.WasInputActive) return;
-                state.WasInputActive = false;
+                if (!InputEventsLogic.ConsumeDeactivateEnd(ref state.WasInputActive)) return;
 
                 if (config.OnInputEnd.Equals(ConditionKey.Null)) return;
 

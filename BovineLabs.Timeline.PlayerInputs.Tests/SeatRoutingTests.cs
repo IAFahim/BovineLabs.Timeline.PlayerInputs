@@ -27,9 +27,11 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
             var mapEntity = Manager.CreateEntity();
             Manager.AddComponentData(mapEntity, new SeatTestInput_Map { Jump = 0, Move = 1 });
 
-            // Projection requires the registry singleton to run.
+            // Projection requires the registry singleton to run. The seat->provider table now lives in a
+            // DynamicBuffer<ProviderSlot> on the same entity, so create it sized to the full seat range.
             var registry = Manager.CreateEntity();
             Manager.AddComponent<InputRegistry>(registry);
+            Manager.AddBuffer<ProviderSlot>(registry).Resize(256, Unity.Collections.NativeArrayOptions.ClearMemory);
 
             var seatA = MakeSeat(jumpDown: true, move: new float2(1f, 0f));
             var seatB = MakeSeat(jumpDown: false, move: new float2(0f, 1f));

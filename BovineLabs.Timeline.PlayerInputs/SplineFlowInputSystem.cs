@@ -9,6 +9,7 @@ using BovineLabs.Timeline.PlayerInputs.Data;
 using BovineLabs.Timeline.PlayerInputs.Flow.Data;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Profiling;
 
 namespace BovineLabs.Timeline.PlayerInputs.Flow
 {
@@ -36,12 +37,13 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation)]
     public partial struct SplineFlowInputSystem : ISystem
     {
+        private static readonly ProfilerMarker Marker = new("SplineFlowInputSystem");
+
         private UnsafeComponentLookup<Targets> _targets;
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private ComponentLookup<PlayerId> _playerIds;
         private BufferLookup<InputAxis> _axisBuffers;
-        private ComponentLookup<SyntheticProviderTag> _synthetic;
 
 #if UNITY_EDITOR
         private double _nextMissingSplineWarn;
@@ -58,11 +60,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
             _axisBuffers = state.GetBufferLookup<InputAxis>(false);
-            _synthetic = state.GetComponentLookup<SyntheticProviderTag>(true);
         }
 
         public void OnUpdate(ref SystemState state)
         {
+            using var auto = Marker.Auto();
+
             // Required (matches GridFlowInputSystem): we read Targets/EntityLink* via Unsafe*Lookup and write the
             // InputAxis buffer on the MAIN thread, which bypasses the safety system's auto-completion. When GridFlow
             // runs first it already drained the graph so this is ~free; when GridFlow is absent this is the only sync
@@ -75,10 +78,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             _entries.Update(ref state);
             _playerIds.Update(ref state);
             _axisBuffers.Update(ref state);
-            _synthetic.Update(ref state);
 
             var splines = SystemAPI.GetSingleton<SplineRegistry>().Map;
-            var registry = SystemAPI.GetSingleton<InputRegistry>().ProviderByPlayer;
+            var slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true);
             var dt = SystemAPI.Time.DeltaTime;
 
             foreach (var (config, stateRef, binding, weight, activePrev) in
@@ -123,11 +125,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (!_playerIds.TryGetComponent(consumer, out var playerId))
                     continue;
 
-                var provider = registry[playerId.Value];
+                // Steer the seat's SYNTHETIC slot directly (the slot an override consumer reads).
+                var provider = slots[playerId.Value].Synthetic;
                 if (provider == Entity.Null || !_axisBuffers.HasBuffer(provider))
-                    continue;
-
-                if (!_synthetic.HasComponent(provider))
                     continue;
 
                 var delta = SplineFlowInputMath.Delta(cfg.Traversal, cfg.Speed, cfg.TraversalSeconds, dt, spline.Value.Length);

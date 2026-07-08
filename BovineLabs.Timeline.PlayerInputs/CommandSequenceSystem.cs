@@ -16,22 +16,33 @@ using Unity.Jobs;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
+    // Cross-clip CommandSequence evaluation order. Lower Priority first (first crack at Consuming shared history);
+    // the clip entity is the stable tiebreak so the order is deterministic within a run.
+    internal struct ClipSortKey : System.IComparable<ClipSortKey>
+    {
+        public int Priority;
+        public Entity Clip;
+
+        public int CompareTo(ClipSortKey other)
+        {
+            return Priority != other.Priority ? Priority.CompareTo(other.Priority) : Clip.CompareTo(other.Clip);
+        }
+    }
+
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(CommandSequenceResetSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct CommandSequenceSystem : ISystem
     {
-        private NativeParallelMultiHashMapFallback<Entity, EventAmount> _eventChanges;
-        private NativeList<Entity> _uniqueKeys;
-        private ConditionEventWriter.Lookup _writers;
-        private ConditionEventWriter.SingletonData _writersSingletonData;
+        private ConditionEventDispatch _dispatch;
 
         private UnsafeComponentLookup<Targets> _targetsLookup;
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private ComponentLookup<InputState> _states;
         private ComponentLookup<PlayerId> _playerIds;
+        private ComponentLookup<PlayerOverride> _overrides;
         private BufferLookup<InputHistory> _histories;
 
         private ComponentLookup<CommandSequenceConfig> _configs;
@@ -43,11 +54,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            if (_uniqueKeys.IsCreated)
-            {
-                _eventChanges.Dispose();
-                _uniqueKeys.Dispose();
-            }
+            _dispatch.Dispose();
         }
 
         [BurstCompile]
@@ -56,16 +63,14 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             state.RequireForUpdate<InputRegistry>();
 
-            _eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
-            _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
-            _writersSingletonData.Create(ref state);
-            _writers.Create(ref state);
+            _dispatch.Create(ref state);
 
             _targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
             _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _states = state.GetComponentLookup<InputState>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
+            _overrides = state.GetComponentLookup<PlayerOverride>(true);
             _histories = state.GetBufferLookup<InputHistory>();
 
             _configs = state.GetComponentLookup<CommandSequenceConfig>(true);
@@ -81,18 +86,17 @@ namespace BovineLabs.Timeline.PlayerInputs
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            _writers.Update(ref state, _writersSingletonData);
+            _dispatch.Update(ref state);
             _targetsLookup.Update(ref state);
             _sources.Update(ref state);
             _entries.Update(ref state);
             _states.Update(ref state);
             _playerIds.Update(ref state);
+            _overrides.Update(ref state);
             _histories.Update(ref state);
             _configs.Update(ref state);
             _bindings.Update(ref state);
             _commandStates.Update(ref state);
-
-            var registry = SystemAPI.GetSingleton<InputRegistry>();
 
             // Fresh per-frame set (auto-freed): sizing to the live clip count removes the old fixed-64 overflow, and
             // allocating anew each frame removes the main-thread Clear()-vs-in-flight-job race on a persistent set.
@@ -105,7 +109,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.Dependency = new GatherJob
             {
                 Clips = activeClips,
-                EventChanges = _eventChanges.AsWriter(),
+                EventChanges = _dispatch.EventWriter,
                 UniqueKeys = uniqueKeySet.AsParallelWriter(),
                 Configs = _configs,
                 Bindings = _bindings,
@@ -113,30 +117,16 @@ namespace BovineLabs.Timeline.PlayerInputs
                 TargetsLookup = _targetsLookup,
                 Sources = _sources,
                 Entries = _entries,
-                Registry = registry.ProviderByPlayer,
+                Slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true),
                 States = _states,
                 PlayerIds = _playerIds,
+                Overrides = _overrides,
                 Histories = _histories
             }.Schedule(state.Dependency);
 
             state.Dependency = activeClips.Dispose(state.Dependency);
 
-            state.Dependency = _eventChanges.Apply(state.Dependency, out var reader);
-
-            state.Dependency = new CollectEventKeysJob
-            {
-                UniqueKeys = _uniqueKeys,
-                UniqueKeySet = uniqueKeySet
-            }.Schedule(state.Dependency);
-
-            state.Dependency = new TriggerEventsJob
-            {
-                Keys = _uniqueKeys.AsDeferredJobArray(),
-                GroupChanges = reader,
-                Writers = _writers
-            }.Schedule(_uniqueKeys, 64, state.Dependency);
-
-            state.Dependency = _eventChanges.Clear(state.Dependency);
+            state.Dependency = _dispatch.Flush(uniqueKeySet, state.Dependency);
         }
 
         [BurstCompile]
@@ -155,28 +145,40 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public NativeArray<Entity> Registry;
+            [ReadOnly] public DynamicBuffer<ProviderSlot> Slots;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public ComponentLookup<InputState> States;
+            [ReadOnly] public ComponentLookup<InputState> States;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public ComponentLookup<PlayerId> PlayerIds;
+            [ReadOnly] public ComponentLookup<PlayerId> PlayerIds;
+
+            [ReadOnly] public ComponentLookup<PlayerOverride> Overrides;
 
             public BufferLookup<InputHistory> Histories;
 
             public void Execute()
             {
-                Clips.Sort();
-
+                // Cross-clip order is author-controlled: sort by (Priority asc, Entity asc). Lower Priority gets the
+                // first crack at Consuming shared history; the Entity tiebreak keeps it deterministic per run even
+                // when CoreCLR recycles entity indices. (Raw Clips.Sort() was entity-order only - meaningless to a
+                // designer, and it shifted with scene/subscene load order.)
+                var keys = new NativeList<ClipSortKey>(Clips.Length, Allocator.Temp);
                 for (var c = 0; c < Clips.Length; c++)
                 {
                     var clip = Clips[c];
+                    keys.Add(new ClipSortKey { Priority = Configs[clip].Priority, Clip = clip });
+                }
+
+                keys.Sort();
+
+                for (var c = 0; c < keys.Length; c++)
+                {
+                    var clip = keys[c].Clip;
                     var commandState = CommandStates[clip];
                     Evaluate(clip, ref commandState, Configs[clip], Bindings[clip]);
                     CommandStates[clip] = commandState;
                 }
+
+                keys.Dispose();
             }
 
             private void Evaluate(Entity clip, ref CommandSequenceState commandState,
@@ -188,7 +190,7 @@ namespace BovineLabs.Timeline.PlayerInputs
                 if (!config.Consumer.TryResolve(binding.Value, targets, Sources, Entries, out var consumer)) return;
 
                 if (!PlayerIds.TryGetComponent(consumer, out var pid)) return;
-                if (!InputAccess.TryGetState(Registry, States, pid.Value, out var state)) return;
+                if (!InputAccess.TryGetState(Slots, States, Overrides, consumer, pid.Value, out var state)) return;
                 if (!Histories.TryGetBuffer(consumer, out var history)) return;
 
                 ref var sequences = ref config.Blob.Value.Sequences;
@@ -202,11 +204,11 @@ namespace BovineLabs.Timeline.PlayerInputs
                     var searchIndex = 0;
                     var matched = true;
 
-                    var lastMatchTick = uint.MaxValue;
+                    var window = default(MatchWindow);
 
                     for (var i = 0; i < seq.Steps.Length; i++)
                         if (!CommandMatcher.Evaluate(ref seq.Steps[i], state, history, ref consumeMask,
-                                ref searchIndex, ref lastMatchTick))
+                                ref searchIndex, ref window))
                         {
                             matched = false;
                             break;

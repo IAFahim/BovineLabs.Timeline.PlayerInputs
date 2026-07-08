@@ -71,15 +71,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
 
-            if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var consumerKey))
-            {
-                Debug.LogError($"NavFlowInputClip '{name}' missing ConsumerLink schema.", this);
+            if (!MultiInputSettingsAuthoringUtility.RequireLink(ConsumerLink, this, $"NavFlowInputClip '{name}'", "ConsumerLink"))
                 return;
-            }
+
+            EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var consumerKey);
 
             if (!EntityLinkAuthoringUtility.TryGetKey(ProxyLink, out var proxyKey))
             {
-                Debug.LogError($"NavFlowInputClip '{name}' missing ProxyLink schema.", this);
+                Debug.LogError($"NavFlowInputClip '{name}': 'ProxyLink' is unassigned or unregistered. Clip will be skipped.", this);
                 return;
             }
 

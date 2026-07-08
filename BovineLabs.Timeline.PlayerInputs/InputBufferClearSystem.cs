@@ -12,7 +12,8 @@ using Unity.Entities;
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
-    [UpdateAfter(typeof(CommandSequenceSystem))]
+    [UpdateAfter(typeof(ConsumerBufferMaskSystem))]
+    [UpdateBefore(typeof(ConsumerHistorySystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct InputBufferClearSystem : ISystem

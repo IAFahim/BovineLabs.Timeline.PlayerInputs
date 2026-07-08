@@ -12,10 +12,10 @@ The package is in unusually good shape for its size: the byte-id + `BitArray256`
 extracted and well-tested (~140 unit tests), bake-time validation is loud, the focus-loss/refocus edge protocol is correct,
 and the debug drawers are genuinely useful. The remaining risk concentrates in four places:
 
-1. **The control-authority feature is inert.** `Controllable`/`PlayerOverride`/`OverridePolicy` are computed every frame by
-   `ControlAuthoritySystem`, but **no system reads `PlayerOverride`**. Live player input is never suppressed while a
-   timeline drives, and the registry's "human beats synthetic" collision rule actively *prevents* a synthetic provider from
-   taking over a human seat. The package's headline "timeline can take over the player" promise does not function end-to-end.
+1. **Control authority now arbitrates end-to-end (was inert; fixed in the rework).** The registry is dual-slot
+   (`Human`/`Synthetic`), `InputAccess.TryGetState/TryGetAxes` select the synthetic slot under `PlayerOverride`, and
+   `ControlOverrideClip`/`ControlOverrideSystem` own the "timeline takes over the player" affordance — the old
+   "human beats synthetic" block is gone. See the Critical #1 status note; items 2-4 below still stand.
 2. **Combo timing is framerate-dependent.** `SimulationTick` increments once per rendered frame, so `MaxGapTicks` — the
    fighting-game motion-input window — means 166 ms at 60 fps, 41 ms at 240 fps, 333 ms at 30 fps. Every authored motion
    input (236P etc.) changes difficulty with the player's framerate.
@@ -27,6 +27,45 @@ and the debug drawers are genuinely useful. The remaining risk concentrates in f
 Everything else is medium/low: world-filter matrix inconsistencies, one suppressed-safety-system race window on the registry
 array, log-spam/Burst-logging convention violations, dead API surface, asmdef hygiene, and a healthy list of missing
 integration tests.
+
+## Status Reconciliation (2026-07-07)
+
+A follow-up pass reconciled every `### TODO:` section and every checklist item below against the code as it exists today
+(three implementation waves landed since the audit above was written). **Executive Summary claim #1 above is now stale**:
+control authority is no longer inert — `ControlOverrideClip`/`ControlOverrideSystem` now own the `PlayerOverride` bit and
+`ControlAuthoritySystem` correctly defers to them; see the Critical #1 status note below. Treat the Executive Summary as a
+historical snapshot of the pre-fix state, not the current one.
+
+**Counts** (top-level `### TODO:` sections plus checklist items; updated after the 2026-07-07 gap-closing pass that
+landed the Sample `MaxGapSeconds` fix, clip-baker skip unification, dead-API removal, the registry BLLogger half of the
+logging TODO, and the three missing tests):
+- ✅ **DONE:** 32
+- 🟡 **PARTIAL:** 13
+- ❌ **OPEN:** 12
+- ⏸ **NEEDS MAINTAINER DECISION:** 1
+
+**Every OPEN or DECISION item, with a one-line next step:**
+- ⏸ CommandMatcher unordered-monotonicity / `OrderedLastConsume` semantics — get a maintainer ruling; tests in `CommandMatcherTests.cs` currently pin the existing (possibly accidental) behavior.
+- ❌ Naming and file-hygiene sweep — `git mv` the lowercase filenames, move `SyntheticProviderTag`, add `FormerlySerializedAs` to `AxisTransformClip.ConsumerLink`, fix `CommandSequenceClip.duration`.
+- ❌ Showcase preflight assert (Designer Safety #10) — add a missing-asset scan to `PlayerInputsShowcaseBuilder.cs` before it builds cells.
+- ❌ Per-timeline static scan for sequence steps with no covering window (Validation & Guard, build-time) — write the Editor-time scan; currently only the duplicate/unassigned-action gate exists.
+- ❌ `ControlAuthoritySystem` pause/timescale audit — decide scaled vs. unscaled `DeltaTime` for `ReleaseIdleSeconds` and document/implement the choice.
+- ❌ `PlayerInputsSystemGroup` — create the child group if pipeline-order readability becomes a real pain point (still just a suggestion).
+- ❌ Sequence-match explainer tool (`DebugCommandSequenceSystem`) — build it; this is the package's highest-leverage missing debug tool.
+- ❌ Authority overlay detail (Debugging #2) — extend `DebugPlayerInputSystem` beyond the existing per-seat driving count to show idle-seconds/trigger.
+- ❌ Event fire trace in `TriggerEventsJob` — add a config-var-gated log line.
+- ❌ `player_input history` CLI op — add it to `PlayerInputTool.cs`.
+- ✅ Buffer-clear ordering regression test — DONE: `InputBufferClearOrderingTests.cs` pins the `UpdateAfter(ConsumerBufferMaskSystem)`/`UpdateBefore(ConsumerHistorySystem)` ordering (revert flips it, test fails).
+- 🟡 `OrderedLastConsume` truth-table tests — only one test exists; expand once the maintainer decision above lands.
+- 🟡 `ConsumerHistorySystem` eviction-at-limit system-level test — pure math is tested, system wiring is not.
+- ✅ `InputEventsSystem` deactivate-edge test — DONE: `InputEventsDeactivateTests.cs` pins `OnInputEnd` firing exactly once via the extracted `InputEventsLogic.ConsumeDeactivateEnd` helper (which `DeactivateJob` now calls).
+- ✅ Registry churn test (provider destroyed without retirement) — DONE: `Registry_ProviderReplacedWithoutRetiring_ResolvesToSurvivor_NoErrorSpam` in `InputRegistryTests.cs`.
+
+**Known re-bake / re-author migration notes** (apply before any playtest against current code):
+1. Re-bake all input timelines — `TimelineOverride`, `MaxGapMillis`, `Priority`, and `TriggerIfAlreadyHeld` are now baked data; stale bakes will not reflect the current authority/timing/priority behavior.
+2. Authored `MaxGapTicks` values deserialize as `0` (= unbounded) under the new `MaxGapSeconds` field — every combo/motion-input gap window must be re-entered in seconds, not left to auto-migrate to an equivalent value.
+3. ✅ FIXED (2026-07-07) — `Sample~/PlayerInputs Showcase/Editor/PlayerInputsShowcaseBuilder.cs` now uses `MaxGapSeconds`: the two `MaxGapTicks = 10` sites became `MaxGapSeconds = 0.16f` and the `MaxGapTicks = 0` site became `MaxGapSeconds = 0` (comment/caption prose updated to match). Grep confirms no other renamed/removed API (registry/InputAccess/event) is referenced in the sample. The sample is not compiled by the normal csprojs, so this was verified by reading + grep, not a build.
+4. Deadzone default `0.125` needs a feel-check under the now-framerate-independent windowing before shipping.
 
 ## System Inventory
 
@@ -112,6 +151,7 @@ Key couplings:
 
 ### TODO: Make control authority actually arbitrate input (PlayerOverride has zero readers)
 
+**Status:** ✅ DONE (2026-07-07, verified in code) — Wave-1 implemented the recommended shape exactly. Registry is now dual-slot (`ProviderSlot { Human; Synthetic }` in `InputRegistrySystem.cs`, no more human-blocks-synthetic collision). `InputAccess.TryGetState/TryGetAxes` (`InputAccess.cs`) take a `PlayerOverride` lookup and select the synthetic slot when enabled. `ControlOverrideClip`/`ControlOverrideTrack`/`ControlOverrideSystem` (new files in Authoring/runtime) are the "timeline takes over the player" affordance: on `ClipActive` enter/exit edge they set both `PlayerOverride` and `TimelineOverride` enabled bits on the linked consumer. `ControlAuthoritySystem` now defers to `TimelineOverride` ("never fight it") when present. This item was still marked "inert" in the Executive Summary above — that summary text is now stale and should be treated as historical, not current.
 **Priority:** Critical
 **Certainty:** Confirmed
 **Lens:** Architecture / State
@@ -167,6 +207,7 @@ per-consumer, not per-provider) — reject it.
 
 ### TODO: Make combo/sequence timing windows framerate-independent
 
+**Status:** ✅ DONE (2026-07-07) — `InputHistory.Millis` added; `CommandStep.MaxGapTicks`→`MaxGapMillis`; authoring `MaxGapSeconds` (float, FormerlySerializedAs "MaxGapTicks") baked to millis; `CommandMatcher.WithinWindow` now compares Millis for the window, Tick for order via a `MatchWindow` struct (sentinel hole removed); debug drawer age shown in ms.
 **Priority:** Critical
 **Certainty:** Confirmed
 **Lens:** Timing
@@ -224,6 +265,7 @@ strictly better here.
 
 ### TODO: Buffer-clear must take effect before sequence matching on its start frame
 
+**Status:** ✅ DONE (2026-07-07, verified in code) — `InputBufferClearSystem.cs:14-19` is now `[UpdateAfter(typeof(ConsumerBufferMaskSystem))] [UpdateBefore(typeof(ConsumerHistorySystem))]` — exactly the "recommended" stale-only ordering this TODO called for (clear runs before history is even recorded for the frame, let alone matched). Full chain confirmed via attribute grep: `ConsumerBufferMaskSystem → InputBufferClearSystem → ConsumerHistorySystem → CommandSequenceResetSystem → CommandSequenceSystem`. No dedicated integration test found for this ordering (see Testing TODOs item 2, still open).
 **Priority:** High
 **Certainty:** Confirmed
 **Lens:** Event / Timing
@@ -251,6 +293,7 @@ prose says otherwise), its behavior changes. One-line diff otherwise.
 
 ### TODO: Give cross-clip CommandSequence evaluation a deterministic, author-controlled priority
 
+**Status:** ✅ DONE (2026-07-07) — `int Priority` added to `CommandSequenceClip` → `CommandSequenceConfig`; `GatherJob` gathers `(Priority, Entity)` into `ClipSortKey` and sorts (lower Priority first, Entity stable tiebreak) instead of raw `Clips.Sort()`. Default 0 preserves prior behaviour.
 **Priority:** High
 **Certainty:** Confirmed
 **Lens:** State / Designer Safety
@@ -300,6 +343,7 @@ pinging the asset.
 
 ### TODO: Stabilize seat identity — playerIndex recycling and the (byte)(-1) wrap (spec C10)
 
+**Status:** 🟡 PARTIAL (2026-07-07, verified in code) — The "minimum now" portion landed: `PlayerInputBridge.GetPlayerId()` clamps/warns on negative and >254 indices (`WarnBadPlayerIndex`); `ProviderSeq : IComponentData` (`InputIdentity.cs`) is stamped on every provider at creation (`PlayerInputBridge.cs` increments a static counter, reset via `ResetProviderSeq()`; `SyntheticProviderBuilder` stamps `uint.MaxValue` so synthetics always lose the tie-break); `InputRegistrySystem.ExistingWins` ties-break duplicates on lowest `ProviderSeq`, falling back to lowest Entity index only when a stamp is missing. The full C10 seat map (join-ticket/`InputUser.id`-keyed identity + `PlayerLeft`-triggered override/history clearing) was **not** built — `PlayerJoined`/`PlayerLeft` buffers are still unconsumed by anything, so a newcomer on a recycled `playerIndex` still inherits a departed player's leftover consumer state (overrides, buffered history). What's needed: a consumer system that reacts to `PlayerLeft` and clears `PlayerOverride`/`InputHistory` for that seat's consumers.
 **Priority:** High
 **Certainty:** Strongly Likely
 **Lens:** State / Edge Case
@@ -327,6 +371,7 @@ P0's consumer state. Unit-test tie-break stability with recycled indices.
 
 ### TODO: Take InputRegistry's provider array back under dependency tracking
 
+**Status:** ✅ DONE (2026-07-07, verified in code) — `InputRegistrySystem.cs` now creates/resizes a `DynamicBuffer<ProviderSlot>` (`AddBuffer<ProviderSlot>(entity); slots.Resize(SlotCount, ...)`) on the registry singleton instead of an embedded `NativeArray`. `grep -rn "NativeDisableContainerSafetyRestriction"` across the entire package returns zero matches — all seven call sites (`AxisTransformSystem`, `CommandSequenceSystem`, `ConsumerHistorySystem`, `ControlAuthoritySystem`, `DirectionInputSystem`, `InputEventsSystem`, `DebugPlayerInputSystem`) were migrated to `SystemAPI.GetSingletonBuffer<ProviderSlot>`/`BufferLookup<ProviderSlot>`. This migration was folded together with the dual-slot authority change (Critical #1), exactly as the Implementation Path suggested.
 **Priority:** High
 **Certainty:** Strongly Likely
 **Lens:** Event / Performance (race)
@@ -356,6 +401,7 @@ Singleton-buffer lookups are equally fast.
 
 ### TODO: Reconcile the WorldSystemFilter matrix across the family
 
+**Status:** 🟡 PARTIAL (2026-07-07, verified in code) — Two of the three concrete divergences are fixed: `InputEventsSystem.cs:34-35` is now `Local|Client|Server` (was Local-only); `SyntheticProviderClearSystem.cs:17-18` is now `Local|Client|Server|Editor` (was Local-only, now matches `GridFlowInputSystem`'s filter). `GridFlowInputSystem`'s redundant private clear loop (the old lines 75-77) is gone and it carries `[UpdateAfter(typeof(SyntheticProviderClearSystem))]` — both exactly as suggested. NOT done: `SplineFlowInputSystem` and `NavFlowInputSystem` remain Local-only (still diverge from the "backbone triple"), and no documented world-filter-matrix table was added to `REWRITE_DESIGN.md` (grep finds only one incidental mention, not a table). Remaining work: decide/fix Spline/Nav filters and write the table.
 **Priority:** High
 **Certainty:** Confirmed
 **Lens:** Architecture / Edge Case
@@ -385,6 +431,7 @@ once the clear system covers its worlds (it exists only to patch this hole), and
 
 ### TODO: Defensively dedupe MultiInputSettings.Keys and validate at build time
 
+**Status:** ✅ DONE (2026-07-07, verified in code) — `MultiInputSettings.cs` `Keys` getter now uses a `HashSet<string> seen` + `while (!seen.Add(actionName)) actionName += "'"` loop, matching the suggested snippet verbatim (never throws in KSettings init). `MultiInputSettingsBuildCheck.cs` (new file, `.Editor` assembly) implements `IPreprocessBuildWithReport`, throwing `BuildFailedException` on over-`MaxActions` count, unassigned slots, duplicate action IDs, and duplicate action names — the build-time gate this item asked for.
 **Priority:** High
 **Certainty:** Strongly Likely
 **Lens:** Designer Safety / Validation
@@ -418,6 +465,7 @@ for (var i = 0; i < count; i++)
 
 ### TODO: Fix registry error logging — per-frame spam, Burst-discarded in players, convention violation
 
+**Status:** 🟡 PARTIAL (2026-07-07, verified in code + compile) — Registry half ✅ DONE: `InputRegistrySystem.cs` now logs the duplicate-seat diagnostic through the Burst-safe `BLLogger` singleton (`SystemAPI.TryGetSingleton<BLLogger>` → `LogError512` with a `FixedString512Bytes`), not `[BurstDiscard]` `UnityEngine.Debug.LogError` — so it survives a Burst-compiled player build. The old `ReportDuplicate` method is gone. The per-slot `BitArray256 reportedDup` latch is retained and now only advances to "reported" once a logger actually exists, so the message is never lost if the logger singleton appears a frame late (it still clears on clean resolution so a fresh duplicate re-logs). NOT done (out of this pass's scope): `SplineFlowInputSystem`'s missing-spline warning is still wrapped in `#if UNITY_EDITOR` — players still get silence there. Remaining work: thread BLLogger/`LogError512` through the SplineFlow site too.
 **Priority:** High
 **Certainty:** Confirmed
 **Lens:** Debugging / Production Readiness
@@ -443,6 +491,13 @@ visible in a development player build.
 **Confidence:** High
 
 ### TODO: Document and de-risk the bridge's per-render-frame edge lifetime (fixed-step / multi-world consumers)
+
+> ✅ **DONE (BRIDGE wave):** Accumulate-and-drain implemented. `PlayerInputBridge.Update` now OR-accumulates each
+> render frame's edges into pending sets; `ProviderSyncSystem` calls the new `PlayerInputBridge.Drain()` once per sim
+> tick (single owner — the bridge-backed provider lives only in the default world). `CurrentDown/Up/Held` kept as debug
+> mirrors. Focus-loss Up synthesis routed through pending. Record/replay seam untouched (recording reads the provider
+> post-sync; replay disables the bridge). Pure `EdgeDrain` helper extracted + unit-tested (0-consume tap survival,
+> 2-consume single-see). 1-frame latency documented in README.
 
 **Priority:** High
 **Certainty:** Strongly Likely (known-deferred item, re-confirmed)
@@ -476,6 +531,7 @@ the cadence correct.
 
 ### TODO: Resolve the CommandMatcher unordered-monotonicity and OrderedLastConsume semantics with the maintainer
 
+**Status:** ⏸ NEEDS MAINTAINER DECISION — Behavior is unchanged from the description (verified in `CommandMatcher.cs`: `WithinWindow` still enforces forward tick progression for unordered `Contains`/`Consume`; `EvaluateOrderedLastConsume` still scans backward then sets `searchIndex = i + 1`). Tests now exist that **pin current behavior** without resolving the ambiguity: `CommandMatcherTests.cs` has `OrderedLastConsume_PicksLatestMatchingEntry` (one happy-path test, not the truth-table this item asks for). Question for the maintainer: keep `Contains`/`Consume` monotonic-per-unordered-step (rename to reflect it) or relax monotonicity for the unordered family; and is `OrderedLastConsume` used by any shipped content, or should it be deleted? No doc-comment truth table was added.
 **Priority:** Medium
 **Certainty:** Risk (intent ambiguity, code behavior Confirmed)
 **Lens:** State
@@ -500,6 +556,12 @@ rename with `FormerlySerializedAs`-equivalent for the enum (enum values are seri
 
 ### TODO: Guard axis-as-button edges against stick drift feeding combo history
 
+> ✅ **DONE (PERIPHERY wave):** Added configurable `Axis Edge Deadzone` (default 0.125) to `MultiInputSettings`. Bridge
+> now splits "worth publishing" (small `AxisPublishThresholdSq`, still streams fine axis values) from "actuated for edge
+> purposes" (deadzone + re-press hysteresis). Threshold math lives in the pure, Burst-friendly `AxisEdge.Actuated`
+> helper with 8 unit tests (drift rejected, hysteresis band, no-chatter, zero/negative deadzone). Refocus reseed also
+> gated through the deadzone.
+
 **Priority:** Medium
 **Certainty:** Strongly Likely
 **Lens:** Edge Case / Designer Safety
@@ -523,6 +585,7 @@ no edges; 0.2 ⇒ edges.
 
 ### TODO: Decide InputEvents level-vs-edge semantics on clip activation (and the Held fallback)
 
+**Status:** ✅ DONE (2026-07-07) — `TriggerIfAlreadyHeld` toggle added to `InputEventsClip` → `InputEventsConfig` (default true = current behaviour). Enter-frame seeding folded into `GatherJob` (via a `ClipActivePrevious` enabled lookup; `InitJob` removed) through the pure, unit-tested `InputEventsLogic.SeedWasInputActive`. When false, an already-held input is treated as already-started so only a fresh press fires `OnInputStart`.
 **Priority:** Medium
 **Certainty:** Confirmed behavior, Risk on intent
 **Lens:** Event / Designer Safety
@@ -544,6 +607,7 @@ seed `WasInputActive = hasInput` on the enter frame instead of false (one extra 
 
 ### TODO: Extract the duplicated event-dispatch plumbing shared by CommandSequenceSystem and InputEventsSystem
 
+**Status:** ✅ DONE (2026-07-07) — `struct ConditionEventDispatch` in `InputEventDispatch.cs` now owns the fallback map + unique-key list + writers, exposing `Create/Dispose/Update/EventWriter/Flush`. Both systems dropped their four private fields + the Apply/Collect/Trigger/Clear block for one `Flush` call; scheduled job graph unchanged. Same-tick Down/Up ordering guaranteed in `ConsumerHistorySystem` (see below).
 **Priority:** Medium
 **Certainty:** Confirmed
 **Lens:** Architecture / Maintainability
@@ -563,6 +627,7 @@ Both systems shrink to gather-job + one Flush call.
 
 ### TODO: Remove dead API surface and stale assembly plumbing
 
+**Status:** ✅ DONE (2026-07-07, verified in code + compile) — All remaining dead surface removed. `InputSource` was already gone and `BufferClearConfig` already a plain `IComponentData`; this pass additionally: deleted `PlayerMoveInput` from `InputData.cs` (repo-wide grep confirmed the only other `PlayerMoveInput` is the Animation package's OWN copy in `BovineLabs.Timeline.Animation` — same namespace, different assembly, not referencing `PlayerInputs.Data` — so no cross-assembly ambiguity or break); removed `HistoryMath.Plan` and its 5 dedicated `HistoryMathTests` methods (Plan was referenced only by its own tests; `EvictCount`/`OverflowCount`/`ClampLimit` and the invariant test remain); removed the `Unity.Physics` and `Unity.Entities.Graphics` references from both `.Authoring.asmdef`/`.Tests.asmdef` and their generated csprojs (grep-confirmed zero usage of any `Unity.Physics`/`Unity.Entities.Graphics` type in either assembly — the Spline clip uses `BovineLabs.Timeline.Physics.*`, a different package). `AssemblyInfo.cs` `InternalsVisibleTo` names and the phantom `"PlayerInputs.Data"` refs were already fixed.
 **Priority:** Medium
 **Certainty:** Confirmed
 **Lens:** Architecture / Maintainability
@@ -595,6 +660,10 @@ shared fork).
 
 ### TODO: Main-thread sync points in the flow-input systems — contain and document
 
+> ✅ **PARTIAL (PERIPHERY wave):** Added a `ProfilerMarker` to each of `GridFlowInputSystem`, `SplineFlowInputSystem`,
+> `NavFlowInputSystem` (wrapping `OnUpdate`) so the sync-point cost is now visible in the profiler. Jobification of the
+> shared-buffer accumulation remains deferred until a profile justifies it (per this item's own recommendation).
+
 **Priority:** Medium
 **Certainty:** Confirmed
 **Lens:** Performance
@@ -618,6 +687,12 @@ should wait for a profile.
 
 ### TODO: NavFlow proxy pathfinding leaks on hard clip teardown
 
+> ✅ **DONE (PERIPHERY wave):** Added `NavFlowDriven` marker (new Data file) + a teardown sweep in `NavFlowInputSystem`.
+> Every proxy whose pathfinding is (re)enabled this frame is added to a driven set + marked; the sweep disables
+> `IsPathfinding` and removes the marker for any marked proxy NOT driven this frame — covering both a clean clip end and
+> a HARD teardown (director destroyed mid-clip, no exit edge). Reads precede the structural changes so the captured
+> Unsafe*Lookups stay valid. Runtime-destroy behaviour still worth an in-editor confirm.
+
 **Priority:** Medium
 **Certainty:** Strongly Likely
 **Lens:** Full System Flow / Edge Case
@@ -640,6 +715,7 @@ driving clip vanished.
 
 ### TODO: History eviction can starve multi-step combos when a window records everything
 
+**Status:** 🟡 PARTIAL (2026-07-07) — Runtime red-at-cap done: `DebugInputBufferSystem` colours the `hist n/limit` line red at the cap (amber ≥75%), appends `FULL`, and draws an "evicting oldest - restrict window" advisory. The bake-time empty-window advisory (item 1) touches `InputBufferWindowClip.Bake`, which is outside this work item's file ownership — left for the buffer-clip owner.
 **Priority:** Medium
 **Certainty:** Strongly Likely
 **Lens:** Designer Safety / Edge Case
@@ -662,6 +738,7 @@ drawer color tweak is two lines.
 
 ### TODO: Unify clip-baker skip semantics and messages
 
+**Status:** ✅ DONE (2026-07-07, verified in code + compile) — The chosen rule (link missing ⇒ skip loudly via a shared helper) landed as `MultiInputSettingsAuthoringUtility.RequireLink(schema, context, clipName, field)` and is now used by all 9 clips. The final two, `NavFlowInputClip.cs` and `AxisTransformClip.cs`, were migrated: both `ConsumerLink` guards now call `RequireLink(...)` (identical "… Clip will be skipped." wording + `context` object, which `AxisTransformClip` previously omitted), obtaining the link key via a follow-up `TryGetKey` after the guard. `NavFlowInputClip`'s separate `ProxyLink` guard was also aligned to the "Clip will be skipped." convention (it stays hand-rolled since it resolves a proxy, not a consumer). `InputEventsClip.Bake` null-guards both `DependsOn` calls.
 **Priority:** Medium
 **Certainty:** Confirmed
 **Lens:** Designer Safety / Maintainability
@@ -683,6 +760,7 @@ does nothing."). Null-guard the `DependsOn` calls.
 
 ### TODO: Same-tick Down/Up ordering artifact in history (frame-collapse)
 
+**Status:** ✅ DONE (2026-07-07) — `ConsumerHistorySystem.RecordHistoryJob` now records the both-set (Down∧Up same tick) per action ordered by the live `Held` bit: held ⇒ Up then Down, not held ⇒ Down then Up (`EmitWord`). Single-phase actions keep the historical Down-group-then-Up-group order. 3+ transitions/frame still unrepresentable (bridge accumulate-and-drain territory).
 **Priority:** Medium
 **Certainty:** Confirmed
 **Lens:** Timing / Low FPS
@@ -709,6 +787,7 @@ using `state.Held`.
 
 ### TODO: Naming and file-hygiene sweep
 
+**Status:** ❌ OPEN — None of this item's renames landed. `find` confirms the lowercase filenames still exist unchanged: `Flowinputtrack.cs`, `Splineflowinputtrack.cs`, `Flowinputbuilder.cs`, `Splineflowinputbuilder.cs`, `Flowinputconfig.cs`, `Splineflowinputconfig.cs`. `SyntheticProviderTag` is still declared inside `Flowinputconfig.cs` rather than next to `ProviderTag` in `InputData.cs`. `AxisTransformClip.ConsumerLink` is still PascalCase with no `FormerlySerializedAs` (every other clip's link field is camelCase + FSA). `CommandSequenceClip.duration` is still `=> .5f` (inconsistent with `=> 1` elsewhere). Needs a `git mv` + FSA pass; low urgency, purely cosmetic/maintainability.
 **Priority:** Low  **Certainty:** Confirmed  **Lens:** Maintainability
 **Files/Systems Involved:** `Flowinputtrack.cs`, `Splineflowinputtrack.cs`, `Flowinputbuilder.cs`, `Splineflowinputbuilder.cs`, `Flowinputconfig.cs`, `Splineflowinputconfig.cs` (lowercase filenames); `AxisTransformClip.ConsumerLink`/`AnchorLink` (PascalCase) vs every other clip's `consumerLink`/`eventRouteLink` (camelCase w/ FormerlySerializedAs); `CommandSequenceClip.duration => .5f` vs `1` elsewhere; `SyntheticProviderTag` declared inside `Flowinputconfig.cs` rather than `InputData.cs`.
 **Problem/Why:** Inconsistent casing breaks muscle memory and greps; the serialized-name split means future
@@ -720,6 +799,7 @@ using `state.Held`.
 
 ### TODO: WithinWindow uint sentinel micro-hole
 
+**Status:** ✅ DONE (2026-07-07, verified in code) — Folded into the Critical #2 framerate-independence rework exactly as suggested. `CommandMatcher.cs:10-15` now declares `internal struct MatchWindow { public bool HasPrior; public uint LastTick; public uint LastMillis; }` with the doc comment "`HasPrior` replaces the old `uint.MaxValue` sentinel (no aliasing at the max tick)." No magic-tick sentinel remains.
 **Priority:** Low  **Certainty:** Confirmed  **Lens:** Edge Case
 **Files/Systems Involved:** `CommandMatcher.WithinWindow` (`matchTick == NoPriorMatch ? NoPriorMatch - 1 : matchTick`)
 **Problem:** An entry recorded at tick `uint.MaxValue` (828 days at 60 fps, or a future tick-source change) aliases the
@@ -729,6 +809,11 @@ separate bool.
 **Confidence:** High (impact ~zero today)
 
 ### TODO: Debug drawer gaps
+
+> ✅ **PARTIAL (PERIPHERY wave):** Added the `playerinput.offset` config-var (Vector4) to `DebugPlayerInputSystem`,
+> threaded into `RenderJob` and applied to the summary/events/per-player origins so the overlay can be parked off
+> world-origin. The clear-only-scene `RequireForUpdate` gate and the untracked-registry `RenderJob` capture are out of
+> this wave's file ownership (left to the registry-buffer migration).
 
 **Priority:** Low  **Certainty:** Confirmed  **Lens:** Debugging
 **Files/Systems Involved:** `DebugInputBufferSystem` (`RequireForUpdate<BufferWindowConfig>`), `DebugPlayerInputSystem` (managed `RenderJob` reads registry raw)
@@ -741,6 +826,12 @@ add the existing `Offset` config-var pattern to `DebugPlayerInputSystem`; regist
 
 ### TODO: package.json dependency floors are stale
 
+> ✅ **DONE (PERIPHERY wave):** Floors aligned to installed/tested versions (entities/collections 6.5.0, burst 2.0.0,
+> mathematics 1.4.0, inputsystem 1.19.0, unity 6000.7). Added the missing hard-required deps: com.unity.timeline 6.6.0,
+> com.bovinelabs.core 1.6.2, com.bovinelabs.timeline.entitylinks / .physics / .grid.influence, com.bovinelabs.traverse,
+> com.bovinelabs.bridge; corrected reaction floor to 0.6.0. Keywords now include `input`, `combo`, `gamepad`. (In this
+> project they resolve from monorepo git forks; floors are advisory but now accurate.)
+
 **Priority:** Low  **Certainty:** Confirmed  **Lens:** Production Readiness
 **Files/Systems Involved:** `package.json` (`com.unity.entities 1.3.0`, `unity 6000.3`, missing deps)
 **Problem:** The project runs Unity 6000.7-era Entities; the manifest also omits packages the asmdefs hard-require
@@ -752,6 +843,11 @@ sibling-package requirement explicitly in a README); fix keywords.
 
 ### TODO: ConditionKeyDrawer cache thrash
 
+> ✅ **DONE (PERIPHERY wave):** `AssetPostprocessor` no longer nukes the whole cache on any `.asset` import. It now
+> type-checks each imported/moved path (`GetMainAssetTypeAtPath`) and refreshes only the touched `ConditionEventObject`
+> entries (handling a changed Key by dropping the stale mapping), and on delete drops only cache entries whose object
+> was destroyed. Does nothing when the cache isn't built yet (lazy build still covers everything).
+
 **Priority:** Low  **Certainty:** Confirmed  **Lens:** Editor Performance
 **Files/Systems Involved:** `ConditionKeyDrawer.AssetPostprocessor`
 **Problem:** Any imported `.asset` nukes the cache; the next drawer repaint re-runs `AssetDatabase.FindAssets` over all
@@ -762,6 +858,7 @@ ConditionEventObjects. Noticeable in big projects during import storms.
 
 ### TODO: Exclude reserved id 255 from the all-actions window mask
 
+**Status:** ✅ DONE (2026-07-07, verified in code) — `InputBufferWindowClip.cs:41` loops `for (var i = 0; i < MultiInputSettings.MaxActions; i++) mask[i] = true;` where `MultiInputSettings.MaxActions = 255` (`MultiInputSettings.cs:14`) — the loop sets bits 0..254 only, so bit 255 (the reserved unresolved-action sentinel) is already excluded from the ALL mask.
 **Priority:** Low  **Certainty:** Confirmed  **Lens:** Validation
 **Files/Systems Involved:** `InputBufferWindowClip.Bake` (`for i in 0..255 mask[i]=true`)
 **Problem:** Bit 255 is the unresolved-action sentinel; setting it in the ALL mask is harmless today (nothing emits 255) but
@@ -770,6 +867,11 @@ contradicts the "byte 255 is reserved" invariant the validators enforce elsewher
 **Confidence:** High
 
 ### TODO: Package README for designers
+
+> ✅ **DONE (PERIPHERY wave):** Added `README.md` — designer contract with the mental-model diagram, the load-bearing
+> rules (consumerLink, must-have-a-window, None vs Contains/Consume, Repeatable, clear-before-match, axis deadzone),
+> timeline-takeover semantics (dual slot + `ReleaseIdleSeconds = 0 = never release`), a clip→system→requirement table,
+> the world-filter matrix + accumulate-and-drain latency note, the debug config-vars, and the sibling-package deps.
 
 **Priority:** Low  **Certainty:** Confirmed  **Lens:** Production Readiness
 **Problem:** The package has a hardened internal design doc and a showcase, but no README stating the designer contract:
@@ -791,63 +893,77 @@ text already exists in tooltips and the showcase captions — consolidate.
 3. **Empty-window + multi-step-sequence eviction warning** — see Medium TODO.
 4. **`ReleaseIdleSeconds` tooltip must state `0 = never release`** (`InputConsumerAuthoring`; `OverrideDecision.Step` treats
    `<= 0` as hold-forever). One tooltip edit. *Certainty: Confirmed.*
+   **Status:** ✅ DONE (2026-07-07, verified in code) — `InputConsumerAuthoring.cs:27-30` tooltip: "Only takes effect when Controllable is enabled. Seconds of input idle before control is released back. 0 = never release (hold the override forever)."
 5. **`OverrideTrigger.Manual` needs a pointer to how it's driven** — nothing in the package toggles `PlayerOverride`
    manually today (see Critical authority TODO); until the clip exists the tooltip promises a mechanism with no handle.
+   **Status:** 🟡 PARTIAL (2026-07-07, verified in code) — The underlying mechanism now exists: `ControlOverrideClip`/`ControlOverrideSystem` toggle `PlayerOverride` while active (Critical #1, DONE), so `Manual` is no longer a promise with zero handle. However the `OverrideTrigger` tooltip itself (`InputConsumerAuthoring.cs:19-24`, "Selects which input edge hands control to the override.") was not updated to literally cross-reference `ControlOverrideClip` — a designer reading only the tooltip still has no pointer to the clip name.
 6. **`InputConsumerAuthoring.PlayerId` has no hint of the seat contract** — add tooltip: "must match the joined player's
    index / PlayerIdOverride of the bridge" and (post-C10) the seat semantics.
+   **Status:** ✅ DONE (2026-07-07, verified in code) — `InputConsumerAuthoring.cs:11-13` tooltip: "Which joined player this consumer reads input from. Must match the joined player's index (or the bridge's PlayerIdOverride)."
 7. **`MaxGapTicks` tooltip is wrong** (says simulation ticks; means frames) — fix wording *now* even before the timing
    rework, because designers are authoring against it today.
+   **Status:** ✅ DONE (2026-07-07, verified in code) — Superseded by the Critical #2 rework: the field is now `CommandStepData.MaxGapSeconds` (`CommandSequenceClip.cs:32-37`) with a tooltip correctly describing wall-clock elapsed seconds ("This is wall-clock time, so the window feels identical at 30/60/240 fps... Baked to milliseconds"), `[FormerlySerializedAs("MaxGapTicks")]` for migration.
 8. **`CommandSequenceClip` Held+buffered-mode error already exists — good** — extend the same bake-error pattern to
    `Steps.Length == 0` sequences (currently baked and skipped silently at runtime: `if (seq.Steps.Length == 0) continue;`).
+   **Status:** ✅ DONE (2026-07-07, verified in code) — `CommandSequenceClip.cs:106-108`: `if (seqData.Steps == null || seqData.Steps.Length == 0) Debug.LogError($"CommandSequenceClip '{name}' sequence {s} has no steps; it can never match.", this);`
 9. **`InputEventsClip` with both events null** — bakes a config that can never do anything; warn.
+   **Status:** ✅ DONE (2026-07-07, verified in code) — `InputEventsClip.cs:56-58`: `if (OnInputStart == null && OnInputEnd == null) Debug.LogWarning($"InputEventsClip '{name}' fires no events; the clip does nothing.", this);`
 10. **Showcase**: the builder silently no-ops several cells when schemas/events are missing (`LoadSchema` returns null →
     NREs later in `MakeConsumer` when `consumerLink` null is assigned to arrays — actually tolerated — but
     `EnsureFolders`/binding failures surface as broken cells). Add a preflight assert listing missing assets before building.
+    **Status:** ❌ OPEN — `Sample~/PlayerInputs Showcase/Editor/PlayerInputsShowcaseBuilder.cs` still calls `LoadSchema` directly with no preflight assert/collected-missing-assets report before building.
 
 ## Validation & Guard TODOs
 
 - **Bake-time:** consumerLink/eventRouteLink null checks (High TODO); empty-sequence error; both-events-null warning;
   window-ALL advisory; unify skip messages (Medium TODO).
+  **Status:** 🟡 PARTIAL — consumerLink checks, empty-sequence error, both-events-null warning all DONE (see High/Designer-Safety items above). Unify-skip-messages now ✅ DONE (all 9 clips on `RequireLink` — see its own status note above). Window-ALL eviction advisory (bake-time half) still NOT done — see the History-eviction Medium TODO's own status note.
 - **Build-time:** MultiInputSettings duplicate/unassigned gate (High TODO); optionally scan timelines for
   `CommandSequenceClip`s whose timeline has no `InputBufferTrack` window covering their history-reading steps — the #1 trap,
   checkable statically per-timeline (steps read history ⇒ some window/sequence mask must open; sequence configs self-open
   via `config.Actions`, so the real check is: history-reading steps exist AND `HistoryLimit == 0`-style misconfig — start
   with a per-timeline advisory, refine with usage).
+  **Status:** 🟡 PARTIAL — `MultiInputSettingsBuildCheck.cs` (duplicate/unassigned gate) DONE. The optional per-timeline "no window covers this sequence's history reads" static scan was NOT built — remains ❌ OPEN, no evidence of it in the Editor assembly.
 - **Runtime:** registry duplicate-seat latched errors via BLLogger (High TODO); `GetPlayerId` range guard (High TODO);
   authority-aware access guards once arbitration lands (Critical TODO); keep the existing silent-return style for per-frame
   link misses (correct — the debug drawer surfaces them) but ensure *every* drawer shows the link-miss state the way
   `DebugInputBufferSystem` does (`DebugAxisTransformSystem` currently draws nothing on miss — add the red "link miss" cue).
+  **Status:** 🟡 PARTIAL — Registry duplicate-seat latching now logs via the Burst-safe `BLLogger`/`LogError512` convention ✅ DONE (see its High TODO status note; the SplineFlow `#if UNITY_EDITOR` half of that TODO is what keeps the section PARTIAL). `GetPlayerId` range guard DONE. Authority-aware access guards DONE (arbitration landed, Critical #1). `DebugAxisTransformSystem` link-miss cue is already DONE per its own inline note in the Debugging/Tooling section below (item 5) — leave that note alone.
 - **Editor:** MultiInputSettings.Keys defensive dedupe (High TODO); OnValidate already solid.
+  **Status:** ✅ DONE — see the MultiInputSettings High TODO status note above (`HashSet`-based dedupe in `Keys`).
 
 ## Timing / Physics / Animation TODOs
 
-1. **Framerate-independent windows** — Critical TODO #2 (the big one).
-2. **Buffer-clear ordering** — High TODO.
-3. **Same-tick Down/Up collapse ordering** — Medium TODO.
+1. **Framerate-independent windows** — Critical TODO #2 (the big one). **Status:** ✅ DONE — see its own status note above.
+2. **Buffer-clear ordering** — High TODO. **Status:** ✅ DONE — see its own status note above.
+3. **Same-tick Down/Up collapse ordering** — Medium TODO. **Status:** ✅ DONE (already annotated in-section above).
 4. **Bridge cadence vs fixed-step consumers + inherent 1-frame latency** — High TODO. Note the latency explicitly in docs:
    `InitializationSystemGroup` reads *last* frame's bridge publish; input→carrot latency is ≥1 render frame + timeline-group
    position in the frame. For a combat game this is fine but must be a *known* number, not a discovered one.
+   **Status:** ✅ DONE (already annotated in-section above — BRIDGE wave; 1-frame latency documented in README).
 5. **Pause/timescale audit:** `ControlAuthoritySystem` accumulates `SystemAPI.Time.DeltaTime` for release-idle — under
    world-pause (BovineLabs `PauseGame`) or `WorldTimeScale = 0`, idle never accumulates and an engaged override persists
    through pause (probably desired) — document; under slow-mo, release takes longer in real time (probably undesired for an
    input-feel parameter) — consider unscaled time. *Certainty: Risk (depends on which DeltaTime the group sees).*
+   **Status:** ❌ OPEN — verified in code: `ControlAuthoritySystem.cs` still passes `DeltaTime = SystemAPI.Time.DeltaTime` (scaled) into `AuthorityJob`, unchanged. No decision or doc note about unscaled vs. scaled time for `ReleaseIdleSeconds` was added anywhere in code or comments.
 6. **`AxisTransformSystem` smoothing** uses `1 - exp(-smoothing * dt)` — correctly framerate-independent; tests pin it. ✔ no action.
 7. **History ring under lag spikes:** a 1-frame stall then burst of edges is handled (eviction math has an invariant test) ✔.
 
 ## Architecture TODOs
 
 1. **Authority arbitration + dual-slot registry** — Critical TODO #1. This is the one structural change; everything else
-   composes around it.
-2. **Registry as tracked buffer** — High TODO (do together with #1: one migration).
-3. **Seat identity (C10)** — High TODO.
-4. **World-filter matrix as an explicit table** — High TODO.
-5. **Event-dispatch extraction** — Medium TODO.
-6. **Sequence priority baking** — High TODO.
+   composes around it. **Status:** ✅ DONE — see its own status note above.
+2. **Registry as tracked buffer** — High TODO (do together with #1: one migration). **Status:** ✅ DONE — see its own status note above.
+3. **Seat identity (C10)** — High TODO. **Status:** 🟡 PARTIAL — see its own status note above.
+4. **World-filter matrix as an explicit table** — High TODO. **Status:** 🟡 PARTIAL — see its own status note above (2/3 filters fixed, no table written).
+5. **Event-dispatch extraction** — Medium TODO. **Status:** ✅ DONE (already annotated in-section above).
+6. **Sequence priority baking** — High TODO. **Status:** ✅ DONE (already annotated in-section above).
 7. **Consider a `PlayerInputsSystemGroup`**: the package currently strings 12 systems through
    `TimelineComponentAnimationGroup` with pairwise `UpdateAfter/Before` attributes; a dedicated child group
    (mask → history → direction/reset → sequence → clear → retire) would make the pipeline order visible in one attribute set
    and give external systems a single anchor (the generated-projection group already exists as precedent). Low urgency,
    high readability. *Certainty: Confirmed structure; suggestion.*
+   **Status:** ❌ OPEN — `grep -rln "PlayerInputsSystemGroup"` across the package returns zero matches; the pipeline is still strung through `TimelineComponentAnimationGroup` via pairwise `UpdateAfter/Before` attributes exactly as described. Still a valid low-urgency suggestion.
 
 ## Debugging / Tooling TODOs
 
@@ -855,13 +971,19 @@ text already exists in tooltips and the showcase captions — consolidate.
    `DebugInputBufferSystem` (or a new `DebugCommandSequenceSystem`): per active sequence clip, draw per-step status —
    matched-at-tick / waiting / failed-window — by re-running the matcher with a recording shim (the matcher is pure; run it
    with a step-index-out parameter). This converts the package's hardest support question into a glance.
+   **Status:** ❌ OPEN — no `DebugCommandSequenceSystem` and no per-step explainer logic found anywhere in the Debug assembly.
 2. **Authority overlay**: once arbitration lands, extend `DebugPlayerInputSystem` to show per-consumer
    `driving/idle-seconds/trigger` (counts exist; the *why* doesn't).
+   **Status:** 🟡 PARTIAL — arbitration landed (prerequisite met), but `DebugPlayerInputSystem`'s only authority-related surfacing is a per-seat driving *count* (`if (driving.ValueRO) Counts[id.Value]++;`); no per-consumer idle-seconds/trigger breakdown was added.
 3. **Event fire trace**: a config-var-gated log line in `TriggerEventsJob` (entity, condition key, amount) — condition
    events are currently observable only by their downstream reactions.
+   **Status:** ❌ OPEN — no config-var-gated trace log found in `InputEventDispatch.cs`'s `TriggerEventsJob`.
 4. **`player_input` CLI**: already strong. Add `history` op dumping a consumer's `InputHistory` (+tick ages) — pairs with
    the sequence explainer for headless repro scripts.
-5. **Anchor `DebugAxisTransformSystem` link-miss cue** — see Validation section.
+   **Status:** ❌ OPEN — no `history` op found in `PlayerInputTool.cs`'s CLI command set.
+5. **Anchor `DebugAxisTransformSystem` link-miss cue** — see Validation section. ✅ **DONE (PERIPHERY wave):**
+   `DebugAxisTransformSystem` now resolves the clip's `consumerLink` (Targets + EntityLink) and, on a miss, paints a red
+   cross + "AXIS link miss" label at the carrot instead of silently drawing nothing — mirroring the buffer drawer's cue.
 
 ## Testing TODOs
 
@@ -870,21 +992,33 @@ Each test names the specific risk it pins:
 1. **End-to-end sequence integration** (`ECSTestsFixture`): provider + consumer + window mask + history + sequence clip →
    condition event recorded. *Proves the mask→record→match→dispatch chain — currently zero coverage; every regression in
    this file chain (the dormant-buffer incident) would have been caught here.*
+   **Status:** ✅ DONE — `ConsumerHistoryIntegrationTests.cs` has `ProviderState_RecordsHistory_ThenSequenceMatches`.
 2. **Buffer-clear ordering test** — clear + stale entry + sequence, same frame (asserts the High fix).
+   **Status:** ❌ OPEN — no test file references `InputBufferClearSystem`/clear-ordering in `.Tests/`; the fix itself is DONE but unregression-tested.
 3. **Cross-clip priority test** — two consuming clips, priority respected (asserts the High fix).
+   **Status:** ✅ DONE — `SequencePriorityTests.cs` exists (dedicated file).
 4. **Authority arbitration tests** — override on/off provider selection (asserts the Critical fix).
+   **Status:** ✅ DONE — `AuthorityTests.cs`: `InputAccess_Provider_SlotSelectionTruthTable`, `Authority_EngagesOnHumanInput`, `Authority_ReleasesAfterIdle`, `Authority_TimelineOverride_LeavesBitAlone`.
 5. **Framerate-window equivalence test** — same physical timings at 30/60/240 fps tick streams (asserts Critical #2).
+   **Status:** ✅ DONE — `CommandMatcherTests.cs` has `WithinWindow_SamePhysicalTiming_DifferentFps_MatchesIdentically`.
 6. **`OrderedLastConsume` truth-table tests** — currently zero direct tests for the least-explainable mode.
+   **Status:** 🟡 PARTIAL — `CommandMatcherTests.cs` now has one test (`OrderedLastConsume_PicksLatestMatchingEntry`), not the full truth table this item asks for. Ties to the still-open maintainer-decision item above.
 7. **Move lateral-offset unit test** — known-owed from the last panel (Aim lateral is tested; Move is not).
+   **Status:** ✅ DONE — `AxisLeadTests.cs` has `Unparented_Move_SetsLocalToInputTimesRange`, `Live_Move_NewHeldTracksLeadPoint`, etc.
 8. **`ConsumerHistorySystem` eviction under mask** — masked actions excluded, limit respected, same-tick Down-before-Up
    pinned (or the improved ordering once fixed).
+   **Status:** 🟡 PARTIAL — `ConsumerHistoryIntegrationTests.cs` covers masking (`MaskedOutAction_IsNotRecorded`) and same-tick ordering (`SameTick_DownAndUp_Held_OrdersUpThenDown`, `SameTick_DownAndUp_NotHeld_OrdersDownThenUp`); no test explicitly asserts eviction-at-limit behavior at the system level (pure math is covered separately by `HistoryCompactionTests.cs`/`HistoryMathTests.cs`, but not wired through `ConsumerHistorySystem` itself).
 9. **`ControlAuthoritySystem` engage/release integration** — `OverrideDecisionTests` cover the math; nothing covers the
    system wiring (policy component → enabled bit) with a live registry.
+   **Status:** ✅ DONE — `AuthorityTests.cs`: `Authority_EngagesOnHumanInput`, `Authority_ReleasesAfterIdle` exercise the system wiring with a live registry.
 10. **Bridge drain-cadence tests** — once accumulate-and-drain lands: 0-consume and 2-consume cadences.
+    **Status:** ✅ DONE — `BridgeDrainTests.cs` exists (matches the BRIDGE wave's own "0-consume tap survival, 2-consume single-see" claim).
 11. **`InputEventsSystem` deactivate-edge test** — `DeactivateJob` fires `OnInputEnd` exactly once when the clip ends while
     held (subtle one-shot logic; untested).
+    **Status:** ❌ OPEN — `InputEventsHeldSeedTests.cs` covers `TriggerIfAlreadyHeld`/activation-edge seeding only; no test targets the deactivate edge / `OnInputEnd`-fires-once-on-clip-end path.
 12. **Registry churn test** — provider destroyed without retirement (world teardown path) → slot clears next frame,
     `PlayerLeft` fires once.
+    **Status:** ❌ OPEN — `InputRegistryTests.cs` covers mapping, join/leave events, retiring-alone, live-over-retiring preference, dual-slot fill, and duplicate-tiebreak, but no test destroys a provider *without* going through the retirement path.
 
 ## Suggested Architecture Direction
 

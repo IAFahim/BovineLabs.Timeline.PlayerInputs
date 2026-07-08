@@ -7,8 +7,10 @@ using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using BovineLabs.Timeline.PlayerInputs.Flow.Data;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Profiling;
 using Unity.Transforms;
 
 namespace BovineLabs.Timeline.PlayerInputs.Flow
@@ -39,12 +41,15 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation)]
     public partial struct NavFlowInputSystem : ISystem
     {
+        private static readonly ProfilerMarker Marker = new("NavFlowInputSystem");
+
+        private EntityQuery _drivenQuery;
+
         private UnsafeComponentLookup<Targets> _targets;
         private UnsafeComponentLookup<EntityLinkSource> _sources;
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private ComponentLookup<PlayerId> _playerIds;
         private BufferLookup<InputAxis> _axisBuffers;
-        private ComponentLookup<SyntheticProviderTag> _synthetic;
         private ComponentLookup<LocalToWorld> _ltws;
         private ComponentLookup<LocalTransform> _localTransforms;
         private ComponentLookup<CrowdAgentData> _agentData;
@@ -53,14 +58,20 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<InputRegistry>();
-            state.RequireForUpdate<NavFlowInputConfig>();
+
+            _drivenQuery = SystemAPI.QueryBuilder().WithAll<NavFlowDriven>().Build();
+
+            // Run when a nav clip config exists OR when a driven proxy still needs sweeping - so the teardown sweep
+            // still fires the frame AFTER the last/only nav clip (and its config) is destroyed, closing the leak even
+            // in the single-clip case.
+            var configQuery = SystemAPI.QueryBuilder().WithAll<NavFlowInputConfig>().Build();
+            state.RequireAnyForUpdate(configQuery, _drivenQuery);
 
             _targets = state.GetUnsafeComponentLookup<Targets>(true);
             _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
             _axisBuffers = state.GetBufferLookup<InputAxis>(false);
-            _synthetic = state.GetComponentLookup<SyntheticProviderTag>(true);
             _ltws = state.GetComponentLookup<LocalToWorld>(true);
             _localTransforms = state.GetComponentLookup<LocalTransform>(false);
             _agentData = state.GetComponentLookup<CrowdAgentData>(false);
@@ -69,22 +80,27 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
 
         public void OnUpdate(ref SystemState state)
         {
+            using var auto = Marker.Auto();
+
             // Same reason as SplineFlowInputSystem: we read Targets/EntityLink* via Unsafe*Lookup and write the InputAxis
             // buffer + drive the proxy on the MAIN thread, which bypasses the safety system's auto-completion.
             state.CompleteDependency();
+
+            // Proxies whose pathfinding we (re)enable this frame. Any marked proxy NOT in this set had its driving clip
+            // end or vanish -> the teardown sweep at the bottom disables it, closing the destroyed-director leak.
+            var driven = new NativeParallelHashSet<Entity>(16, Allocator.Temp);
 
             _targets.Update(ref state);
             _sources.Update(ref state);
             _entries.Update(ref state);
             _playerIds.Update(ref state);
             _axisBuffers.Update(ref state);
-            _synthetic.Update(ref state);
             _ltws.Update(ref state);
             _localTransforms.Update(ref state);
             _agentData.Update(ref state);
             _pathfinding.Update(ref state);
 
-            var registry = SystemAPI.GetSingleton<InputRegistry>().ProviderByPlayer;
+            var slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true);
 
             // --- Active: drive the proxy + feed the fake axis --------------------------------------------------------
             foreach (var (config, binding, weight, activePrev) in
@@ -109,11 +125,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (!_playerIds.TryGetComponent(consumer, out var playerId))
                     continue;
 
-                var provider = registry[playerId.Value];
+                // Feed the seat's SYNTHETIC slot directly (the slot an override consumer reads).
+                var provider = slots[playerId.Value].Synthetic;
                 if (provider == Entity.Null || !_axisBuffers.HasBuffer(provider))
-                    continue;
-
-                if (!_synthetic.HasComponent(provider))
                     continue;
 
                 // proxy agent
@@ -173,6 +187,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                     lt.Position = playerPos;
                     _localTransforms[proxy] = lt;
                     _pathfinding.SetComponentEnabled(proxy, true);
+                    driven.Add(proxy); // enabled pathfinding here -> mark so the sweep owns its teardown.
                     continue;
                 }
 
@@ -181,6 +196,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
 
                 // Leash: hold the proxy when it out-runs the player; resume when the player closes the gap.
                 _pathfinding.SetComponentEnabled(proxy, !held);
+                driven.Add(proxy); // driven this frame; the sweep will not disable it.
 
                 if (math.all(dir == float2.zero))
                     continue;
@@ -206,6 +222,39 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
                 if (_pathfinding.HasComponent(proxy))
                     _pathfinding.SetComponentEnabled(proxy, false);
             }
+
+            // --- Teardown sweep: stop + unmark any proxy that WAS driven but is not this frame ------------------------
+            // Covers both a clean clip end (redundant with the exit loop, idempotent) and a HARD teardown where the
+            // director/clip entity was destroyed mid-clip so no exit edge ever fired. Reads happen before the structural
+            // changes so the captured Unsafe*Lookups stay valid throughout the loops above.
+            var em = state.EntityManager;
+            using var marked = _drivenQuery.ToEntityArray(Allocator.Temp);
+
+            var toStop = new NativeList<Entity>(marked.Length, Allocator.Temp);
+            for (var i = 0; i < marked.Length; i++)
+                if (!driven.Contains(marked[i]))
+                    toStop.Add(marked[i]);
+
+            var toMark = new NativeList<Entity>(Allocator.Temp);
+            foreach (var proxy in driven)
+                if (!em.HasComponent<NavFlowDriven>(proxy))
+                    toMark.Add(proxy);
+
+            // Apply structural changes only after all reads are done.
+            for (var i = 0; i < toStop.Length; i++)
+            {
+                var proxy = toStop[i];
+                if (em.HasComponent<IsPathfinding>(proxy))
+                    em.SetComponentEnabled<IsPathfinding>(proxy, false);
+                em.RemoveComponent<NavFlowDriven>(proxy);
+            }
+
+            for (var i = 0; i < toMark.Length; i++)
+                em.AddComponent<NavFlowDriven>(toMark[i]);
+
+            toStop.Dispose();
+            toMark.Dispose();
+            driven.Dispose();
         }
 
         private static void Accumulate(DynamicBuffer<InputAxis> axes, byte actionId, float2 value)

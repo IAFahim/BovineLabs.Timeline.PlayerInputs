@@ -78,11 +78,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
 
-            if (!EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var linkKey))
-            {
-                Debug.LogError($"AxisTransformClip '{name}' missing ConsumerLink schema.");
+            if (!MultiInputSettingsAuthoringUtility.RequireLink(ConsumerLink, this, $"AxisTransformClip '{name}'", "ConsumerLink"))
                 return;
-            }
+
+            EntityLinkAuthoringUtility.TryGetKey(ConsumerLink, out var linkKey);
 
             EntityLinkAuthoringUtility.TryGetKey(AnchorLink, out var anchorLinkKey);
 

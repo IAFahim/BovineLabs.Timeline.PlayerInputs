@@ -16,11 +16,16 @@ namespace BovineLabs.Timeline.PlayerInputs
             {
                 if (bridge.Value == null) continue;
 
+                // Accumulate-and-drain: pull the edges the bridge accumulated across every render frame since the last
+                // sim tick (see PlayerInputBridge.Drain). This is the ONLY drain site - the bridge-backed provider is
+                // created in the default world only, so exactly one ProviderSyncSystem instance ever consumes it.
+                bridge.Value.Drain(out var down, out var up, out var held);
+
                 state.ValueRW = new InputState
                 {
-                    Down = bridge.Value.CurrentDown,
-                    Held = bridge.Value.CurrentHeld,
-                    Up = bridge.Value.CurrentUp
+                    Down = down,
+                    Held = held,
+                    Up = up
                 };
 
                 axes.Clear();

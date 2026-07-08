@@ -66,6 +66,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow.Authoring
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
 
+            if (!MultiInputSettingsAuthoringUtility.RequireLink(consumerLink, this, $"SplineFlowInputClip '{name}'", "consumerLink"))
+                return;
+
             if (Spline == null)
             {
                 Debug.LogError($"SplineFlowInputClip '{name}' has no Spline schema assigned. Clip will be skipped.", this);

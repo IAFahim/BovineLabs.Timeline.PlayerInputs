@@ -24,6 +24,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         private UnsafeBufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<PlayerId> _playerIds;
+        private ComponentLookup<PlayerOverride> _overrides;
         private ComponentLookup<PointerProviderTag> _pointerProviders;
         private ComponentLookup<LocalTransform> _transforms;
         private ComponentLookup<Parent> _parents;
@@ -41,6 +42,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
+            _overrides = state.GetComponentLookup<PlayerOverride>(true);
             _pointerProviders = state.GetComponentLookup<PointerProviderTag>(true);
             _transforms = state.GetComponentLookup<LocalTransform>();
             _parents = state.GetComponentLookup<Parent>(true);
@@ -57,6 +59,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             _entries.Update(ref state);
             _axes.Update(ref state);
             _playerIds.Update(ref state);
+            _overrides.Update(ref state);
             _pointerProviders.Update(ref state);
             _transforms.Update(ref state);
             _parents.Update(ref state);
@@ -77,8 +80,6 @@ namespace BovineLabs.Timeline.PlayerInputs
                     cameraRotation = camLt.Rotation;
             }
 
-            var registry = SystemAPI.GetSingleton<InputRegistry>();
-
             // Cursor world ray for PointFromCursor aim (one shared system pointer). Optional: no InputCommon / no
             // camera / cursor off-screen or unfocused => CursorValid false => aim holds its last direction.
             var cursorRay = default(CameraRay);
@@ -96,9 +97,10 @@ namespace BovineLabs.Timeline.PlayerInputs
                 TargetsLookup = _targetsLookup,
                 Sources = _sources,
                 Entries = _entries,
-                Registry = registry.ProviderByPlayer,
+                Slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true),
                 Axes = _axes,
                 PlayerIds = _playerIds,
+                Overrides = _overrides,
                 PointerProviders = _pointerProviders,
                 Transforms = _transforms,
                 Parents = _parents,
@@ -129,16 +131,15 @@ namespace BovineLabs.Timeline.PlayerInputs
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public NativeArray<Entity> Registry;
+            [ReadOnly] public DynamicBuffer<ProviderSlot> Slots;
 
             [ReadOnly] public BufferLookup<InputAxis> Axes;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public ComponentLookup<PlayerId> PlayerIds;
+            [ReadOnly] public ComponentLookup<PlayerId> PlayerIds;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public ComponentLookup<PointerProviderTag> PointerProviders;
+            [ReadOnly] public ComponentLookup<PlayerOverride> Overrides;
+
+            [ReadOnly] public ComponentLookup<PointerProviderTag> PointerProviders;
 
             [ReadOnly] public ComponentLookup<Parent> Parents;
             [ReadOnly] public ComponentLookup<LocalToWorld> Ltws;
@@ -165,7 +166,8 @@ namespace BovineLabs.Timeline.PlayerInputs
                 // silently kill it. Stick aim still requires the buffer.
                 var cursorAim = config.Mode == AxisTransformMode.Aim &&
                                 config.Flags.Has(AxisTransformFlags.PointFromCursor);
-                if (!InputAccess.TryGetAxes(Registry, Axes, pid.Value, out var axesBuf) && !cursorAim) return;
+                if (!InputAccess.TryGetAxes(Slots, Axes, Overrides, consumer, pid.Value, out var axesBuf) && !cursorAim)
+                    return;
 
                 var carrot = boundEntity;
                 if (config.AnchorLinkKey != 0 &&
@@ -210,8 +212,9 @@ namespace BovineLabs.Timeline.PlayerInputs
                     inputVec = float3.zero;
 
                     // Local coop: only the seat that OWNS the pointer device follows the (single, global) cursor.
-                    // Other seats (gamepad) hold their last aim instead of snapping to player 1's mouse.
-                    var seatProvider = pid.Value < Registry.Length ? Registry[pid.Value] : Entity.Null;
+                    // Other seats (gamepad) hold their last aim instead of snapping to player 1's mouse. The pointer
+                    // device rides the HUMAN provider, so check the human slot regardless of any override.
+                    var seatProvider = InputAccess.Provider(Slots, pid.Value, false);
                     var ownsPointer = seatProvider != Entity.Null && PointerProviders.HasComponent(seatProvider);
 
                     if (CursorValid && ownsPointer)

@@ -1,7 +1,6 @@
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
@@ -28,11 +27,9 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             _states.Update(ref state);
 
-            var registry = SystemAPI.GetSingleton<InputRegistry>();
-
             state.Dependency = new AuthorityJob
             {
-                Registry = registry.ProviderByPlayer,
+                Slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true),
                 States = _states,
                 DeltaTime = SystemAPI.Time.DeltaTime
             }.ScheduleParallel(state.Dependency);
@@ -40,23 +37,28 @@ namespace BovineLabs.Timeline.PlayerInputs
 
         [BurstCompile]
         [WithAll(typeof(Controllable))]
+        [WithPresent(typeof(PlayerOverride), typeof(TimelineOverride))]
         private partial struct AuthorityJob : IJobEntity
         {
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public NativeArray<Entity> Registry;
+            [ReadOnly] public DynamicBuffer<ProviderSlot> Slots;
 
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public ComponentLookup<InputState> States;
+            [ReadOnly] public ComponentLookup<InputState> States;
 
             public float DeltaTime;
 
             private void Execute(in PlayerId id, in OverridePolicy policy, ref OverrideState authority,
-                EnabledRefRW<PlayerOverride> driving)
+                EnabledRefRW<PlayerOverride> driving, EnabledRefRO<TimelineOverride> timelineOverride)
             {
                 if (policy.Trigger == OverrideTrigger.Manual) return;
 
+                // A ControlOverride clip owns the PlayerOverride bit while it drives - never fight it.
+                if (timelineOverride.ValueRO) return;
+
+                // Authority keys off the LIVE human input, never the synthetic feed an override would enable, so read
+                // the human slot directly (a self-triggering loop otherwise).
                 var active = false;
-                if (InputAccess.TryGetState(Registry, States, id.Value, out var state))
+                var human = Slots[id.Value].Human;
+                if (human != Entity.Null && States.TryGetComponent(human, out var state))
                 {
                     active = OverrideDecision.IsActive(policy.Trigger,
                         !state.Down.AllFalse, !state.Held.AllFalse,

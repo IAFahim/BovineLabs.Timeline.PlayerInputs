@@ -31,6 +31,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         {
             MultiInputSettingsAuthoringUtility.DependsOnSettings(context.Baker);
 
+            if (!MultiInputSettingsAuthoringUtility.RequireLink(consumerLink, this, $"InputBufferClearClip '{name}'", "consumerLink"))
+                return;
+
             var mask = default(BitArray256);
             var requestedAny = false;
             if (ActionsToClear != null)

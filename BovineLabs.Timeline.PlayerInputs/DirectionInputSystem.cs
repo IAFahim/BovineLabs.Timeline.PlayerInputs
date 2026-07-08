@@ -1,7 +1,6 @@
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Unity.Burst;
 using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 
 namespace BovineLabs.Timeline.PlayerInputs
@@ -14,6 +13,7 @@ namespace BovineLabs.Timeline.PlayerInputs
     {
         private ComponentLookup<InputState> _states;
         private BufferLookup<InputAxis> _axes;
+        private ComponentLookup<PlayerOverride> _overrides;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -23,6 +23,7 @@ namespace BovineLabs.Timeline.PlayerInputs
             state.RequireForUpdate<DirectionConfig>();
             _states = state.GetComponentLookup<InputState>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
+            _overrides = state.GetComponentLookup<PlayerOverride>(true);
         }
 
         [BurstCompile]
@@ -30,13 +31,13 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             _states.Update(ref state);
             _axes.Update(ref state);
-
-            var registry = SystemAPI.GetSingleton<InputRegistry>();
+            _overrides.Update(ref state);
 
             state.Dependency = new QuantiseJob
             {
-                Registry = registry.ProviderByPlayer,
+                Slots = SystemAPI.GetSingletonBuffer<ProviderSlot>(true),
                 Axes = _axes,
+                Overrides = _overrides,
                 Tick = SystemAPI.GetSingleton<SimulationTick>().Value
             }.ScheduleParallel(state.Dependency);
         }
@@ -45,19 +46,19 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(ConsumerTag))]
         private partial struct QuantiseJob : IJobEntity
         {
-            [ReadOnly] [NativeDisableContainerSafetyRestriction]
-            public NativeArray<Entity> Registry;
+            [ReadOnly] public DynamicBuffer<ProviderSlot> Slots;
 
             [ReadOnly] public BufferLookup<InputAxis> Axes;
 
+            [ReadOnly] public ComponentLookup<PlayerOverride> Overrides;
+
             public uint Tick;
 
-            private void Execute(in PlayerId id, in DirectionConfig config, ref DirectionState dir)
+            private void Execute(Entity entity, in PlayerId id, in DirectionConfig config, ref DirectionState dir)
             {
                 var resolved = Direction.Neutral;
 
-                var provider = Registry[id.Value];
-                if (provider != Entity.Null && Axes.TryGetBuffer(provider, out var buffer))
+                if (InputAccess.TryGetAxes(Slots, Axes, Overrides, entity, id.Value, out var buffer))
                 {
                     var value = InputAccess.ReadAxis(buffer, config.ActionId);
                     resolved = DirectionMath.Quantise(value, config.DeadZone, config.Facing);

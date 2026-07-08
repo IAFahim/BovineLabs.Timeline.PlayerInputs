@@ -112,6 +112,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             var tick = SystemAPI.HasSingleton<SimulationTick>()
                 ? SystemAPI.GetSingleton<SimulationTick>().Value
                 : 0u;
+            var millis = (uint)(SystemAPI.Time.ElapsedTime * 1000.0);
 
             var scale = InputBufferDebugConfig.Scale.Data;
             var offset = ((float4)InputBufferDebugConfig.Offset.Data).xyz;
@@ -128,6 +129,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 Sources = _sources,
                 Entries = _entries,
                 Tick = tick,
+                Millis = millis,
                 Scale = scale,
                 Offset = offset,
                 Accent = InputBufferDebugConfig.WindowColor.Data
@@ -163,6 +165,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
 
             public uint Tick;
+            public uint Millis;
             public float Scale;
             public float3 Offset;
             public Color Accent;
@@ -230,6 +233,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
 
                 Renderer.Text64(pos + up * RowHead, head, panel, 12f * Scale);
 
+                // Ring pressure: at the cap the oldest entries are evicted every record, which silently starves
+                // multi-step combos. Red = full (evicting), amber = >=75% (about to evict), else white.
+                var atCap = limit > 0 && histLen >= limit;
+                var nearCap = limit > 0 && histLen >= (limit * 3) / 4;
+                var histColor = atCap ? new Color(1f, 0.3f, 0.3f)
+                    : nearCap ? new Color(1f, 0.8f, 0.3f)
+                    : new Color(1f, 1f, 1f, 0.85f);
+
                 var hl = new FixedString64Bytes();
                 hl.Append((FixedString32Bytes)"hist ");
                 hl.Append(histLen);
@@ -239,14 +250,24 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                     hl.Append((int)limit);
                 }
 
-                Renderer.Text64(pos + up * RowHist, hl, new Color(1f, 1f, 1f, 0.85f), 11f * Scale);
+                if (atCap) hl.Append((FixedString32Bytes)" FULL");
+
+                Renderer.Text64(pos + up * RowHist, hl, histColor, 11f * Scale);
+
+                if (atCap)
+                {
+                    var advise = new FixedString64Bytes();
+                    advise.Append((FixedString32Bytes)"evicting oldest - restrict window");
+                    Renderer.Text64(pos + up * (RowHist - 0.28f), advise, new Color(1f, 0.45f, 0.45f), 9f * Scale);
+                }
+
                 Renderer.Line(pos + up * 4.42f - right * 0.05f, pos + up * 4.42f + right * 1.7f,
                     new Color(1f, 1f, 1f, 0.22f));
 
                 DrawHistoryLog(pos, up, history, histLen);
             }
 
-            // Newest press at the top, oldest at the bottom. Each row: phase glyph + action id + age in ticks.
+            // Newest press at the top, oldest at the bottom. Each row: phase glyph + action id + age in millis.
             //   v = Down (press)   ^ = Up (release)   = = Held      yellow row = happened THIS frame.
             // ActionId is the MultiInputSettings slot index (A0 = first configured action, etc.).
             private void DrawHistoryLog(float3 pos, float3 up, DynamicBuffer<InputHistory> history, int histLen)
@@ -263,7 +284,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 for (var i = 0; i < n; i++)
                 {
                     var entry = history[histLen - 1 - i]; // newest first
-                    var age = (int)(Tick - entry.Tick);
+                    var tickAge = (int)(Tick - entry.Tick);
+                    var age = (int)(Millis - entry.Millis); // wall-clock age drives the sequence gap windows
 
                     var row = new FixedString64Bytes();
                     Color color;
@@ -284,9 +306,10 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                     }
 
                     row.Append((int)entry.ActionId);
-                    row.Append((FixedString32Bytes)"  t-");
+                    row.Append((FixedString32Bytes)"  ");
                     row.Append(age);
-                    if (age == 0) color = new Color(1f, 1f, 0.4f); // fired this frame
+                    row.Append((FixedString32Bytes)"ms");
+                    if (tickAge == 0) color = new Color(1f, 1f, 0.4f); // fired this frame
 
                     Renderer.Text64(pos + up * (LogTop - i * RowStep), row, color, 10f * Scale);
                 }

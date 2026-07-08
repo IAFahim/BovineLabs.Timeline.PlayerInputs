@@ -8,7 +8,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
 {
     public class InputConsumerAuthoring : MonoBehaviour
     {
-        [Tooltip("Which joined player this consumer reads input from.")]
+        [Tooltip("Which joined player this consumer reads input from. " +
+                 "Must match the joined player's index (or the bridge's PlayerIdOverride).")]
         public byte PlayerId;
 
         [Tooltip(
@@ -24,7 +25,8 @@ namespace BovineLabs.Timeline.PlayerInputs.Authoring
         public InputActionReference OverrideAction;
 
         [Tooltip(
-            "Only takes effect when Controllable is enabled. Seconds of input idle before control is released back.")]
+            "Only takes effect when Controllable is enabled. Seconds of input idle before control is released back. " +
+            "0 = never release (hold the override forever).")]
         public float ReleaseIdleSeconds = 0.25f;
 
         [Range(1, 256)]

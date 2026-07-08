@@ -1,4 +1,5 @@
 using System;
+using BovineLabs.Core.Collections;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Reaction.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
@@ -13,6 +14,68 @@ using Unity.Jobs;
 
 namespace BovineLabs.Timeline.PlayerInputs
 {
+    // Shared condition-event dispatch pipeline, previously hand-rolled identically in CommandSequenceSystem and
+    // InputEventsSystem. A gather job accumulates (routeTarget -> EventAmount) pairs into EventWriter; one Flush per
+    // frame applies the fixed-capacity fallback map, collects the unique target keys, fans the accumulated amounts
+    // out to each target's ConditionEventWriter (TriggerEventsJob), then clears the map. Owning it here keeps the
+    // fixed-64-overflow + Clear-race handling in a single place instead of duplicated and kept in lockstep by hand.
+    internal struct ConditionEventDispatch
+    {
+        private NativeParallelMultiHashMapFallback<Entity, EventAmount> eventChanges;
+        private NativeList<Entity> uniqueKeys;
+        private ConditionEventWriter.Lookup writers;
+        private ConditionEventWriter.SingletonData writersSingletonData;
+
+        public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventWriter =>
+            this.eventChanges.AsWriter();
+
+        public void Create(ref SystemState state)
+        {
+            this.eventChanges = new NativeParallelMultiHashMapFallback<Entity, EventAmount>(64, Allocator.Persistent);
+            this.uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
+            this.writersSingletonData.Create(ref state);
+            this.writers.Create(ref state);
+        }
+
+        public void Dispose()
+        {
+            if (this.uniqueKeys.IsCreated)
+            {
+                this.eventChanges.Dispose();
+                this.uniqueKeys.Dispose();
+            }
+        }
+
+        // Refresh the writer lookup. Call once at the top of OnUpdate before scheduling the gather job(s).
+        public void Update(ref SystemState state)
+        {
+            this.writers.Update(ref state, this.writersSingletonData);
+        }
+
+        // uniqueKeySet: a per-frame set (sized to the live clip count) that the gather job(s) populated with the
+        // same target keys they wrote to EventWriter. Returns the dependency after the trigger + clear jobs.
+        public JobHandle Flush(NativeParallelHashSet<Entity> uniqueKeySet, JobHandle dep)
+        {
+            dep = this.eventChanges.Apply(dep, out var reader);
+
+            dep = new CollectEventKeysJob
+            {
+                UniqueKeys = this.uniqueKeys,
+                UniqueKeySet = uniqueKeySet,
+            }.Schedule(dep);
+
+            dep = new TriggerEventsJob
+            {
+                Keys = this.uniqueKeys.AsDeferredJobArray(),
+                GroupChanges = reader,
+                Writers = this.writers,
+            }.Schedule(this.uniqueKeys, 64, dep);
+
+            dep = this.eventChanges.Clear(dep);
+            return dep;
+        }
+    }
+
     internal struct EventAmount : IEquatable<EventAmount>
     {
         public readonly ConditionKey Event;
