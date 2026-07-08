@@ -23,7 +23,8 @@
         "Unity.Scenes",
         "Unity.Timeline",
         "Unity.TextMeshPro",
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "BovineLabs.Nerve"
     ],
     "includePlatforms": [
         "Editor"
