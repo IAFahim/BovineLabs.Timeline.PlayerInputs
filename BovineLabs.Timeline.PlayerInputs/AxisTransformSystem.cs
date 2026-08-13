@@ -16,6 +16,7 @@ using Unity.Transforms;
 namespace BovineLabs.Timeline.PlayerInputs
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
+    [UpdateAfter(typeof(PlayerInputProjectionGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation)]
     public partial struct AxisTransformSystem : ISystem
     {
