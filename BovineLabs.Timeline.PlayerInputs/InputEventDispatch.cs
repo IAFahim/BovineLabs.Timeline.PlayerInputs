@@ -35,6 +35,13 @@ namespace BovineLabs.Timeline.PlayerInputs
             this.uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
             this.writersSingletonData.Create(ref state);
             this.writers.Create(ref state);
+
+            // Condition events exist only where Reaction writes them: ConditionWriteEventsGroup is
+            // WorldSystemFilter(Worlds.ServerLocal), so ConditionEventWriteSystem — the sole creator of
+            // ConditionEventPayloadAllocator — never runs in a client world. The dispatching systems advertise
+            // ClientSimulation too, so without this gate their first client-world update throws inside Burst on
+            // GetSingleton. Requiring the allocator makes them cleanly idle there instead.
+            state.RequireForUpdate<ConditionEventPayloadAllocator>();
         }
 
         public void Dispose()
