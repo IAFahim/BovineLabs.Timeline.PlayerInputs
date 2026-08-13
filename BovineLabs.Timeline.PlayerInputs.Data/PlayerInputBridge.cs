@@ -4,11 +4,20 @@ using System.Collections.Generic;
 using BovineLabs.Core.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Scripting.LifecycleManagement;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 namespace BovineLabs.Timeline.PlayerInputs.Data
 {
+    /// <remarks>
+    /// NoAutoStaticsCleanup because this type already resets its one static itself, at a moment it chose:
+    /// <see cref="ResetProviderSeq" /> runs on SubsystemRegistration, i.e. before the first frame of a play
+    /// session. providerSeqCounter is what InputRegistrySystem uses to break same-kind duplicate ties
+    /// deterministically, so WHEN it returns to zero is part of that determinism, not an implementation detail.
+    /// Handing the reset to the automatic pass would move it to a lifecycle point we do not control.
+    /// </remarks>
+    [NoAutoStaticsCleanup]
     [RequireComponent(typeof(PlayerInput))]
     public sealed class PlayerInputBridge : MonoBehaviour
     {

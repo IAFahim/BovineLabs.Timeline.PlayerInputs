@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using Unity.Scripting.LifecycleManagement;
 using Unity.VectorGraphics;
 using UnityEngine;
 
@@ -14,7 +15,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Editor
     /// sprite ''"), yielding a blank texture. Drawing the mesh ourselves sidesteps that entirely.
     /// Reusable by any clip editor that wants to show an explanatory vector icon (e.g. on hover).
     /// </summary>
-    internal static class SvgIconRaster
+    /// <remarks>
+    /// AutoStaticsCleanup: both statics hold Unity objects this class created itself. A domain reload destroys
+    /// them, so keeping the references would leave <see cref="Cache" /> full of dead Texture2Ds and
+    /// <see cref="material" /> pointing at a destroyed Material. Nothing here is worth carrying across a reload -
+    /// it is a pure cache and rasterising again is cheap - so letting Unity reset it is exactly right.
+    /// </remarks>
+    [AutoStaticsCleanup]
+    internal static partial class SvgIconRaster
     {
         private static readonly Dictionary<string, Texture2D> Cache = new();
         private static Material material;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json.Linq;
+using Unity.Scripting.LifecycleManagement;
 using UnityCliConnector;
 using UnityEditor;
 using UnityEngine;
@@ -12,6 +13,18 @@ using Object = UnityEngine.Object;
 
 namespace BovineLabs.Timeline.PlayerInputs.Editor.CliTools
 {
+    /// <remarks>
+    /// NoAutoStaticsCleanup, and this one is deliberate rather than a way to silence the analyzer.
+    /// The statics here are editor-session state that is SUPPOSED to outlive a play-mode transition:
+    /// <c>Pending</c> is the list of virtual button releases still owed, and <c>OnPlayModeStateChanged</c> ->
+    /// <c>Cleanup()</c> is what drains it on the way out of play. Wiping it as part of the transition would
+    /// strand held buttons down with no record of what to release.
+    /// <c>_hooked</c> is worse: <c>EnsureHooked</c> is "if (_hooked) return; EditorApplication.update += Pump;",
+    /// so resetting the flag while the delegate is still subscribed double-subscribes Pump and every pending
+    /// release fires on half its intended frame count. The flag and the subscription must be reset together or
+    /// not at all, and only <c>Pump</c> itself knows how to do that.
+    /// </remarks>
+    [NoAutoStaticsCleanup]
     [InitializeOnLoad]
     [UnityCliTool(
         Name = "player_input",

@@ -3,14 +3,22 @@ using System.Collections.Generic;
 using BovineLabs.Reaction.Authoring.Conditions;
 using BovineLabs.Reaction.Data.Conditions;
 using BovineLabs.Timeline.Core;
+using Unity.Scripting.LifecycleManagement;
 using UnityEditor;
 using UnityEngine;
 
 #if UNITY_EDITOR
 namespace BovineLabs.Timeline.PlayerInputs.Editor
 {
+    /// <remarks>
+    /// AutoStaticsCleanup: both statics are lookup caches over ConditionEventObject assets, keyed by raw int.
+    /// The managed wrappers they hold do not survive a domain reload, and <see cref="s_Missing" /> is a negative
+    /// cache - persisting it would keep reporting "no such key" for assets authored since the reload. Rebuilding
+    /// on the next OnGUI is cheap and always correct.
+    /// </remarks>
+    [AutoStaticsCleanup]
     [CustomPropertyDrawer(typeof(ConditionKey))]
-    public class ConditionKeyDrawer : PropertyDrawer
+    public partial class ConditionKeyDrawer : PropertyDrawer
     {
         private static Dictionary<int, ConditionEventObject> s_Cache;
 
