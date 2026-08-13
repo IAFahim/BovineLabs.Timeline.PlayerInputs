@@ -25,6 +25,7 @@ namespace BovineLabs.Timeline.PlayerInputs
         private NativeList<Entity> uniqueKeys;
         private ConditionEventWriter.Lookup writers;
         private ConditionEventWriter.SingletonData writersSingletonData;
+        private EntityQuery allocatorQuery;
 
         public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventWriter =>
             this.eventChanges.AsWriter();
@@ -36,12 +37,19 @@ namespace BovineLabs.Timeline.PlayerInputs
             this.writersSingletonData.Create(ref state);
             this.writers.Create(ref state);
 
-            // Condition events exist only where Reaction writes them: ConditionWriteEventsGroup is
-            // WorldSystemFilter(Worlds.ServerLocal), so ConditionEventWriteSystem — the sole creator of
-            // ConditionEventPayloadAllocator — never runs in a client world. The dispatching systems advertise
-            // ClientSimulation too, so without this gate their first client-world update throws inside Burst on
-            // GetSingleton. Requiring the allocator makes them cleanly idle there instead.
-            state.RequireForUpdate<ConditionEventPayloadAllocator>();
+            // Condition events exist only where Reaction writes them: ConditionsSystemGroup and its
+            // ConditionWriteEventsGroup are both WorldSystemFilter(Worlds.ServerLocal), so
+            // ConditionEventWriteSystem - the sole creator of ConditionEventPayloadAllocator - never runs in a
+            // client world. The dispatching systems advertise ClientSimulation too, so an ungated client-world
+            // update throws inside Burst on GetSingleton.
+            //
+            // Gated here, on the dispatch, rather than with RequireForUpdate on the owning systems. Those systems
+            // do more than dispatch - CommandSequenceSystem advances CommandSequenceState and InputHistory, and
+            // AccumulateCommandMaskJob reads commandState.IsCompleted on the CLIENT to decide when to stop
+            // reserving an input mask. RequireForUpdate would have switched all of that off too, and the mask
+            // would never release. Narrowing this to what genuinely has no consumer off-server keeps the rest
+            // running everywhere.
+            this.allocatorQuery = state.GetEntityQuery(ComponentType.ReadOnly<ConditionEventPayloadAllocator>());
         }
 
         public void Dispose()
@@ -53,9 +61,19 @@ namespace BovineLabs.Timeline.PlayerInputs
             }
         }
 
+        // True where Reaction is actually writing condition events, i.e. server and local worlds. False on a
+        // client, where the gather jobs still run and still accumulate, but Flush drops the result instead of
+        // handing it to writers that do not exist.
+        public bool HasWriters => !this.allocatorQuery.IsEmpty;
+
         // Refresh the writer lookup. Call once at the top of OnUpdate before scheduling the gather job(s).
         public void Update(ref SystemState state)
         {
+            if (!this.HasWriters)
+            {
+                return;
+            }
+
             this.writers.Update(ref state, this.writersSingletonData);
         }
 
@@ -63,6 +81,12 @@ namespace BovineLabs.Timeline.PlayerInputs
         // same target keys they wrote to EventWriter. Returns the dependency after the trigger + clear jobs.
         public JobHandle Flush(NativeParallelHashSet<Entity> uniqueKeySet, JobHandle dep)
         {
+            if (!this.HasWriters)
+            {
+                // Still clear: the gather jobs wrote into the map this frame and it is reused next frame.
+                return this.eventChanges.Clear(dep);
+            }
+
             dep = this.eventChanges.Apply(dep, out var reader);
 
             dep = new CollectEventKeysJob
