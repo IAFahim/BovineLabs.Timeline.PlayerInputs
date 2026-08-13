@@ -95,15 +95,41 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
             }
         }
 
+        /// <summary>
+        /// Applies this frame's axis changes, leaving every other axis at the value it already had.
+        /// </summary>
+        /// <remarks>
+        /// Samples are CHANGES, not a per-frame stream — <see cref="InputRecordSystem"/> writes one only when an
+        /// action's value differs from its last. So this must NOT clear: clearing would drop a stick that is being
+        /// held to zero on every frame between the two samples that describe the hold, which is silent and looks
+        /// like the recording is broken rather than like the format was misread.
+        /// </remarks>
         public static void CollectAxes(DynamicBuffer<RecordedAxisSample> samples, uint frame, ref int cursor,
             DynamicBuffer<InputAxis> outAxes)
         {
-            outAxes.Clear();
-
             while (cursor < samples.Length && samples[cursor].Frame == frame)
             {
                 var sample = samples[cursor];
-                outAxes.Add(new InputAxis { ActionId = sample.ActionId, Value = sample.Value });
+                var axis = new InputAxis { ActionId = sample.ActionId, Value = sample.Value };
+                var replaced = false;
+
+                for (var i = 0; i < outAxes.Length; i++)
+                {
+                    if (outAxes[i].ActionId != sample.ActionId)
+                    {
+                        continue;
+                    }
+
+                    outAxes[i] = axis;
+                    replaced = true;
+                    break;
+                }
+
+                if (!replaced)
+                {
+                    outAxes.Add(axis);
+                }
+
                 cursor++;
             }
         }

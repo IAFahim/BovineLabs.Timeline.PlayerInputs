@@ -57,9 +57,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 SlotCount, state.WorldUpdateAllocator);
             var overriddenCounts = CollectionHelper.CreateNativeArray<int>(
                 SlotCount, state.WorldUpdateAllocator);
+            var replayProgress = CollectionHelper.CreateNativeArray<int2>(
+                SlotCount, state.WorldUpdateAllocator);
 
             state.Dependency = new CountConsumersJob { Counts = consumerCounts }.Schedule(state.Dependency);
             state.Dependency = new CountOverriddenJob { Counts = overriddenCounts }.Schedule(state.Dependency);
+            state.Dependency = new CollectReplaysJob { Progress = replayProgress }.Schedule(state.Dependency);
 
             state.Dependency = new RenderJob
             {
@@ -71,6 +74,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 Axes = axes,
                 ConsumerCounts = consumerCounts,
                 OverriddenCounts = overriddenCounts,
+                ReplayProgress = replayProgress,
                 Joined = SystemAPI.GetSingletonBuffer<PlayerJoined>(true),
                 Left = SystemAPI.GetSingletonBuffer<PlayerLeft>(true)
             }.Schedule(state.Dependency);
@@ -100,6 +104,26 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             }
         }
 
+        /// <summary>
+        /// Which seats a recording is currently driving, and how far through it is.
+        /// </summary>
+        /// <remarks>
+        /// Keyed by the seat the replay DRIVES, which is not the seat it was captured on whenever RetargetSeat is set
+        /// — that is the whole point of retargeting, and showing the recorded seat would put the bar on the wrong
+        /// column exactly when a replay has been added as a second player.
+        /// </remarks>
+        [BurstCompile]
+        private partial struct CollectReplaysJob : IJobEntity
+        {
+            public NativeArray<int2> Progress;
+
+            private void Execute(in InputRecording recording, in InputReplay replay)
+            {
+                var seat = replay.RetargetSeat ? replay.Seat : recording.Seat;
+                Progress[seat] = new int2((int)replay.Frame, (int)recording.FrameCount);
+            }
+        }
+
         private struct RenderJob : IJob
         {
             public Drawer Renderer;
@@ -113,6 +137,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             [ReadOnly] public BufferLookup<InputAxis> Axes;
             [ReadOnly] public NativeArray<int> ConsumerCounts;
             [ReadOnly] public NativeArray<int> OverriddenCounts;
+            [ReadOnly] public NativeArray<int2> ReplayProgress;
             [ReadOnly] public DynamicBuffer<PlayerJoined> Joined;
             [ReadOnly] public DynamicBuffer<PlayerLeft> Left;
 
@@ -220,14 +245,44 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
                 stats.Append(OverriddenCounts[id]);
                 Renderer.Text64(origin + new float3(0f, -0.4f, 0f), stats, new Color(1f, 0.9f, 0.4f), 11f);
 
-                Renderer.Line(origin + new float3(-0.5f, -0.7f, 0f), origin + new float3(4.5f, -0.7f, 0f),
+                // A replayed seat looks identical to a played one below this point — same provider, same held keys —
+                // so the only place the difference can be shown is here, above the state it is producing.
+                var cursor = origin + new float3(0f, -0.7f, 0f);
+                if (ReplayProgress[id].y > 0)
+                {
+                    RenderReplay(cursor, ReplayProgress[id]);
+                    cursor.y -= 0.5f;
+                }
+
+                Renderer.Line(cursor + new float3(-0.5f, 0f, 0f), cursor + new float3(4.5f, 0f, 0f),
                     new Color(1f, 1f, 1f, 0.3f));
 
                 if (States.HasComponent(provider))
-                    RenderState(origin + new float3(0f, -1.1f, 0f), States[provider]);
+                    RenderState(cursor + new float3(0f, -0.4f, 0f), States[provider]);
 
                 if (Axes.HasBuffer(provider))
-                    RenderAxes(origin + new float3(3f, -1.1f, 0f), Axes[provider]);
+                    RenderAxes(cursor + new float3(3f, -0.4f, 0f), Axes[provider]);
+            }
+
+            private void RenderReplay(float3 origin, int2 progress)
+            {
+                var tint = new Color(0.3f, 1f, 0.4f);
+
+                var line = new FixedString64Bytes();
+                line.Append("REPLAY ");
+                line.Append(progress.x);
+                line.Append('/');
+                line.Append(progress.y);
+                Renderer.Text64(origin, line, tint, 11f);
+
+                var y = origin.y - 0.2f;
+                var left = origin.x;
+                var right = origin.x + 4f;
+                var t = math.saturate(progress.x / (float)progress.y);
+
+                Renderer.Line(new float3(left, y, origin.z), new float3(right, y, origin.z),
+                    new Color(1f, 1f, 1f, 0.2f));
+                Renderer.Line(new float3(left, y, origin.z), new float3(math.lerp(left, right, t), y, origin.z), tint);
             }
 
             private void RenderState(float3 origin, InputState state)

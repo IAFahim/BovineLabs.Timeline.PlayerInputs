@@ -66,7 +66,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         }
 
         [Test]
-        public void CollectAxes_RewritesTheAxisBuffer()
+        public void CollectAxes_AppliesChangesAndHoldsTheRest()
         {
             var samples = Samples(
                 (1, 3, new float2(1f, 0f)),
@@ -77,17 +77,77 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
 
             var cursor = 0;
             InputReplayMath.CollectAxes(samples, 1, ref cursor, outAxes);
-            Assert.AreEqual(2, outAxes.Length);
-            Assert.AreEqual(3, outAxes[0].ActionId);
-            Assert.AreEqual(new float2(1f, 0f), outAxes[0].Value);
-            Assert.AreEqual(4, outAxes[1].ActionId);
+            Assert.AreEqual(3, outAxes.Length, "existing axes are held, not cleared");
+            Assert.AreEqual(9, outAxes[0].ActionId);
+            Assert.AreEqual(3, outAxes[1].ActionId);
+            Assert.AreEqual(new float2(1f, 0f), outAxes[1].Value);
+            Assert.AreEqual(4, outAxes[2].ActionId);
             Assert.AreEqual(2, cursor);
 
+            // Only action 3 changed on frame 2. Action 4 keeps the value it was given on frame 1 — that is the
+            // whole point of the format: a stick held still writes nothing and must not read as released.
             InputReplayMath.CollectAxes(samples, 2, ref cursor, outAxes);
-            Assert.AreEqual(1, outAxes.Length);
-            Assert.AreEqual(3, outAxes[0].ActionId);
-            Assert.AreEqual(new float2(0.5f, 0f), outAxes[0].Value);
+            Assert.AreEqual(3, outAxes.Length);
+            Assert.AreEqual(new float2(0.5f, 0f), outAxes[1].Value, "action 3 was rewritten in place");
+            Assert.AreEqual(new float2(0f, 1f), outAxes[2].Value, "action 4 held");
             Assert.AreEqual(3, cursor);
+        }
+
+        [Test]
+        public void CollectAxes_AFrameWithNoSamplesChangesNothing()
+        {
+            var samples = Samples((1, 3, new float2(1f, 0f)));
+            var outAxes = AxisBuffer();
+
+            var cursor = 0;
+            InputReplayMath.CollectAxes(samples, 1, ref cursor, outAxes);
+            InputReplayMath.CollectAxes(samples, 2, ref cursor, outAxes);
+            InputReplayMath.CollectAxes(samples, 3, ref cursor, outAxes);
+
+            Assert.AreEqual(1, outAxes.Length);
+            Assert.AreEqual(new float2(1f, 0f), outAxes[0].Value);
+            Assert.AreEqual(1, cursor);
+        }
+
+        [Test]
+        public void Record_WritesOneSamplePerChangeNotPerFrame()
+        {
+            var provider = Manager.CreateEntity();
+            Manager.AddComponent<ProviderTag>(provider);
+            Manager.AddComponentData(provider, new PlayerId { Value = 7 });
+            Manager.AddComponentData(provider, new InputState());
+            Manager.AddBuffer<InputAxis>(provider);
+
+            var recordingEntity = Manager.CreateEntity();
+            Manager.AddComponentData(recordingEntity, new InputRecording { Seat = 7 });
+            Manager.AddBuffer<RecordedEdge>(recordingEntity);
+            Manager.AddBuffer<RecordedAxisSample>(recordingEntity);
+            Manager.AddComponent<InputRecordingActive>(recordingEntity);
+
+            var recordSystem = World.GetOrCreateSystemManaged<InputRecordSystem>();
+
+            // Twenty frames of an axis nobody is moving. Before dedupe this wrote twenty samples; a real session
+            // measured 1760 identical samples and a 155 KB asset for a single motionless axis.
+            SetHeldWithAxis(provider, 5, 2, new float2(0.5f, -0.25f));
+            for (var i = 0; i < 20; i++)
+            {
+                recordSystem.Update();
+            }
+
+            var samples = Manager.GetBuffer<RecordedAxisSample>(recordingEntity);
+            Assert.AreEqual(1, samples.Length, "a value that never changes is one sample");
+            Assert.AreEqual(0u, samples[0].Frame);
+
+            SetHeldWithAxis(provider, 5, 2, new float2(0.75f, -0.25f));
+            recordSystem.Update();
+
+            samples = Manager.GetBuffer<RecordedAxisSample>(recordingEntity);
+            Assert.AreEqual(2, samples.Length, "a change is recorded");
+            Assert.AreEqual(20u, samples[1].Frame);
+            Assert.AreEqual(new float2(0.75f, -0.25f), samples[1].Value);
+
+            Assert.AreEqual(21u, Manager.GetComponentData<InputRecording>(recordingEntity).FrameCount,
+                "frames still advance every update — only the samples are sparse");
         }
 
         [Test]
