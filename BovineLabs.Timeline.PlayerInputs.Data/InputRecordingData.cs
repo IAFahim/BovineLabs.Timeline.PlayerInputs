@@ -39,6 +39,34 @@ namespace BovineLabs.Timeline.PlayerInputs.Data
         public int AxisCursor;
         public BitArray256 Held;
         public bool Loop;
+
+        /// <summary>
+        /// False (the default) replays onto the seat the recording was captured from, taking that seat over from its
+        /// human. True replays onto <see cref="Seat"/> instead, which <em>adds</em> a player rather than possessing
+        /// one — a recording becomes a second local player, or one of many.
+        /// </summary>
+        /// <remarks>
+        /// Deliberately a flag rather than a sentinel value: <c>default(InputReplay)</c> has to keep meaning "replay
+        /// where it was recorded", and seat 0 is a real seat, so any numeric sentinel would silently retarget every
+        /// existing caller to seat 0.
+        /// <para>
+        /// Why a free seat needs no takeover: the registry indexes providers by seat and keeps Human and Synthetic
+        /// slots apart, flagging a duplicate only when two providers of the <em>same kind</em> land on one seat. A
+        /// replay provider carries no <c>SyntheticProviderTag</c>, so it registers as Human — which is exactly why
+        /// replaying onto the recorded seat must first disable that seat's bridge. On a seat with no human there is
+        /// nobody to displace, and both providers run side by side.
+        /// </para>
+        /// </remarks>
+        public bool RetargetSeat;
+
+        /// <summary>The seat to drive when <see cref="RetargetSeat"/> is set. Ignored otherwise.</summary>
+        public byte Seat;
+
+        /// <summary>Replay this recording onto <paramref name="seat"/> instead of the one it was captured from.</summary>
+        public static InputReplay OnSeat(byte seat, bool loop = false)
+        {
+            return new InputReplay { RetargetSeat = true, Seat = seat, Loop = loop };
+        }
     }
 
     public static class InputReplayMath

@@ -41,20 +41,31 @@ namespace BovineLabs.Timeline.PlayerInputs
         private void Process(EntityManager em, Entity entity)
         {
             var recording = em.GetComponentData<InputRecording>(entity);
-            var seat = recording.Seat;
 
             if (recording.FrameCount == 0)
             {
-                Debug.LogWarning($"InputReplaySystem: recording for seat {seat} has no frames; nothing to replay.");
+                Debug.LogWarning(
+                    $"InputReplaySystem: recording for seat {recording.Seat} has no frames; nothing to replay.");
                 em.RemoveComponent<InputReplay>(entity);
                 return;
             }
 
             var replay = em.GetComponentData<InputReplay>(entity);
 
+            // Where this recording actually plays. Retargeting is what turns a recording from a possession of its
+            // original seat into an additional player on a free one.
+            var seat = replay.RetargetSeat ? replay.Seat : recording.Seat;
+
             if (replay.Provider == Entity.Null)
             {
-                this.DisableHumanBridge(seat);
+                // Only when we are taking a human's own seat. A replay provider registers as Human (it carries no
+                // SyntheticProviderTag), so two of them on one seat would be a same-kind duplicate; on a free seat
+                // there is nobody to displace and the human keeps playing.
+                if (seat == recording.Seat)
+                {
+                    this.DisableHumanBridge(seat);
+                }
+
                 replay.Provider = CreateReplayProvider(em, seat);
                 InputReplayMath.Reset(ref replay, recording.InitialHeld);
                 em.SetComponentData(replay.Provider, new InputState { Held = replay.Held });

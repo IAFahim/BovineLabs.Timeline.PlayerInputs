@@ -107,6 +107,60 @@ namespace BovineLabs.Timeline.PlayerInputs.Tests
         }
 
         [Test]
+        public void ReplayDefaultsToTheSeatItWasRecordedOn()
+        {
+            var recording = this.RecordingOnSeat(3);
+            Manager.AddComponentData(recording, new InputReplay());
+
+            World.GetOrCreateSystemManaged<InputReplaySystem>().Update();
+
+            var provider = Manager.GetComponentData<InputReplay>(recording).Provider;
+            Assert.AreEqual(3, Manager.GetComponentData<PlayerId>(provider).Value,
+                "an InputReplay with nothing set must keep replaying where it was captured");
+        }
+
+        [Test]
+        public void RetargetingPutsTheReplayOnAnotherSeat()
+        {
+            var recording = this.RecordingOnSeat(3);
+            Manager.AddComponentData(recording, InputReplay.OnSeat(7));
+
+            World.GetOrCreateSystemManaged<InputReplaySystem>().Update();
+
+            var provider = Manager.GetComponentData<InputReplay>(recording).Provider;
+            Assert.AreEqual(7, Manager.GetComponentData<PlayerId>(provider).Value,
+                "a recording captured on 3 must be able to drive seat 7 instead");
+        }
+
+        [Test]
+        public void TwoRecordingsRetargetedToDifferentSeatsEachGetTheirOwnProvider()
+        {
+            var first = this.RecordingOnSeat(0);
+            var second = this.RecordingOnSeat(0);
+            Manager.AddComponentData(first, InputReplay.OnSeat(1));
+            Manager.AddComponentData(second, InputReplay.OnSeat(2));
+
+            World.GetOrCreateSystemManaged<InputReplaySystem>().Update();
+
+            var a = Manager.GetComponentData<InputReplay>(first).Provider;
+            var b = Manager.GetComponentData<InputReplay>(second).Provider;
+
+            Assert.AreNotEqual(a, b, "one recording per seat means one provider per seat");
+            Assert.AreEqual(1, Manager.GetComponentData<PlayerId>(a).Value);
+            Assert.AreEqual(2, Manager.GetComponentData<PlayerId>(b).Value);
+        }
+
+        /// <summary>A one-frame recording captured on <paramref name="seat"/>, ready to replay.</summary>
+        private Entity RecordingOnSeat(byte seat)
+        {
+            var entity = Manager.CreateEntity();
+            Manager.AddComponentData(entity, new InputRecording { Seat = seat, FrameCount = 1 });
+            Manager.AddBuffer<RecordedEdge>(entity);
+            Manager.AddBuffer<RecordedAxisSample>(entity);
+            return entity;
+        }
+
+        [Test]
         public void RecordThenReplay_ReproducesProviderStateEachFrame()
         {
             var provider = Manager.CreateEntity();
