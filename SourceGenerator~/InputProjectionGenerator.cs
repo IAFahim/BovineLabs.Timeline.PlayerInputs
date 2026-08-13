@@ -298,6 +298,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             sb.Append("    private ").Append(Ent).AppendLine(".EntityQuery providerQuery;");
             sb.Append("    private ").Append(Ent).AppendLine(".EntityQuery missingQuery;");
             sb.Append("    private ").Append(Ent).AppendLine(".EntityQuery anyProviderQuery;");
+            // Type handles are created ONCE here and refreshed with Update(ref state) in OnUpdate. Acquiring them
+            // per-update makes Unity log "creates a type handle during OnUpdate ... This is significantly faster"
+            // for every generated projection, and it is measurably slower.
+            sb.Append("    private ").Append(Ent).Append(".ComponentTypeHandle<").Append(t).AppendLine("> typeHandle;");
+            sb.Append("    private ").Append(Ent).Append(".ComponentTypeHandle<").Append(Data).AppendLine(".InputState> stateHandle;");
+            sb.Append("    private ").Append(Ent).Append(".BufferTypeHandle<").Append(Data).AppendLine(".InputAxis> axisHandle;");
             sb.AppendLine();
             sb.Append("    public void OnCreate(ref ").Append(Ent).AppendLine(".SystemState state)");
             sb.AppendLine("    {");
@@ -314,6 +320,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
                 .Append(t).AppendLine(">().Build(ref state);");
             sb.Append("        this.anyProviderQuery = state.GetEntityQuery(").Append(Ent)
                 .Append(".ComponentType.ReadOnly<").Append(Data).AppendLine(".ProviderTag>());");
+            sb.Append("        this.typeHandle = state.GetComponentTypeHandle<").Append(t).AppendLine(">(false);");
+            sb.Append("        this.stateHandle = state.GetComponentTypeHandle<").Append(Data).AppendLine(".InputState>(true);");
+            sb.Append("        this.axisHandle = state.GetBufferTypeHandle<").Append(Data).AppendLine(".InputAxis>(true);");
             sb.Append("        state.RequireForUpdate<").Append(Data).AppendLine(".InputRegistry>();");
             sb.AppendLine("    }");
             sb.AppendLine();
@@ -362,9 +371,12 @@ namespace BovineLabs.Timeline.PlayerInputs.Generator
             }
 
             sb.AppendLine();
-            sb.Append("        var typeHandle = state.GetComponentTypeHandle<").Append(t).AppendLine(">(false);");
-            sb.Append("        var stateHandle = state.GetComponentTypeHandle<").Append(Data).AppendLine(".InputState>(true);");
-            sb.Append("        var axisHandle = state.GetBufferTypeHandle<").Append(Data).AppendLine(".InputAxis>(true);");
+            sb.AppendLine("        this.typeHandle.Update(ref state);");
+            sb.AppendLine("        this.stateHandle.Update(ref state);");
+            sb.AppendLine("        this.axisHandle.Update(ref state);");
+            sb.AppendLine("        var typeHandle = this.typeHandle;");
+            sb.AppendLine("        var stateHandle = this.stateHandle;");
+            sb.AppendLine("        var axisHandle = this.axisHandle;");
             sb.Append("        var chunks = this.providerQuery.ToArchetypeChunkArray(").Append(Alloc).AppendLine(".Temp);");
             sb.AppendLine("        for (var ci = 0; ci < chunks.Length; ci++)");
             sb.AppendLine("        {");
