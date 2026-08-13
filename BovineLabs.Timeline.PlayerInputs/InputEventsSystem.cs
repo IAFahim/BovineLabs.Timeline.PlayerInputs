@@ -49,9 +49,9 @@ namespace BovineLabs.Timeline.PlayerInputs
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct InputEventsSystem : ISystem
     {
-        private UnsafeComponentLookup<Targets> _targetsLookup;
-        private UnsafeComponentLookup<EntityLinkSource> _sources;
-        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<Targets> _targetsLookup;
+        private ComponentLookup<EntityLinkSource> _sources;
+        private BufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<InputState> _states;
         private ComponentLookup<PlayerId> _playerIds;
@@ -74,9 +74,9 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             state.RequireForUpdate<InputEventsConfig>();
             state.RequireForUpdate<InputRegistry>();
-            _targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
-            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _targetsLookup = state.GetComponentLookup<Targets>(true);
+            _sources = state.GetComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
             _states = state.GetComponentLookup<InputState>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
@@ -142,9 +142,9 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(ClipActive))]
         private partial struct GatherJob : IJobEntity
         {
-            [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
-            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
-            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+            [ReadOnly] public ComponentLookup<Targets> TargetsLookup;
+            [ReadOnly] public ComponentLookup<EntityLinkSource> Sources;
+            [ReadOnly] public BufferLookup<EntityLinkEntry> Entries;
 
             [ReadOnly] public DynamicBuffer<ProviderSlot> Slots;
 
@@ -228,9 +228,9 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithNone(typeof(ClipActive))]
         private partial struct DeactivateJob : IJobEntity
         {
-            [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
-            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
-            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+            [ReadOnly] public ComponentLookup<Targets> TargetsLookup;
+            [ReadOnly] public ComponentLookup<EntityLinkSource> Sources;
+            [ReadOnly] public BufferLookup<EntityLinkEntry> Entries;
 
             public NativeParallelMultiHashMapFallback<Entity, EventAmount>.ParallelWriter EventChanges;
             public NativeParallelHashSet<Entity>.ParallelWriter UniqueKeys;

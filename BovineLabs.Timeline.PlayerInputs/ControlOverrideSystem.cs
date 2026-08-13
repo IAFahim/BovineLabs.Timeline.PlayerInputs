@@ -22,18 +22,18 @@ namespace BovineLabs.Timeline.PlayerInputs
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct ControlOverrideSystem : ISystem
     {
-        private UnsafeComponentLookup<Targets> _targets;
-        private UnsafeComponentLookup<EntityLinkSource> _sources;
-        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<Targets> _targets;
+        private ComponentLookup<EntityLinkSource> _sources;
+        private BufferLookup<EntityLinkEntry> _entries;
         private ComponentLookup<PlayerOverride> _overrides;
         private ComponentLookup<TimelineOverride> _timelineOverrides;
 
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<ControlOverrideConfig>();
-            _targets = state.GetUnsafeComponentLookup<Targets>(true);
-            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _targets = state.GetComponentLookup<Targets>(true);
+            _sources = state.GetComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetBufferLookup<EntityLinkEntry>(true);
             _overrides = state.GetComponentLookup<PlayerOverride>(false);
             _timelineOverrides = state.GetComponentLookup<TimelineOverride>(false);
         }

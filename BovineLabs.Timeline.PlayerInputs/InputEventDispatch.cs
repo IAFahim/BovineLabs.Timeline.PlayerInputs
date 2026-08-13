@@ -178,7 +178,7 @@ namespace BovineLabs.Timeline.PlayerInputs
     internal static class InputRouting
     {
         public static bool TryResolveRoute(Entity self, in Targets targets, in EntityLinkRef route,
-            in UnsafeComponentLookup<EntityLinkSource> sources, in UnsafeBufferLookup<EntityLinkEntry> entries,
+            in ComponentLookup<EntityLinkSource> sources, in BufferLookup<EntityLinkEntry> entries,
             out Entity target)
         {
             if (route.LinkKey == 0 && route.ReadRootFrom is Target.Self or Target.None)

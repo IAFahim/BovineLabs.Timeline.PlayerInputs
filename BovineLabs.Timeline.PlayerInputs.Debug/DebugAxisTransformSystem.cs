@@ -27,9 +27,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
         private ComponentLookup<Parent> parents;
         private ComponentLookup<ClipActive> active;
 
-        private UnsafeComponentLookup<Targets> targets;
-        private UnsafeComponentLookup<EntityLinkSource> sources;
-        private UnsafeBufferLookup<EntityLinkEntry> entries;
+        private ComponentLookup<Targets> targets;
+        private ComponentLookup<EntityLinkSource> sources;
+        private BufferLookup<EntityLinkEntry> entries;
 
         public void OnCreate(ref SystemState state)
         {
@@ -39,9 +39,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             parents = state.GetComponentLookup<Parent>(true);
             active = state.GetComponentLookup<ClipActive>(true);
 
-            targets = state.GetUnsafeComponentLookup<Targets>(true);
-            sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            targets = state.GetComponentLookup<Targets>(true);
+            sources = state.GetComponentLookup<EntityLinkSource>(true);
+            entries = state.GetBufferLookup<EntityLinkEntry>(true);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -76,9 +76,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             [ReadOnly] public ComponentLookup<Parent> Parents;
             [ReadOnly] public ComponentLookup<ClipActive> Active;
 
-            [ReadOnly] public UnsafeComponentLookup<Targets> Targets;
-            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
-            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+            [ReadOnly] public ComponentLookup<Targets> Targets;
+            [ReadOnly] public ComponentLookup<EntityLinkSource> Sources;
+            [ReadOnly] public BufferLookup<EntityLinkEntry> Entries;
 
             private void Execute(Entity clip, in TrackBinding binding, in AxisTransformConfig config)
             {

@@ -45,14 +45,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
 
         private EntityQuery _drivenQuery;
 
-        private UnsafeComponentLookup<Targets> _targets;
-        private UnsafeComponentLookup<EntityLinkSource> _sources;
-        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<Targets> _targets;
+        private ComponentLookup<EntityLinkSource> _sources;
+        private BufferLookup<EntityLinkEntry> _entries;
         private ComponentLookup<PlayerId> _playerIds;
         private BufferLookup<InputAxis> _axisBuffers;
         private ComponentLookup<LocalToWorld> _ltws;
         private ComponentLookup<LocalTransform> _localTransforms;
-        private ComponentLookup<CrowdAgentData> _agentData;
+        private ComponentLookup<CrowdAgentMove> _agentData;
         private ComponentLookup<IsPathfinding> _pathfinding;
 
         public void OnCreate(ref SystemState state)
@@ -67,14 +67,14 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             var configQuery = SystemAPI.QueryBuilder().WithAll<NavFlowInputConfig>().Build();
             state.RequireAnyForUpdate(configQuery, _drivenQuery);
 
-            _targets = state.GetUnsafeComponentLookup<Targets>(true);
-            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _targets = state.GetComponentLookup<Targets>(true);
+            _sources = state.GetComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetBufferLookup<EntityLinkEntry>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
             _axisBuffers = state.GetBufferLookup<InputAxis>(false);
             _ltws = state.GetComponentLookup<LocalToWorld>(true);
             _localTransforms = state.GetComponentLookup<LocalTransform>(false);
-            _agentData = state.GetComponentLookup<CrowdAgentData>(false);
+            _agentData = state.GetComponentLookup<CrowdAgentMove>(false);
             _pathfinding = state.GetComponentLookup<IsPathfinding>(false);
         }
 
@@ -82,7 +82,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
         {
             using var auto = Marker.Auto();
 
-            // Same reason as SplineFlowInputSystem: we read Targets/EntityLink* via Unsafe*Lookup and write the InputAxis
+            // Same reason as SplineFlowInputSystem: we read Targets/EntityLink* via ComponentLookup/BufferLookup and write the InputAxis
             // buffer + drive the proxy on the MAIN thread, which bypasses the safety system's auto-completion.
             state.CompleteDependency();
 
@@ -226,7 +226,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             // --- Teardown sweep: stop + unmark any proxy that WAS driven but is not this frame ------------------------
             // Covers both a clean clip end (redundant with the exit loop, idempotent) and a HARD teardown where the
             // director/clip entity was destroyed mid-clip so no exit edge ever fired. Reads happen before the structural
-            // changes so the captured Unsafe*Lookups stay valid throughout the loops above.
+            // changes so the captured lookups stay valid throughout the loops above.
             var em = state.EntityManager;
             using var marked = _drivenQuery.ToEntityArray(Allocator.Temp);
 

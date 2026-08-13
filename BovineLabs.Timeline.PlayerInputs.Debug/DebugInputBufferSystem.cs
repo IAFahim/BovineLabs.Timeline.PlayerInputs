@@ -71,9 +71,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
         private ComponentLookup<InputHistoryLimit> _limits;
         private ComponentLookup<LocalToWorld> _ltws;
 
-        private UnsafeComponentLookup<Targets> _targets;
-        private UnsafeComponentLookup<EntityLinkSource> _sources;
-        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<Targets> _targets;
+        private ComponentLookup<EntityLinkSource> _sources;
+        private BufferLookup<EntityLinkEntry> _entries;
 
         public void OnCreate(ref SystemState state)
         {
@@ -87,9 +87,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             _limits = state.GetComponentLookup<InputHistoryLimit>(true);
             _ltws = state.GetComponentLookup<LocalToWorld>(true);
 
-            _targets = state.GetUnsafeComponentLookup<Targets>(true);
-            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _targets = state.GetComponentLookup<Targets>(true);
+            _sources = state.GetComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetBufferLookup<EntityLinkEntry>(true);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -160,9 +160,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             [ReadOnly] public BufferLookup<InputHistory> Histories;
             [ReadOnly] public ComponentLookup<InputHistoryLimit> Limits;
 
-            [ReadOnly] public UnsafeComponentLookup<Targets> Targets;
-            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
-            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+            [ReadOnly] public ComponentLookup<Targets> Targets;
+            [ReadOnly] public ComponentLookup<EntityLinkSource> Sources;
+            [ReadOnly] public BufferLookup<EntityLinkEntry> Entries;
 
             public uint Tick;
             public uint Millis;
@@ -334,9 +334,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Debug
             [ReadOnly] public ComponentLookup<LocalToWorld> Ltws;
             [ReadOnly] public ComponentLookup<ClipActive> Active;
 
-            [ReadOnly] public UnsafeComponentLookup<Targets> Targets;
-            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
-            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+            [ReadOnly] public ComponentLookup<Targets> Targets;
+            [ReadOnly] public ComponentLookup<EntityLinkSource> Sources;
+            [ReadOnly] public BufferLookup<EntityLinkEntry> Entries;
 
             public float Scale;
             public float3 Offset;

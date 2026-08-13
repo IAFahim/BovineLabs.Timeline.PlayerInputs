@@ -39,9 +39,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
     {
         private static readonly ProfilerMarker Marker = new("SplineFlowInputSystem");
 
-        private UnsafeComponentLookup<Targets> _targets;
-        private UnsafeComponentLookup<EntityLinkSource> _sources;
-        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<Targets> _targets;
+        private ComponentLookup<EntityLinkSource> _sources;
+        private BufferLookup<EntityLinkEntry> _entries;
         private ComponentLookup<PlayerId> _playerIds;
         private BufferLookup<InputAxis> _axisBuffers;
 
@@ -55,9 +55,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             state.RequireForUpdate<InputRegistry>();
             state.RequireForUpdate<SplineFlowInputConfig>();
 
-            _targets = state.GetUnsafeComponentLookup<Targets>(true);
-            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _targets = state.GetComponentLookup<Targets>(true);
+            _sources = state.GetComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetBufferLookup<EntityLinkEntry>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
             _axisBuffers = state.GetBufferLookup<InputAxis>(false);
         }
@@ -66,7 +66,7 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
         {
             using var auto = Marker.Auto();
 
-            // Required (matches GridFlowInputSystem): we read Targets/EntityLink* via Unsafe*Lookup and write the
+            // Required (matches GridFlowInputSystem): we read Targets/EntityLink* via ComponentLookup/BufferLookup and write the
             // InputAxis buffer on the MAIN thread, which bypasses the safety system's auto-completion. When GridFlow
             // runs first it already drained the graph so this is ~free; when GridFlow is absent this is the only sync
             // that makes the unsafe main-thread reads safe. Cheaper alternative is a single-threaded IJobChunk — deferred

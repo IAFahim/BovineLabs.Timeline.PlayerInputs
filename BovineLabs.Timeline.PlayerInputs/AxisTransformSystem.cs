@@ -19,9 +19,9 @@ namespace BovineLabs.Timeline.PlayerInputs
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation)]
     public partial struct AxisTransformSystem : ISystem
     {
-        private UnsafeComponentLookup<Targets> _targetsLookup;
-        private UnsafeComponentLookup<EntityLinkSource> _sources;
-        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<Targets> _targetsLookup;
+        private ComponentLookup<EntityLinkSource> _sources;
+        private BufferLookup<EntityLinkEntry> _entries;
         private BufferLookup<InputAxis> _axes;
         private ComponentLookup<PlayerId> _playerIds;
         private ComponentLookup<PlayerOverride> _overrides;
@@ -37,9 +37,9 @@ namespace BovineLabs.Timeline.PlayerInputs
         {
             state.RequireForUpdate<AxisTransformConfig>();
             state.RequireForUpdate<InputRegistry>();
-            _targetsLookup = state.GetUnsafeComponentLookup<Targets>(true);
-            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _targetsLookup = state.GetComponentLookup<Targets>(true);
+            _sources = state.GetComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetBufferLookup<EntityLinkEntry>(true);
             _axes = state.GetBufferLookup<InputAxis>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
             _overrides = state.GetComponentLookup<PlayerOverride>(true);
@@ -127,9 +127,9 @@ namespace BovineLabs.Timeline.PlayerInputs
         [WithAll(typeof(ClipActive))]
         private partial struct ApplyJob : IJobEntity
         {
-            [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
-            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> Sources;
-            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> Entries;
+            [ReadOnly] public ComponentLookup<Targets> TargetsLookup;
+            [ReadOnly] public ComponentLookup<EntityLinkSource> Sources;
+            [ReadOnly] public BufferLookup<EntityLinkEntry> Entries;
 
             [ReadOnly] public DynamicBuffer<ProviderSlot> Slots;
 

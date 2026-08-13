@@ -23,9 +23,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
     {
         private static readonly ProfilerMarker Marker = new("GridFlowInputSystem");
 
-        private UnsafeComponentLookup<Targets> _targets;
-        private UnsafeComponentLookup<EntityLinkSource> _sources;
-        private UnsafeBufferLookup<EntityLinkEntry> _entries;
+        private ComponentLookup<Targets> _targets;
+        private ComponentLookup<EntityLinkSource> _sources;
+        private BufferLookup<EntityLinkEntry> _entries;
         private ComponentLookup<PlayerId> _playerIds;
         private ComponentLookup<LocalTransform> _transforms;
         private BufferLookup<InputAxis> _axisBuffers;
@@ -37,9 +37,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             state.RequireForUpdate<InputRegistry>();
             state.RequireForUpdate<FlowInputConfig>();
 
-            _targets = state.GetUnsafeComponentLookup<Targets>(true);
-            _sources = state.GetUnsafeComponentLookup<EntityLinkSource>(true);
-            _entries = state.GetUnsafeBufferLookup<EntityLinkEntry>(true);
+            _targets = state.GetComponentLookup<Targets>(true);
+            _sources = state.GetComponentLookup<EntityLinkSource>(true);
+            _entries = state.GetBufferLookup<EntityLinkEntry>(true);
             _playerIds = state.GetComponentLookup<PlayerId>(true);
             _transforms = state.GetComponentLookup<LocalTransform>(true);
             _axisBuffers = state.GetBufferLookup<InputAxis>(false);
@@ -64,8 +64,9 @@ namespace BovineLabs.Timeline.PlayerInputs.Flow
             for (var i = 0; i < reg.Count; i++)
             {
                 ref var pair = ref reg.Slot(i);
-                pair.WriterDependency.Complete();
-                pair.WriterDependency = default;
+
+                // Upstream moved the writer handle off the pair and onto the fields themselves
+                // (InfluenceField.Dependency / PublishDependency), so completing each field is the whole wait now.
                 pair.Front.Complete();
                 if (pair.DoubleBuffered)
                     pair.Back.Complete();
